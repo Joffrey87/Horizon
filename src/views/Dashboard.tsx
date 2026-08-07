@@ -81,21 +81,67 @@ export function Dashboard() {
 
   return (
     <div className="rise space-y-4">
-      {/* ---- Accueil immersif (option 5) ---- */}
-      <header className="pb-1 pt-4">
-        <p className="text-xs uppercase tracking-widest text-ink-3">{fmtDay(now)}</p>
-        <h1 className="mt-1 text-2xl font-semibold">
-          Bonjour {firstName ?? ''} <span className="text-sun-soft">—</span> quel est ton cap aujourd'hui ?
-        </h1>
-        {s.settings?.daily_quote !== false && (
-          <p className="mt-2 text-sm italic text-ink-3">
-            « {quote.text} »{quote.source && <span className="not-italic"> — {quote.source}</span>}
-          </p>
-        )}
-      </header>
+      {/* ---- Accueil immersif (option 5) : paysage, cap du jour, vue globale ---- */}
+      <section className="relative mt-4 min-h-[520px] overflow-hidden rounded-2xl border border-line lg:min-h-[560px]">
+        <img src="/horizon-bg.jpg" alt="" aria-hidden
+          className="absolute inset-0 h-full w-full object-cover" />
+        {/* voiles pour la lisibilité */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/10 to-black/55" />
+
+        <div className="relative flex min-h-[520px] flex-col p-6 lg:min-h-[560px] lg:p-8">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-semibold text-white drop-shadow-md lg:text-3xl">
+                Bonjour {firstName ?? ''},
+              </h1>
+              <p className="mt-1 text-sm text-white/85 drop-shadow">Quel est ton cap aujourd'hui ?</p>
+            </div>
+            <span className="rounded-full border border-white/20 bg-black/30 px-3 py-1 text-xs capitalize text-white/85 backdrop-blur-md">
+              {fmtDay(now)}
+            </span>
+          </div>
+
+          {/* carte centrale « Vue du jour » */}
+          <div className="flex flex-1 items-center justify-center py-8">
+            <div className="rounded-2xl border border-white/15 bg-black/35 px-8 py-6 text-center backdrop-blur-md">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">Vue du jour</p>
+              <p className="mt-2 text-3xl font-semibold text-white">
+                {focus.length} priorité{focus.length > 1 ? 's' : ''}
+              </p>
+              <a href="#cockpit"
+                className="mt-4 inline-block rounded-xl border border-white/25 bg-white/10 px-4 py-1.5 text-sm text-white transition-colors hover:bg-white/20">
+                Voir le cockpit
+              </a>
+            </div>
+          </div>
+
+          {/* « Ta vue globale » : équilibre des domaines */}
+          <div className="rounded-2xl border border-white/15 bg-black/40 p-4 backdrop-blur-md">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">Ta vue globale</p>
+            <div className="grid grid-cols-3 gap-2 md:grid-cols-6">
+              {balance.map(({ domain, value }) => (
+                <div key={domain.id} className="rounded-xl border border-white/10 bg-black/30 px-2.5 py-2 text-center">
+                  <p className="truncate text-[11px] text-white/85" title={domain.name}>{domain.name}</p>
+                  <div className="mx-auto mt-1.5 h-1 w-4/5 overflow-hidden rounded-full bg-white/15">
+                    <div className="h-full rounded-full" style={{ width: `${Math.round(value * 100)}%`, background: domain.color }} />
+                  </div>
+                  <p className="mt-1 text-[10px] tabular-nums text-white/60">
+                    {value > 0 ? `${Math.round(value * 100)}%` : 'calme'}
+                  </p>
+                </div>
+              ))}
+            </div>
+            {s.settings?.daily_quote !== false && (
+              <p className="mt-3 text-center text-xs italic text-white/70">
+                « {quote.text} »{quote.source && <span className="not-italic text-white/50"> — {quote.source}</span>}
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
 
       {/* ---- Cartes cockpit (option 2) ---- */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div id="cockpit" className="grid scroll-mt-4 grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard value={String(focus.length)} label="priorités aujourd'hui" to="/temps" />
         <StatCard value={String(actifs.length)} label="projets en cours" to="/projets"
           warn={actifs.length > (s.settings?.wip_limit ?? 5)} />
