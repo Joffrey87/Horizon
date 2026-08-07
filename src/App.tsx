@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { useHorizon } from './lib/store'
 import { Shell } from './components/Shell'
 import { AuthView } from './views/AuthView'
+import { SetPasswordView } from './views/SetPasswordView'
 import { Dashboard } from './views/Dashboard'
 import { ProjectsView } from './views/ProjectsView'
 import { DomainsView } from './views/DomainsView'
@@ -15,7 +16,7 @@ import { WorkspaceView } from './views/WorkspaceView'
 import { SettingsView } from './views/SettingsView'
 
 export default function App() {
-  const { session, ready, init } = useHorizon()
+  const { session, ready, recovery, init } = useHorizon()
 
   useEffect(() => { void init() }, [init])
 
@@ -27,6 +28,7 @@ export default function App() {
     )
   }
 
+  if (recovery) return <SetPasswordView />
   if (!session) return <AuthView />
 
   return (

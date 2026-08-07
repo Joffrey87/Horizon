@@ -16,6 +16,7 @@ type Table =
 
 interface HorizonState {
   session: Session | null
+  recovery: boolean
   ready: boolean
   loading: boolean
   domains: Domain[]
@@ -36,6 +37,7 @@ interface HorizonState {
   remove: (table: Table, id: string) => Promise<void>
   saveSettings: (values: Partial<Settings>) => Promise<void>
   toggleHabitToday: (habitId: string, date: string) => Promise<void>
+  clearRecovery: () => void
   signOut: () => Promise<void>
 }
 
@@ -46,6 +48,7 @@ const COLLECTION: Record<Table, keyof HorizonState> = {
 
 export const useHorizon = create<HorizonState>((set, get) => ({
   session: null,
+  recovery: false,
   ready: false,
   loading: false,
   domains: [], objectives: [], projects: [], tasks: [], ideas: [],
@@ -54,8 +57,9 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   init: async () => {
     const { data } = await supabase.auth.getSession()
     set({ session: data.session, ready: true })
-    supabase.auth.onAuthStateChange((_event, session) => {
+    supabase.auth.onAuthStateChange((event, session) => {
       const prev = get().session
+      if (event === 'PASSWORD_RECOVERY') set({ recovery: true })
       set({ session })
       if (session && session.user.id !== prev?.user.id) void get().loadAll()
       if (!session) {
@@ -147,6 +151,8 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       if (!error && data) set({ habitLogs: [...get().habitLogs, data] })
     }
   },
+
+  clearRecovery: () => set({ recovery: false }),
 
   signOut: async () => { await supabase.auth.signOut() },
 }))
