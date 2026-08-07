@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Variables d'environnement (déclarées dans Vercel)
+.env
+.env.local
+.env.*.local
