@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { NavLink } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import {
   Home, FolderKanban, ListTodo, Compass, CalendarDays, Lightbulb,
   Repeat, ClipboardCheck, Network, Settings, Sparkles, Plus, LogOut, Menu,
@@ -31,13 +31,15 @@ export function Shell({ children }: { children: ReactNode }) {
       {/* ---- Barre latérale (style options 1/3) ---- */}
       <aside className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-line bg-panel
         transition-transform lg:static lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex items-center gap-3 px-5 py-5">
+        <Link to="/" onClick={() => setMenuOpen(false)}
+          className="flex items-center gap-3 px-5 py-5 transition-opacity hover:opacity-80"
+          aria-label="Retour à l'accueil">
           <img src="/favicon.svg" alt="" className="h-9 w-9" />
           <div>
             <p className="text-sm font-bold tracking-[0.22em]">HORIZON</p>
             <p className="text-[10px] uppercase tracking-wider text-ink-3">Cap · Clarté · Focus</p>
           </div>
-        </div>
+        </Link>
 
         <nav className="flex-1 space-y-0.5 px-3">
           {NAV.map(({ to, label, icon: Icon }) => (
@@ -83,7 +85,9 @@ export function Shell({ children }: { children: ReactNode }) {
             <button onClick={() => setMenuOpen(true)} className="btn-ghost p-2" aria-label="Menu">
               <Menu size={18} />
             </button>
-            <img src="/favicon.svg" alt="Horizon" className="h-8 w-8" />
+            <Link to="/" aria-label="Retour à l'accueil">
+              <img src="/favicon.svg" alt="Horizon" className="h-8 w-8" />
+            </Link>
           </div>
           {children}
         </div>

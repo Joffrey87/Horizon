@@ -235,3 +235,55 @@ export function quoteOfDay(now = new Date()): { text: string; source: string } {
   const [text, source] = QUOTES[dayIndex]
   return { text, source }
 }
+
+// ---- Salutations contextuelles (matin / journée / soir) ----------
+
+const DAY_PHRASES = [
+  'Quel est ton cap aujourd’hui ?',
+  'Où porter ton attention aujourd’hui ?',
+  'Un pas suffit à ouvrir la voie.',
+  'Choisis ta première action.',
+  'Fais peu, fais bien.',
+  'Sur quoi vaut-il la peine d’insister ?',
+  'Quelle est la ligne d’horizon du jour ?',
+  'Quel geste t’approche de ton cap ?',
+  'Reste simple. Reste net.',
+  'Une chose à la fois.',
+  'Où se joue l’essentiel aujourd’hui ?',
+  'Choisis ce qui pèse, laisse ce qui traîne.',
+  'Ce que tu commences aujourd’hui compte.',
+  'Que veux-tu vraiment avancer ?',
+]
+
+const EVENING_PHRASES = [
+  'Ferme la journée. Ouvre l’espace pour ce qui vient.',
+  'Ce qui a été fait aujourd’hui, laisse-le partir. Demain a sa propre lumière.',
+  'Ralentis. Le jour a suffi. Demain saura attendre.',
+  'Prends note de ce qui compte. Puis laisse la nuit faire son travail.',
+  'Un cap se garde aussi dans le silence du soir.',
+  'Regarde en arrière avec calme. Regarde en avant avec confiance.',
+  'Ce que tu prépares ce soir, tu le trouves demain.',
+  'Repose l’esprit. Demain se prépare ici.',
+]
+
+/** Phrase du jour — change chaque jour, stable au sein de la journée. */
+export function dayPhraseOfDay(now = new Date()): string {
+  const idx = Math.floor(now.getTime() / 86_400_000) % DAY_PHRASES.length
+  return DAY_PHRASES[idx]
+}
+
+/** Phrase du soir — change moins souvent (rotation hebdomadaire). */
+export function eveningPhraseOfWeek(now = new Date()): string {
+  const weekIndex = Math.floor(now.getTime() / (7 * 86_400_000))
+  return EVENING_PHRASES[weekIndex % EVENING_PHRASES.length]
+}
+
+/** Segment de la journée à afficher en tête d'accueil. */
+export type GreetingKind = 'morning' | 'day' | 'evening'
+
+export function greetingKind(now = new Date(), morningGreetedAlready = false): GreetingKind {
+  const h = now.getHours()
+  if (h >= 22) return 'evening'
+  if (h < 10 && !morningGreetedAlready) return 'morning'
+  return 'day'
+}

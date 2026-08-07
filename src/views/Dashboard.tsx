@@ -1,10 +1,14 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, AlertTriangle, Info, CheckCircle2, Circle } from 'lucide-react'
+import {
+  ArrowRight, AlertTriangle, Info, CheckCircle2, Circle,
+  LayoutDashboard, X,
+} from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import {
-  computeAlerts, domainBalance, fmtDay, focusOfDay, habitStats, habitsForDay,
-  quoteOfDay, suggestedReview, todayIso,
+  computeAlerts, dayPhraseOfDay, domainBalance, eveningPhraseOfWeek, fmtDay,
+  focusOfDay, greetingKind, habitStats, habitsForDay, quoteOfDay,
+  suggestedReview, todayIso,
 } from '../lib/logic'
 import { Card, Badge, ProgressBar, DomainDot, EmptyState } from '../components/ui'
 import { DomainRadar } from '../components/charts'
@@ -18,10 +22,14 @@ const DEFAULT_DOMAINS = [
   { name: 'Personnel', color: '#65a30d', icon: 'sprout' },
 ]
 
+const MORNING_GREETED_KEY = 'horizon.lastMorningGreetedDate'
+
 export function Dashboard() {
   const s = useHorizon()
   const now = new Date()
   const today = todayIso()
+
+  const [cockpitOpen, setCockpitOpen] = useState(false)
 
   const lastFocusReview = s.reviews.find((r) => (r.kind === 'confirmation' || r.kind === 'hebdo') && r.completed)
   const weekFocusIds = useMemo(() => lastFocusReview?.week_focus ?? [], [lastFocusReview])
@@ -53,6 +61,28 @@ export function Dashboard() {
 
   const focusWeekTasks = s.tasks.filter((t) => weekFocusIds.includes(t.id))
 
+  // ---- Salutation contextuelle ----
+  // « Bonjour X » : seulement à la première ouverture du jour, avant 10h.
+  // Journée : phrase du jour qui tourne. Soir (≥ 22h) : phrase inspirante hebdo.
+  const [greeting] = useState(() => {
+    const alreadyGreeted = (() => {
+      try {
+        return localStorage.getItem(MORNING_GREETED_KEY) === today
+      } catch { return false }
+    })()
+    const kind = greetingKind(now, alreadyGreeted)
+    if (kind === 'morning') {
+      try { localStorage.setItem(MORNING_GREETED_KEY, today) } catch { /* noop */ }
+    }
+    return kind
+  })
+
+  const heroTitle = greeting === 'morning'
+    ? `Bonjour ${firstName ?? ''}`.trim()
+    : greeting === 'evening'
+      ? eveningPhraseOfWeek(now)
+      : dayPhraseOfDay(now)
+
   // ---- Premier lancement : proposer les domaines par défaut ----
   if (!s.loading && s.domains.length === 0) {
     return (
@@ -79,69 +109,11 @@ export function Dashboard() {
     )
   }
 
-  return (
-    <div className="rise space-y-4">
-      {/* ---- Accueil immersif (option 5) : paysage, cap du jour, vue globale ---- */}
-      <section className="relative mt-4 min-h-[520px] overflow-hidden rounded-2xl border border-line lg:min-h-[560px]">
-        <img src="/horizon-bg.jpg" alt="" aria-hidden
-          className="absolute inset-0 h-full w-full object-cover" />
-        {/* voiles pour la lisibilité */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/10 to-black/55" />
-
-        <div className="relative flex min-h-[520px] flex-col p-6 lg:min-h-[560px] lg:p-8">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-semibold text-white drop-shadow-md lg:text-3xl">
-                Bonjour {firstName ?? ''},
-              </h1>
-              <p className="mt-1 text-sm text-white/85 drop-shadow">Quel est ton cap aujourd'hui ?</p>
-            </div>
-            <span className="rounded-full border border-white/20 bg-black/30 px-3 py-1 text-xs capitalize text-white/85 backdrop-blur-md">
-              {fmtDay(now)}
-            </span>
-          </div>
-
-          {/* carte centrale « Vue du jour » */}
-          <div className="flex flex-1 items-center justify-center py-8">
-            <div className="rounded-2xl border border-white/15 bg-black/35 px-8 py-6 text-center backdrop-blur-md">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">Vue du jour</p>
-              <p className="mt-2 text-3xl font-semibold text-white">
-                {focus.length} priorité{focus.length > 1 ? 's' : ''}
-              </p>
-              <a href="#cockpit"
-                className="mt-4 inline-block rounded-xl border border-white/25 bg-white/10 px-4 py-1.5 text-sm text-white transition-colors hover:bg-white/20">
-                Voir le cockpit
-              </a>
-            </div>
-          </div>
-
-          {/* « Ta vue globale » : équilibre des domaines */}
-          <div className="rounded-2xl border border-white/15 bg-black/40 p-4 backdrop-blur-md">
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">Ta vue globale</p>
-            <div className="grid grid-cols-3 gap-2 md:grid-cols-6">
-              {balance.map(({ domain, value }) => (
-                <div key={domain.id} className="rounded-xl border border-white/10 bg-black/30 px-2.5 py-2 text-center">
-                  <p className="truncate text-[11px] text-white/85" title={domain.name}>{domain.name}</p>
-                  <div className="mx-auto mt-1.5 h-1 w-4/5 overflow-hidden rounded-full bg-white/15">
-                    <div className="h-full rounded-full" style={{ width: `${Math.round(value * 100)}%`, background: domain.color }} />
-                  </div>
-                  <p className="mt-1 text-[10px] tabular-nums text-white/60">
-                    {value > 0 ? `${Math.round(value * 100)}%` : 'calme'}
-                  </p>
-                </div>
-              ))}
-            </div>
-            {s.settings?.daily_quote !== false && (
-              <p className="mt-3 text-center text-xs italic text-white/70">
-                « {quote.text} »{quote.source && <span className="not-italic text-white/50"> — {quote.source}</span>}
-              </p>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* ---- Cartes cockpit (option 2) ---- */}
-      <div id="cockpit" className="grid scroll-mt-4 grid-cols-2 gap-3 lg:grid-cols-4">
+  // ---- Contenu du cockpit (drawer) ----
+  const cockpitContent = (
+    <div className="space-y-4">
+      {/* Cartes cockpit */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard value={String(focus.length)} label="priorités aujourd'hui" to="/temps" />
         <StatCard value={String(actifs.length)} label="projets en cours" to="/projets"
           warn={actifs.length > (s.settings?.wip_limit ?? 5)} />
@@ -157,7 +129,7 @@ export function Dashboard() {
       )}
 
       <div className="grid gap-4 lg:grid-cols-3">
-        {/* ---- Aujourd'hui ---- */}
+        {/* Aujourd'hui */}
         <Card title="Aujourd'hui" className="lg:col-span-2">
           {focus.length === 0 && todaysHabits.length === 0 ? (
             <EmptyState hint="Planifie des tâches dans « Temps » ou confirme ton focus le dimanche.">
@@ -209,7 +181,7 @@ export function Dashboard() {
           )}
         </Card>
 
-        {/* ---- Équilibre (radar, options 1/2) ---- */}
+        {/* Équilibre */}
         <Card title="Équilibre des domaines"
           action={<Link to="/espace" className="text-xs text-ink-3 hover:text-sun-soft">Vue globale →</Link>}>
           <DomainRadar data={balance.map((b) => ({ label: b.domain.name, color: b.domain.color, value: b.value }))} />
@@ -218,7 +190,7 @@ export function Dashboard() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        {/* ---- Projets actifs ---- */}
+        {/* Projets actifs */}
         <Card title="Projets actifs" className="lg:col-span-2"
           action={<Link to="/projets" className="text-xs text-ink-3 hover:text-sun-soft">Tous les projets →</Link>}>
           {actifs.length === 0 ? (
@@ -248,7 +220,7 @@ export function Dashboard() {
           )}
         </Card>
 
-        {/* ---- Alertes utiles ---- */}
+        {/* Alertes */}
         <Card title="Alertes">
           {alerts.length === 0 ? (
             <EmptyState>Tout est calme. Rien à signaler.</EmptyState>
@@ -256,7 +228,8 @@ export function Dashboard() {
             <ul className="space-y-2.5">
               {alerts.map((a) => (
                 <li key={a.id}>
-                  <Link to={a.link ?? '/'} className="group flex gap-2.5">
+                  <Link to={a.link ?? '/'} className="group flex gap-2.5"
+                    onClick={() => setCockpitOpen(false)}>
                     {a.severity === 'warn'
                       ? <AlertTriangle size={15} className="mt-0.5 shrink-0 text-[#eda145]" />
                       : <Info size={15} className="mt-0.5 shrink-0 text-ink-3" />}
@@ -272,7 +245,7 @@ export function Dashboard() {
         </Card>
       </div>
 
-      {/* ---- Focus de la semaine ---- */}
+      {/* Focus de la semaine */}
       {focusWeekTasks.length > 0 && (
         <Card title="Focus de la semaine (confirmé dimanche)">
           <div className="flex flex-wrap gap-2">
@@ -284,6 +257,77 @@ export function Dashboard() {
           </div>
         </Card>
       )}
+    </div>
+  )
+
+  return (
+    <div className="rise space-y-4">
+      {/* ---- Accueil immersif : paysage seul, plus de contenu au scroll ---- */}
+      <section className="relative mt-4 h-[calc(100vh-6rem)] min-h-[520px] overflow-hidden rounded-2xl border border-line">
+        <img src="/horizon-bg.jpg" alt="" aria-hidden
+          className="absolute inset-0 h-full w-full object-cover" />
+        {/* voiles pour la lisibilité */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/10 to-black/50" />
+
+        <div className="relative flex h-full flex-col p-6 lg:p-8">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-semibold text-white drop-shadow-md lg:text-3xl">
+                {heroTitle}
+              </h1>
+            </div>
+            <span className="rounded-full border border-white/20 bg-black/30 px-3 py-1 text-xs capitalize text-white/85 backdrop-blur-md">
+              {fmtDay(now)}
+            </span>
+          </div>
+
+          {/* Citation discrète en bas, uniquement si activée */}
+          {s.settings?.daily_quote !== false && (
+            <div className="mt-auto text-center">
+              <p className="text-xs italic text-white/70 drop-shadow">
+                « {quote.text} »{quote.source && <span className="not-italic text-white/50"> — {quote.source}</span>}
+              </p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ---- Bouton flottant : ouvre le cockpit ---- */}
+      <button onClick={() => setCockpitOpen(true)}
+        aria-label="Ouvrir le cockpit"
+        className="fixed right-4 top-1/2 z-30 flex -translate-y-1/2 items-center gap-2 rounded-full border border-white/25 bg-black/55 px-4 py-2.5 text-white shadow-lg shadow-black/40 backdrop-blur-md transition-colors hover:bg-black/75">
+        <LayoutDashboard size={16} />
+        <span className="text-xs font-semibold uppercase tracking-[0.16em]">Cockpit</span>
+      </button>
+
+      {/* ---- Zone de clic-hors (transparente, laisse voir le paysage) ---- */}
+      {cockpitOpen && (
+        <button onClick={() => setCockpitOpen(false)}
+          aria-label="Fermer le cockpit"
+          className="fixed inset-0 z-30 cursor-default bg-transparent" />
+      )}
+
+      {/* ---- Drawer cockpit : glisse depuis la droite, semi-transparent ---- */}
+      <aside
+        aria-hidden={!cockpitOpen}
+        className={`fixed inset-y-0 right-0 z-40 flex w-full flex-col border-l border-white/15 bg-black/55 shadow-2xl shadow-black/60 backdrop-blur-2xl transition-transform duration-300 ease-out sm:w-[560px] lg:w-[720px] ${
+          cockpitOpen ? 'translate-x-0' : 'pointer-events-none translate-x-full'
+        }`}>
+        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">Cockpit</p>
+            <p className="text-xs text-white/50">{fmtDay(now)}</p>
+          </div>
+          <button onClick={() => setCockpitOpen(false)}
+            aria-label="Fermer"
+            className="rounded-full p-2 text-white/70 transition-colors hover:bg-white/10 hover:text-white">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 lg:p-6">
+          {cockpitContent}
+        </div>
+      </aside>
     </div>
   )
 }
