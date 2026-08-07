@@ -1,5 +1,6 @@
 # Horizon — Personal Operating System
 
+
 Tableau de bord personnel pour piloter vie professionnelle, spirituelle, familiale et personnelle,
 construit d'après la spécification « POS v0.1 ».
 
