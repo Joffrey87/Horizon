@@ -1,0 +1,137 @@
+@import "tailwindcss";
+
+/* ================================================================
+   HORIZON — design system
+   Thème sombre chaleureux « lever de soleil » (options 2 & 5)
+   Structure sobre et zen (option 3)
+   ================================================================ */
+
+@theme {
+  /* Surfaces — noir chaud */
+  --color-bg: #0f0d0a;
+  --color-panel: #191512;
+  --color-panel-2: #211c16;
+  --color-panel-3: #2a231c;
+  --color-line: #2e2721;
+  --color-line-2: #3a3129;
+
+  /* Encres — crème */
+  --color-ink: #f2ede3;
+  --color-ink-2: #b8b0a2;
+  --color-ink-3: #857c6d;
+
+  /* Accent solaire (chrome UI, CTA, lueurs) */
+  --color-sun: #f59e0b;
+  --color-sun-2: #fb923c;
+  --color-sun-soft: #fbbf24;
+
+  /* Statuts (réservés, jamais réutilisés comme série) */
+  --color-good: #199e70;
+  --color-warn: #d97706;
+  --color-bad: #dc4a6b;
+  --color-info: #3987e5;
+
+  /* Séries de domaines — palette catégorielle validée (mode sombre) */
+  --color-dom-1: #d97706;
+  --color-dom-2: #0d9488;
+  --color-dom-3: #8b5cf6;
+  --color-dom-4: #dc4a6b;
+  --color-dom-5: #3987e5;
+  --color-dom-6: #65a30d;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --radius-card: 1rem;
+}
+
+html { color-scheme: dark; }
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: 0.01em;
+}
+
+/* Halo « lever de soleil » discret en haut de page */
+.sunrise-veil {
+  background:
+    radial-gradient(1100px 420px at 18% -8%, rgba(245, 158, 11, 0.09), transparent 60%),
+    radial-gradient(900px 380px at 85% -12%, rgba(251, 146, 60, 0.05), transparent 55%);
+}
+
+/* Carte standard */
+.card {
+  background: var(--color-panel);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+}
+.card-hover { transition: border-color .15s ease, transform .15s ease; }
+.card-hover:hover { border-color: var(--color-line-2); }
+
+/* Titres de bloc, façon cockpit option 2 */
+.block-title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+}
+
+/* Bouton solaire */
+.btn-sun {
+  background: linear-gradient(135deg, #f59e0b, #ea580c);
+  color: #140e05;
+  font-weight: 600;
+  border-radius: 0.75rem;
+  transition: filter .15s ease;
+}
+.btn-sun:hover { filter: brightness(1.08); }
+
+.btn-ghost {
+  border: 1px solid var(--color-line-2);
+  color: var(--color-ink-2);
+  border-radius: 0.75rem;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+.btn-ghost:hover { color: var(--color-ink); border-color: #4a4036; background: rgba(255,255,255,0.02); }
+
+/* Scrollbars discrets */
+* { scrollbar-width: thin; scrollbar-color: #3a3129 transparent; }
+
+/* React Flow — habillage sombre */
+.react-flow__attribution { display: none; }
+.react-flow__controls {
+  background: var(--color-panel-2);
+  border: 1px solid var(--color-line);
+  border-radius: 0.6rem;
+  overflow: hidden;
+}
+.react-flow__controls-button {
+  background: transparent;
+  border-bottom: 1px solid var(--color-line);
+  fill: var(--color-ink-2);
+}
+.react-flow__controls-button:hover { background: var(--color-panel-3); }
+
+input, textarea, select {
+  color-scheme: dark;
+}
+input::placeholder, textarea::placeholder { color: var(--color-ink-3); }
+
+/* Champ standard */
+.field {
+  background: var(--color-panel-2);
+  border: 1px solid var(--color-line-2);
+  border-radius: 0.65rem;
+  padding: 0.5rem 0.75rem;
+  width: 100%;
+  outline: none;
+  transition: border-color .15s ease;
+}
+.field:focus { border-color: var(--color-sun); }
+
+/* Animation douce d'apparition */
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.rise { animation: rise .35s ease both; }
