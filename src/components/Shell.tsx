@@ -27,7 +27,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const signOut = useHorizon((s) => s.signOut)
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen overflow-x-hidden">
       {/* ---- Barre latérale (style options 1/3) ---- */}
       <aside className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-line bg-panel
         transition-transform lg:static lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
