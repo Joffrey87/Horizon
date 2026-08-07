@@ -310,8 +310,9 @@ export function Dashboard() {
       {/* ---- Drawer cockpit : glisse depuis la droite, semi-transparent ---- */}
       <aside
         aria-hidden={!cockpitOpen}
+        style={{ transform: cockpitOpen ? 'translateX(0)' : 'translateX(105%)' }}
         className={`fixed inset-y-0 right-0 z-40 flex w-full flex-col border-l border-white/15 bg-black/55 shadow-2xl shadow-black/60 backdrop-blur-2xl transition-transform duration-300 ease-out sm:w-[560px] lg:w-[720px] ${
-          cockpitOpen ? 'translate-x-0' : 'pointer-events-none translate-x-full'
+          cockpitOpen ? '' : 'pointer-events-none'
         }`}>
         <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <div>
