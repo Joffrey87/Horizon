@@ -83,8 +83,8 @@ function WeekGrid({ anchor, onEdit, onCreate }: {
             if (e.target === e.currentTarget) onCreate(iso(day))
           }
           return (
-            <Card key={day.toISOString()} className={`min-h-36 cursor-pointer !p-2.5 ${today ? '!border-sun/50' : ''}`}>
-              <div onClick={handleVoidClick}>
+            <Card key={day.toISOString()} className={`!p-0 ${today ? '!border-sun/50' : ''}`}>
+              <div onClick={handleVoidClick} className="flex min-h-36 cursor-pointer flex-col p-2.5">
                 <header className="mb-1.5 flex items-center justify-between"
                   onClick={(e) => e.stopPropagation()}>
                   <p className={`text-xs font-medium ${today ? 'text-sun-soft' : 'text-ink-3'}`}>
@@ -93,7 +93,7 @@ function WeekGrid({ anchor, onEdit, onCreate }: {
                   <button onClick={() => onCreate(iso(day))} className="text-ink-3 transition-colors hover:text-sun"
                     aria-label="Ajouter une tâche"><Plus size={13} /></button>
                 </header>
-                <div className="space-y-1" onClick={handleVoidClick}>
+                <div className="min-h-0 flex-1 space-y-1" onClick={handleVoidClick}>
                   {list.map((t) => {
                     const done = t.is_recurring
                       ? false // l'état « fait » d'une récurrente est journalier : simplification v1 → clic = fait aujourd'hui
