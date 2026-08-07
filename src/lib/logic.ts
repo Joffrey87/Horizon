@@ -278,6 +278,26 @@ export function eveningPhraseOfWeek(now = new Date()): string {
   return EVENING_PHRASES[weekIndex % EVENING_PHRASES.length]
 }
 
+/** Extrait la première heure trouvée dans un titre : "9h30 dentiste", "14h", "9:00 call…". */
+export function extractHourMinute(title: string): { hour: number; minute: number } | null {
+  const m = title.match(/(?<!\d)(\d{1,2})[h:](\d{0,2})(?!\d)/i)
+  if (!m) return null
+  const hour = parseInt(m[1], 10)
+  const minute = m[2] ? parseInt(m[2], 10) : 0
+  if (hour > 23 || minute > 59) return null
+  return { hour, minute }
+}
+
+/** Comparateur : tâches avec heure en tête (chronologique), puis les autres dans l'ordre existant. */
+export function compareTasksByTitleTime(a: { title: string }, b: { title: string }): number {
+  const ta = extractHourMinute(a.title)
+  const tb = extractHourMinute(b.title)
+  if (ta && tb) return (ta.hour * 60 + ta.minute) - (tb.hour * 60 + tb.minute)
+  if (ta) return -1
+  if (tb) return 1
+  return 0
+}
+
 /** Segment de la journée à afficher en tête d'accueil. */
 export type GreetingKind = 'morning' | 'day' | 'evening'
 

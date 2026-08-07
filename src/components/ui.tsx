@@ -55,9 +55,9 @@ export function Modal({ open, onClose, title, children, wide = false }: {
 }) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm"
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 p-4 backdrop-blur-sm"
       onClick={onClose}>
-      <div className={`card rise mt-[8vh] w-full ${wide ? 'max-w-2xl' : 'max-w-md'} p-5`}
+      <div className={`card rise mx-auto my-6 w-full ${wide ? 'max-w-2xl' : 'max-w-md'} p-5 sm:my-10`}
         onClick={(e) => e.stopPropagation()}>
         <header className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">{title}</h2>
