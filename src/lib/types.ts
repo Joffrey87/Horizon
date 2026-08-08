@@ -94,6 +94,7 @@ export interface Task {
   end_date: string | null   // durée « jusqu'à une date »
   duration_min: number | null
   is_task: boolean          // false = simple évènement calendaire (hors Priorités)
+  location: string | null   // lieu (ex. lieu de vacances) — change où chercher les messes
   is_recurring: boolean
   recurrence_rule: string | null // 'daily' | 'weekly:1,3,5' | 'monthly:15'
   notable: boolean // apparaît dans les vues trimestre / année
@@ -188,7 +189,8 @@ export interface MassSlot { t: string; c: string }
 
 /** Contenu typé de `Check.config` pour le type messe_travail. */
 export interface MassConfig {
-  masses?: Record<string, MassSlot[]>  // clé = jour ISO ('5' ven, '6' sam, '7' dim)
+  masses?: Record<string, MassSlot[]>  // Reims (hérité) — clé = jour ISO ('5' ven, '6' sam, '7' dim)
+  massesByCity?: Record<string, Record<string, MassSlot[]>>  // slug ville -> jour ISO -> messes
   chosen?: Record<string, string>       // date ISO -> messe choisie (« HH:MM Lieu »)
   refreshed_at?: string                 // dernière mise à jour de la liste
 }
@@ -218,6 +220,7 @@ export interface Settings {
   user_id: UUID
   wip_limit: number
   first_name: string | null
+  home_city: string | null   // ville de référence pour la recherche de messes
   daily_quote: boolean
   updated_at: string
 }

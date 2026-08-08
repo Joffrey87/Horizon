@@ -272,11 +272,35 @@ export function worksOn(tasks: Task[], day: Date): boolean {
     && !/ - Vf?$/.test(t.title))
 }
 
+/** URL de recherche messes.info pour une ville (accents retirés). */
+export function citySlug(city: string): string {
+  return city.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim().replace(/\s+/g, '+')
+}
+export function massesInfoUrl(city: string): string {
+  return `https://messes.info/horaires/${citySlug(city)}`
+}
+/** Ville d'une liste de messes maintenue en interne (déroulante horaire dispo). */
+export function hasMaintainedMasses(city: string): boolean {
+  return /reims/i.test(city)
+}
+
+/** Suis-je en déplacement/vacances ce jour-là ? = un évènement avec un lieu qui
+ *  couvre ce jour (span [scheduled_date, end_date]). Renvoie le lieu, sinon null. */
+export function tripLocationOn(tasks: Task[], dayIso: string): string | null {
+  for (const t of tasks) {
+    if (t.is_task === false && t.location && t.scheduled_date) {
+      const end = t.end_date ?? t.scheduled_date
+      if (t.scheduled_date <= dayIso && dayIso <= end) return t.location
+    }
+  }
+  return null
+}
+
 export interface CheckStatus {
   due: boolean
-  /** messe_travail : TOUS les jours d'obligation travaillés de la fenêtre (dans l'ordre,
-   *  réglés compris — l'app garde chaque date à sa place). */
-  dates: { date: string; label: string }[]
+  /** messe_travail : TOUS les jours d'obligation retenus de la fenêtre (dans l'ordre,
+   *  réglés compris). `location` = où chercher la messe (domicile ou lieu de séjour). */
+  dates: { date: string; label: string; location: string }[]
   /** Nb de points encore à traiter (messe : dates ni réglées ni choisies ; periodique : 0/1). */
   pending: number
   /** periodique : nb de jours écoulés au-delà de l'échéance (≥ 0) une fois due. */
@@ -286,15 +310,19 @@ export interface CheckStatus {
 }
 
 /** État d'une vérification à l'instant présent. */
-export function checkStatus(check: Check, tasks: Task[], now = new Date()): CheckStatus {
+export function checkStatus(check: Check, tasks: Task[], opts: { now?: Date; homeCity?: string } = {}): CheckStatus {
+  const now = opts.now ?? new Date()
+  const homeCity = opts.homeCity?.trim() || 'Reims'
   if (check.kind === 'messe_travail') {
     const resolved = new Set(check.resolved ?? [])
     const chosen = ((check.config?.chosen) ?? {}) as Record<string, string>
     const days = eachDayOfInterval({ start: now, end: addMonths(now, check.window_months) })
     const dates = days
       .filter(isObligationDay)
-      .filter((d) => worksOn(tasks, d))
-      .map((d) => ({ date: iso(d), label: obligationLabel(d) }))
+      .map((d) => ({ d, di: iso(d), trip: tripLocationOn(tasks, iso(d)) }))
+      // un jour d'obligation est retenu si je travaille CE jour OU si je suis en séjour
+      .filter(({ d, trip }) => worksOn(tasks, d) || trip !== null)
+      .map(({ d, di, trip }) => ({ date: di, label: obligationLabel(d), location: trip ?? homeCity }))
     const pending = dates.filter((d) => !resolved.has(d.date) && !chosen[d.date]).length
     return { due: pending > 0, dates, pending, overdueDays: null, nextDueInDays: null }
   }
@@ -348,10 +376,10 @@ export function massFitsShift(time: string, shift: { start: number; end: number 
 }
 
 /** Nb total de points « à vérifier maintenant » sur toutes les vérifications actives. */
-export function checksDueCount(checks: Check[], tasks: Task[], now = new Date()): number {
+export function checksDueCount(checks: Check[], tasks: Task[], opts: { now?: Date; homeCity?: string } = {}): number {
   return checks
     .filter((c) => c.active)
-    .reduce((n, c) => n + checkStatus(c, tasks, now).pending, 0)
+    .reduce((n, c) => n + checkStatus(c, tasks, opts).pending, 0)
 }
 
 /** Équilibre des domaines : part de l'activité récente (tâches faites 14 j) par domaine. */

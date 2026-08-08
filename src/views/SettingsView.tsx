@@ -7,13 +7,14 @@ import { Card } from '../components/ui'
 export function SettingsView() {
   const s = useHorizon()
   const [firstName, setFirstName] = useState(s.settings?.first_name ?? '')
+  const [homeCity, setHomeCity] = useState(s.settings?.home_city ?? '')
   const [wip, setWip] = useState(s.settings?.wip_limit ?? 5)
   const [quote, setQuote] = useState(s.settings?.daily_quote ?? true)
   const [importMsg, setImportMsg] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const save = async () => {
-    await s.saveSettings({ first_name: firstName.trim() || null, wip_limit: wip, daily_quote: quote })
+    await s.saveSettings({ first_name: firstName.trim() || null, home_city: homeCity.trim() || null, wip_limit: wip, daily_quote: quote })
   }
 
   /* ---- Export : éviter l'enfermement des données ---- */
@@ -69,6 +70,12 @@ export function SettingsView() {
           Prénom (pour l'accueil)
           <input value={firstName} onChange={(e) => setFirstName(e.target.value)}
             onBlur={() => void save()} placeholder="Joffrey" className="field" />
+        </label>
+        <label className="mt-3 block space-y-1 text-xs text-ink-3">
+          Ville de référence (pour chercher les messes)
+          <input value={homeCity} onChange={(e) => setHomeCity(e.target.value)}
+            onBlur={() => void save()} placeholder="Reims" className="field" />
+          <span className="block text-[11px] text-ink-3">Horaires détaillés disponibles pour Reims. Ailleurs : lien vers messes.info.</span>
         </label>
         <label className="mt-3 flex items-center gap-2 text-sm text-ink-2">
           <input type="checkbox" checked={quote}

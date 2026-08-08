@@ -45,7 +45,7 @@ export function Dashboard() {
     projects: s.projects, habits: s.habits, logs: s.habitLogs, reviews: s.reviews, settings: s.settings,
   }), [s.projects, s.habits, s.habitLogs, s.reviews, s.settings])
   const balance = useMemo(() => domainBalance(s.domains, s.projects, s.tasks), [s.domains, s.projects, s.tasks])
-  const checksDue = useMemo(() => checksDueCount(s.checks, s.tasks), [s.checks, s.tasks])
+  const checksDue = useMemo(() => checksDueCount(s.checks, s.tasks, { homeCity: s.settings?.home_city ?? undefined }), [s.checks, s.tasks, s.settings])
 
   const actifs = s.projects.filter((p) => p.status === 'actif')
   const quote = quoteOfDay()

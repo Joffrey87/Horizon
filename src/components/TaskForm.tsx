@@ -37,6 +37,7 @@ export function TaskForm({ open, task, defaultDate, overrideScheduled, defaultIs
     recur_days: task?.recurrence_rule?.startsWith('weekly') ? (task.recurrence_rule.split(':')[1] ?? '') : '1',
     recur_dom: task?.recurrence_rule?.startsWith('monthly') ? (task.recurrence_rule.split(':')[1] ?? '1') : '1',
     notable: task?.notable ?? false,
+    location: task?.location ?? '',
     notes: task?.notes ?? '',
   }
   const setF = (k: string, v: unknown) => setForm({ ...current, [k]: v })
@@ -70,6 +71,7 @@ export function TaskForm({ open, task, defaultDate, overrideScheduled, defaultIs
       importance: current.importance, urgence: current.urgence,
       is_recurring: current.is_recurring, recurrence_rule: rule,
       notable: current.notable,
+      location: (current.location as string).trim() || null,
       notes: (current.notes as string).trim() || null,
     }
     if (task) await s.update('tasks', task.id, values)
@@ -140,6 +142,14 @@ export function TaskForm({ open, task, defaultDate, overrideScheduled, defaultIs
             onChange={(e) => setF('is_task', e.target.checked)} className="accent-[#f59e0b]" />
           C'est une tâche (apparaît dans Priorités)
         </label>
+
+        {!(current.is_task as boolean) && (
+          <label className="block space-y-1 text-xs text-ink-3">
+            Lieu (ex. vacances) — change où chercher les messes ces jours-là
+            <input value={current.location as string} onChange={(e) => setF('location', e.target.value)}
+              placeholder="Ville du séjour (laisser vide si domicile)" className="field" />
+          </label>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">

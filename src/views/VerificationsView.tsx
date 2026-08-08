@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import { supabase } from '../lib/supabase'
-import { checkStatus, workShiftOn, massFitsShift, fmtMinutes } from '../lib/logic'
+import { checkStatus, workShiftOn, massFitsShift, fmtMinutes, hasMaintainedMasses, massesInfoUrl, citySlug } from '../lib/logic'
 import { Card, Modal, Seg, DomainDot, Badge, EmptyState } from '../components/ui'
 import type { Check as CheckRow, CheckKind, MassSlot } from '../lib/types'
 
@@ -65,12 +65,23 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
   const s = useHorizon()
   const [refreshing, setRefreshing] = useState(false)
   const domain = s.domains.find((d) => d.id === check.domain_id)
-  const status = useMemo(() => checkStatus(check, s.tasks), [check, s.tasks])
+  const status = useMemo(() => checkStatus(check, s.tasks, { homeCity: s.settings?.home_city ?? undefined }), [check, s.tasks, s.settings])
 
-  const cfg = (check.config ?? {}) as { masses?: Record<string, MassSlot[]>; chosen?: Record<string, string>; refreshed_at?: string }
-  const masses = cfg.masses ?? {}
+  const cfg = (check.config ?? {}) as {
+    masses?: Record<string, MassSlot[]>
+    massesByCity?: Record<string, Record<string, MassSlot[]>>  // slug ville -> jour ISO -> messes
+    chosen?: Record<string, string>; refreshed_at?: string
+  }
   const chosen = cfg.chosen ?? {}
-  const massesForDate = (date: string): MassSlot[] => masses[String(getISODay(parseISO(date)))] ?? []
+  const homeCity = s.settings?.home_city?.trim() || 'Reims'
+  // Messes d'une ville : liste dédiée si renseignée, sinon liste Reims héritée (`masses`).
+  const cityMasses = (city: string): Record<string, MassSlot[]> => {
+    const byCity = cfg.massesByCity?.[citySlug(city)]
+    if (byCity) return byCity
+    return hasMaintainedMasses(city) ? (cfg.masses ?? {}) : {}
+  }
+  const massesForDate = (city: string, date: string): MassSlot[] =>
+    cityMasses(city)[String(getISODay(parseISO(date)))] ?? []
 
   // Marqueur des évènements « messe » posés au calendrier par cette vérification.
   const massTag = `source:check:${check.id}`
@@ -90,6 +101,15 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
   const chooseMass = async (date: string, m: MassSlot) => {
     await s.update('checks', check.id, { config: { ...cfg, chosen: { ...chosen, [date]: `${m.t} ${m.c}` } } })
     await addMassEvent(date, m.t, m.c)
+  }
+  // Hors Reims (séjour) : pas de liste horaire — on note « j'y vais » à la ville
+  // et on pose un évènement sans heure (l'horaire précis se choisit sur messes.info).
+  const chooseAway = async (date: string, city: string) => {
+    await s.update('checks', check.id, { config: { ...cfg, chosen: { ...chosen, [date]: `Messe à ${city}` } } })
+    await s.insert('tasks', {
+      title: `Messe — ${city}`, is_task: false, scheduled_date: date,
+      domain_id: check.domain_id, notes: massTag, status: 'a_faire',
+    })
   }
   // Jour sans messe possible : on l'écarte (aucun évènement posé).
   const markHandled = (date: string) =>
@@ -187,21 +207,23 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
                   : `Toutes les messes sont choisies (${status.dates.length})`}
               </p>
               <ul className="space-y-1.5">
-                {status.dates.map(({ date, label }) => {
+                {status.dates.map(({ date, label, location }) => {
                   const shift = workShiftOn(s.tasks, date)
-                  const all = massesForDate(date)
+                  const hasTimed = Object.keys(cityMasses(location)).length > 0 // liste horaire dispo pour ce lieu ?
+                  const all = massesForDate(location, date)
                   // Ne proposer que les messes compatibles avec la garde (30 min de marge avant/après).
                   const options = shift ? all.filter((m) => massFitsShift(m.t, shift)) : all
                   const hidden = all.length - options.length
                   const chosenVal = chosen[date]
                   const isHandled = (check.resolved ?? []).includes(date)
-                  const noMass = !chosenVal && !isHandled && options.length === 0
+                  const noMass = !chosenVal && !isHandled && hasTimed && options.length === 0
                   return (
                     <li key={date}
                       className={`rounded-lg px-2 py-1.5 ${noMass ? 'border border-[#ef4444]/60 bg-[#ef4444]/12' : 'bg-panel-2/60'}`}>
                       <div className="text-xs">
                         <span className="capitalize text-ink">{format(parseISO(date), 'EEEE d MMMM', { locale: fr })}</span>
                         <span className="text-ink-3"> — {label}</span>
+                        {location !== homeCity && <span className="font-medium text-[#a78bfa]"> · à {location}</span>}
                         {shift && (
                           <span className="text-ink-3"> · garde {shift.code && <span className="font-medium text-ink-2">{shift.code}</span>} {fmtMinutes(shift.start)}–{fmtMinutes(shift.end)}</span>
                         )}
@@ -224,21 +246,39 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
                               <Undo2 size={12} />
                             </button>
                           </div>
-                        ) : options.length > 0 ? (
-                          <select defaultValue="" onChange={(e) => { const m = options.find((o) => `${o.t} ${o.c}` === e.target.value); if (m) void chooseMass(date, m) }}
-                            className="field w-full py-1 text-xs">
-                            <option value="">Choisir une messe…</option>
-                            {options.map((m) => (
-                              <option key={m.t + m.c} value={`${m.t} ${m.c}`}>{m.t} — {m.c}</option>
-                            ))}
-                          </select>
+                        ) : hasTimed ? (
+                          options.length > 0 ? (
+                            <select defaultValue="" onChange={(e) => { const m = options.find((o) => `${o.t} ${o.c}` === e.target.value); if (m) void chooseMass(date, m) }}
+                              className="field w-full py-1 text-xs">
+                              <option value="">Choisir une messe…</option>
+                              {options.map((m) => (
+                                <option key={m.t + m.c} value={`${m.t} ${m.c}`}>{m.t} — {m.c}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className="min-w-0 flex-1 text-[11px] font-medium text-[#ef4444]">
+                                {all.length > 0 ? 'Aucune messe compatible avec ta garde' : 'Aucune messe connue ce jour'}
+                              </span>
+                              <button onClick={() => markHandled(date)}
+                                className="btn-ghost shrink-0 px-2 py-0.5 text-[11px] text-ink-3" title="Ne rien planifier ce jour">
+                                Ignorer
+                              </button>
+                            </div>
+                          )
                         ) : (
-                          <div className="flex items-center gap-2">
-                            <span className="min-w-0 flex-1 text-[11px] font-medium text-[#ef4444]">
-                              {all.length > 0 ? 'Aucune messe compatible avec ta garde' : 'Aucune messe connue ce jour'}
-                            </span>
+                          // Séjour hors ville renseignée : lien vers la ville (pas de liste horaire ici).
+                          <div className="flex flex-wrap items-center gap-2">
+                            <a href={massesInfoUrl(location)} target="_blank" rel="noopener noreferrer"
+                              className="btn-ghost flex items-center gap-1 px-2 py-0.5 text-[11px]" title={`Chercher une messe à ${location}`}>
+                              <ExternalLink size={11} /> messes à {location}
+                            </a>
+                            <button onClick={() => void chooseAway(date, location)}
+                              className="btn-ghost px-2 py-0.5 text-[11px] text-[#4cc79a]" title="Poser la messe au calendrier">
+                              J'y vais
+                            </button>
                             <button onClick={() => markHandled(date)}
-                              className="btn-ghost shrink-0 px-2 py-0.5 text-[11px] text-ink-3" title="Ne rien planifier ce jour">
+                              className="btn-ghost px-2 py-0.5 text-[11px] text-ink-3" title="Ne rien planifier ce jour">
                               Ignorer
                             </button>
                           </div>
