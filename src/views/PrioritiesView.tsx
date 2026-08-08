@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
+import { Plus } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import { quadrant, todayIso } from '../lib/logic'
 import { Badge, DomainDot, Modal, Seg, Scale3 } from '../components/ui'
+import { TaskForm } from '../components/TaskForm'
 import type { Idea, Task } from '../lib/types'
 
 type Item = { kind: 'idee'; idea: Idea } | { kind: 'tache'; task: Task }
@@ -27,6 +29,7 @@ export function PrioritiesView() {
   const s = useHorizon()
   const [source, setSource] = useState<'tout' | 'idees' | 'taches'>('tout')
   const [selected, setSelected] = useState<Item | null>(null)
+  const [createIn, setCreateIn] = useState<1 | 2 | 3 | 4 | 'triage' | null>(null)
 
   const items: Item[] = useMemo(() => {
     const ideas: Item[] = s.ideas
@@ -40,15 +43,36 @@ export function PrioritiesView() {
     return [...ideas, ...tasks]
   }, [s.ideas, s.tasks, source])
 
-  const byQuadrant = (q: 1 | 2 | 3 | 4) => items.filter((it) => {
-    const x = it.kind === 'idee' ? it.idea : it.task
-    return quadrant(x.importance, x.urgence) === q
-  })
+  const val = (it: Item) => (it.kind === 'idee' ? it.idea : it.task)
+  // « À trier » = ni importance ni urgence renseignées (sinon quadrant() les classerait par défaut).
+  const isUntriaged = (it: Item) => val(it).importance == null && val(it).urgence == null
+  const byQuadrant = (q: 1 | 2 | 3 | 4) => items.filter((it) => !isUntriaged(it) && quadrant(val(it).importance, val(it).urgence) === q)
+  const untriaged = items.filter(isUntriaged)
 
   // déplacer un item dans un quadrant : ajuste importance/urgence en conséquence
-  const moveToQuadrant = (q: 1 | 2 | 3 | 4, kind: 'idee' | 'tache', id: string) => {
-    const table = kind === 'idee' ? 'ideas' : 'tasks'
-    void s.update(table, id, QUADRANT_SCALES[q])
+  const moveToQuadrant = (q: 1 | 2 | 3 | 4, kind: 'idee' | 'tache', id: string) =>
+    void s.update(kind === 'idee' ? 'ideas' : 'tasks', id, QUADRANT_SCALES[q])
+  // renvoyer un item « à trier » : on efface importance & urgence
+  const untriage = (kind: 'idee' | 'tache', id: string) =>
+    void s.update(kind === 'idee' ? 'ideas' : 'tasks', id, { importance: null, urgence: null })
+
+  // Rendu d'un item (réutilisé par les quadrants et la zone « À trier »).
+  const renderItem = (it: Item) => {
+    const x = val(it)
+    const domain = s.domains.find((d) => d.id ===
+      (it.kind === 'idee' ? it.idea.domain_id : it.task.domain_id ?? s.projects.find((p) => p.id === it.task.project_id)?.domain_id))
+    return (
+      <li key={x.id}>
+        <button onClick={(e) => { e.stopPropagation(); setSelected(it) }}
+          draggable
+          onDragStart={(e) => e.dataTransfer.setData('application/horizon-prio', JSON.stringify({ kind: it.kind, id: x.id }))}
+          className="flex w-full cursor-grab items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-panel-2 active:cursor-grabbing">
+          {domain && <DomainDot color={domain.color} size={7} />}
+          <span className="min-w-0 flex-1 truncate text-sm text-ink-2">{x.title}</span>
+          <Badge tone={it.kind === 'idee' ? 'sun' : 'info'}>{it.kind}</Badge>
+        </button>
+      </li>
+    )
   }
 
   return (
@@ -65,45 +89,47 @@ export function PrioritiesView() {
         {QUADRANTS.map(({ q, title, hint, tone }) => {
           const list = byQuadrant(q)
           return (
-            <QuadrantCard key={q} q={q} title={title} hint={hint} tone={tone} onDropItem={moveToQuadrant}>
+            <QuadrantCard key={q} title={title} hint={hint} tone={tone}
+              onDropItem={(kind, id) => moveToQuadrant(q, kind, id)} onCreate={() => setCreateIn(q)}>
               {list.length === 0 ? (
-                <p className="py-3 text-center text-xs text-ink-3">Glisse un item ici.</p>
+                <p className="py-3 text-center text-xs text-ink-3">Glisse un item ici, ou clique pour créer une tâche.</p>
               ) : (
-                <ul className="space-y-1">
-                  {list.map((it) => {
-                    const x = it.kind === 'idee' ? it.idea : it.task
-                    const domain = s.domains.find((d) => d.id ===
-                      (it.kind === 'idee' ? it.idea.domain_id
-                        : it.task.domain_id ?? s.projects.find((p) => p.id === it.task.project_id)?.domain_id))
-                    return (
-                      <li key={x.id}>
-                        <button onClick={() => setSelected(it)}
-                          draggable
-                          onDragStart={(e) => e.dataTransfer.setData('application/horizon-prio', JSON.stringify({ kind: it.kind, id: x.id }))}
-                          className="flex w-full cursor-grab items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-panel-2 active:cursor-grabbing">
-                          {domain && <DomainDot color={domain.color} size={7} />}
-                          <span className="min-w-0 flex-1 truncate text-sm text-ink-2">{x.title}</span>
-                          <Badge tone={it.kind === 'idee' ? 'sun' : 'info'}>{it.kind}</Badge>
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
+                <ul className="space-y-1">{list.map(renderItem)}</ul>
               )}
             </QuadrantCard>
           )
         })}
       </div>
 
+      {/* Zone libre « À trier » : items sans importance ni urgence, à classer. */}
+      <QuadrantCard title="À trier" hint="Ni importance ni urgence — à glisser dans un quadrant"
+        tone="text-ink-2" onDropItem={untriage} onCreate={() => setCreateIn('triage')}>
+        {untriaged.length === 0 ? (
+          <p className="py-3 text-center text-xs text-ink-3">Rien à trier. Clique pour créer une tâche à classer plus tard.</p>
+        ) : (
+          <ul className="grid gap-1 sm:grid-cols-2">{untriaged.map(renderItem)}</ul>
+        )}
+      </QuadrantCard>
+
       <DecisionModal item={selected} onClose={() => setSelected(null)} />
+
+      {/* Créer une tâche directement dans le quadrant / la zone cliqué·e (importance/urgence pré-réglées, ou vierges pour « À trier »). */}
+      <TaskForm
+        open={createIn !== null}
+        task={null}
+        defaultIsTask
+        defaultImportance={typeof createIn === 'number' ? QUADRANT_SCALES[createIn].importance : null}
+        defaultUrgence={typeof createIn === 'number' ? QUADRANT_SCALES[createIn].urgence : null}
+        onClose={() => setCreateIn(null)} />
     </div>
   )
 }
 
-/** Quadrant : zone de dépôt pour le drag & drop. */
-function QuadrantCard({ q, title, hint, tone, onDropItem, children }: {
-  q: 1 | 2 | 3 | 4; title: string; hint: string; tone: string
-  onDropItem: (q: 1 | 2 | 3 | 4, kind: 'idee' | 'tache', id: string) => void
+/** Quadrant (ou zone « À trier ») : zone de dépôt pour le drag & drop + création au clic dans le vide. */
+function QuadrantCard({ title, hint, tone, onDropItem, onCreate, children }: {
+  title: string; hint: string; tone: string
+  onDropItem: (kind: 'idee' | 'tache', id: string) => void
+  onCreate: () => void
   children: React.ReactNode
 }) {
   const [over, setOver] = useState(false)
@@ -112,14 +138,19 @@ function QuadrantCard({ q, title, hint, tone, onDropItem, children }: {
     const raw = e.dataTransfer.getData('application/horizon-prio')
     if (!raw) return
     const { kind, id } = JSON.parse(raw)
-    onDropItem(q, kind, id)
+    onDropItem(kind, id)
   }
+  // Clic dans le vide (hors item, qui stoppe la propagation) → créer une tâche dans ce quadrant.
   return (
     <div onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={onDrop}
-      className={`card p-4 transition-colors ${over ? 'ring-2 ring-sun/60' : ''}`}>
-      <header className="mb-2">
-        <h3 className={`text-sm font-semibold ${tone}`}>{title}</h3>
-        <p className="text-xs text-ink-3">{hint}</p>
+      onClick={onCreate}
+      className={`group card cursor-pointer p-4 transition-colors ${over ? 'ring-2 ring-sun/60' : ''}`}>
+      <header className="mb-2 flex items-start justify-between gap-2">
+        <div>
+          <h3 className={`text-sm font-semibold ${tone}`}>{title}</h3>
+          <p className="text-xs text-ink-3">{hint}</p>
+        </div>
+        <Plus size={15} className="mt-0.5 shrink-0 text-ink-3 opacity-0 transition-opacity group-hover:opacity-100" />
       </header>
       {children}
     </div>
