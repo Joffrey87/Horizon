@@ -146,7 +146,7 @@ function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
       }`}>
       {isMarketParkingDay(s.tasks, day) && (
         <div onClick={(e) => e.stopPropagation()}
-          title="Dimanche travaillé le matin — marché dominical & stationnement compliqués"
+          title="Dimanche travaillé (début ≤ 15h) — marché dominical & stationnement compliqués"
           className="mb-1 flex items-center justify-center gap-1 rounded bg-[#ef4444]/20 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#ff6b6b] ring-1 ring-[#ef4444]/40">
           <AlertTriangle size={10} /> Marché / Parking
         </div>
@@ -344,7 +344,7 @@ function AllDayBand({ day, onEdit, onStep, onMove, onCreate }: {
       onClick={(e) => { if (e.target === e.currentTarget) onCreate(iso(day)) }}
       className={`min-h-8 space-y-0.5 border-b border-line-2/60 p-0.5 ${over ? 'bg-sun/10' : ''} ${isToday(day) ? 'bg-sun/5' : ''}`}>
       {isMarketParkingDay(s.tasks, day) && (
-        <div title="Dimanche travaillé le matin — marché dominical & stationnement compliqués"
+        <div title="Dimanche travaillé (début ≤ 15h) — marché dominical & stationnement compliqués"
           className="flex items-center justify-center gap-1 rounded bg-[#ef4444]/20 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#ff6b6b] ring-1 ring-[#ef4444]/40">
           <AlertTriangle size={10} /> Marché / Parking
         </div>
