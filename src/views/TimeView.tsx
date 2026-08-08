@@ -335,12 +335,26 @@ function AllDayBand({ day, onEdit, onStep, onMove, onCreate }: {
           <Layers size={10} className="shrink-0" /><span className="truncate font-medium">{st.title}</span>
         </button>
       ))}
-      {untimed.map((t) => (
-        <button key={t.id} draggable={!t.is_recurring} onDragStart={dragData('task', t.id)} onClick={() => onEdit(t)}
-          className="block w-full truncate rounded bg-panel-3 px-1 py-0.5 text-left text-[10px] text-ink-2">
-          {t.title}
-        </button>
-      ))}
+      {untimed.map((t) => {
+        const part = spanPart(t, iso(day))
+        const c = s.domains.find((d) => d.id === (t.domain_id ?? s.projects.find((p) => p.id === t.project_id)?.domain_id))?.color
+        // Jours intermédiaires / fin d'un évènement multi-jours : barre fine continue, sans titre.
+        if (part === 'middle' || part === 'end') {
+          return (
+            <button key={t.id} draggable={!t.is_recurring} onDragStart={dragData('task', t.id)}
+              onClick={() => onEdit(t)} title={t.title}
+              style={{ background: c ? `${c}59` : 'var(--color-line-2)' }}
+              className="block h-1.5 w-full rounded-full" />
+          )
+        }
+        return (
+          <button key={t.id} draggable={!t.is_recurring} onDragStart={dragData('task', t.id)} onClick={() => onEdit(t)}
+            style={{ background: c ? `${c}2b` : undefined, borderLeft: c ? `3px solid ${c}` : undefined }}
+            className="block w-full truncate rounded bg-panel-3 px-1 py-0.5 text-left text-[10px] text-ink-2">
+            {t.title}
+          </button>
+        )
+      })}
     </div>
   )
 }

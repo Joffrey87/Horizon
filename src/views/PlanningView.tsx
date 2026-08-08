@@ -6,7 +6,7 @@ import {
 import { fr } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, Plus, Inbox, CheckCircle2, Circle, Sparkles } from 'lucide-react'
 import { useHorizon } from '../lib/store'
-import { iso, tasksForDay, compareTasksByTitleTime, quadrant } from '../lib/logic'
+import { iso, tasksForDay, compareTasksByTitleTime, quadrant, spanPart } from '../lib/logic'
 import { Card, DomainDot, Seg } from '../components/ui'
 import { TaskForm } from '../components/TaskForm'
 import type { Task } from '../lib/types'
@@ -244,6 +244,15 @@ function DayBox({ day, big, onDropId, readId, drag, onEdit, domainOf }: {
           {planned.map((t) => {
             const done = t.status === 'fait'
             const c = domainOf(t)?.color
+            const part = spanPart(t, d)
+            // Jours intermédiaires / fin d'un item multi-jours : barre fine continue, sans coche.
+            if (part === 'middle' || part === 'end') {
+              return (
+                <button key={t.id} draggable onDragStart={drag(t.id)} onClick={() => onEdit(t)} title={t.title}
+                  style={{ background: c ? `${c}59` : 'var(--color-line-2)' }}
+                  className="block h-1.5 w-full rounded-full" />
+              )
+            }
             return (
               <div key={t.id} draggable onDragStart={drag(t.id)}
                 style={{ background: c ? `${c}2b` : 'var(--color-panel-3)', borderLeft: c ? `3px solid ${c}` : undefined }}
