@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { wallpaperOfDay } from '../lib/logic'
 
 type Mode = 'signin' | 'signup'
 
@@ -60,15 +61,16 @@ export function AuthView() {
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-6">
       {/* fond : le paysage Horizon, repris en petit derrière la carte */}
-      <img src="/horizon-bg.jpg" alt="" aria-hidden
+      <img src={wallpaperOfDay()} alt="" aria-hidden
         className="absolute inset-0 h-full w-full scale-105 object-cover blur-[2px]" />
       <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/45 to-black/70" />
 
       <div className="card rise relative w-full max-w-sm border-white/10 bg-black/45 p-8 text-center backdrop-blur-xl">
-        {/* vignette du paysage en petit */}
-        <div className="mx-auto mb-5 h-24 w-full overflow-hidden rounded-xl border border-white/15">
-          <img src="/horizon-bg.jpg" alt="" className="h-full w-full object-cover" />
-        </div>
+        {/* logo Horizon */}
+        <span className="mx-auto mb-5 block h-24 w-24 overflow-hidden rounded-full ring-1 ring-white/15">
+          <img src="/logo.png" alt="Horizon" className="h-full w-full object-cover"
+            style={{ transform: 'scale(2.1)', transformOrigin: '50% 41%' }} />
+        </span>
 
         <h1 className="text-2xl font-bold tracking-[0.25em] text-white">HORIZON</h1>
         <p className="mb-6 mt-1 text-xs uppercase tracking-widest text-white/60">Tableau de bord personnel</p>

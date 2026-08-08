@@ -272,6 +272,13 @@ export function quoteOfDay(now = new Date()): { text: string; source: string } {
   return { text, source }
 }
 
+/** Fond d'écran du jour : rotation quotidienne parmi les images de /public/fonds. */
+const WALLPAPER_COUNT = 9
+export function wallpaperOfDay(now = new Date()): string {
+  const dayIndex = Math.floor(now.getTime() / 86_400_000)
+  return `/fonds/${((dayIndex % WALLPAPER_COUNT) + WALLPAPER_COUNT) % WALLPAPER_COUNT + 1}.png`
+}
+
 /** Phrases inspirantes sur le temps (vue Temps) — en rotation quotidienne. */
 const TIME_QUOTES: [string, string][] = [
   ['On a toujours le temps pour ce qui compte vraiment.', ''],

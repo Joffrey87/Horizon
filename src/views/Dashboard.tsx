@@ -9,7 +9,7 @@ import { useHorizon } from '../lib/store'
 import {
   computeAlerts, dayPhraseOfDay, domainBalance, eveningPhraseOfWeek, fmtDay,
   focusOfDay, greetingKind, habitStats, habitsForDay, isRecentlyDone, quoteOfDay,
-  suggestedReview, tasksForDay, todayIso,
+  suggestedReview, tasksForDay, todayIso, wallpaperOfDay,
 } from '../lib/logic'
 import { Card, Badge, ProgressBar, DomainDot, EmptyState } from '../components/ui'
 import { DomainRadar } from '../components/charts'
@@ -92,7 +92,10 @@ export function Dashboard() {
   if (!s.loading && s.domains.length === 0) {
     return (
       <div className="rise mx-auto max-w-lg pt-16 text-center">
-        <img src="/favicon.svg" alt="" className="mx-auto mb-4 h-16 w-16" />
+        <span className="mx-auto mb-4 block h-20 w-20 overflow-hidden rounded-full ring-1 ring-white/10">
+          <img src="/logo.png" alt="Horizon" className="h-full w-full object-cover"
+            style={{ transform: 'scale(2.1)', transformOrigin: '50% 41%' }} />
+        </span>
         <h1 className="text-2xl font-semibold">Bienvenue dans Horizon</h1>
         <p className="mt-2 text-sm text-ink-2">
           Tout commence par tes <strong>domaines de vie</strong> : les grandes zones stables qui donnent
@@ -284,7 +287,7 @@ export function Dashboard() {
     <div className="rise space-y-4">
       {/* ---- Accueil immersif : paysage seul, plus de contenu au scroll ---- */}
       <section className="relative mt-4 h-[calc(100vh-7rem)] min-h-[520px] overflow-hidden rounded-2xl border border-line">
-        <img src="/horizon-bg.jpg" alt="" aria-hidden
+        <img src={wallpaperOfDay(now)} alt="" aria-hidden
           className="absolute inset-0 h-full w-full object-cover" />
         {/* voiles pour la lisibilité */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/10 to-black/50" />
@@ -495,7 +498,7 @@ function GlassTile({ icon, accent, title, to, children }: {
       {children}
     </>
   )
-  const cls = 'group relative overflow-hidden rounded-2xl border border-white/15 bg-gradient-to-br from-white/12 to-black/35 p-4 text-white shadow-lg shadow-black/30 backdrop-blur-md transition-all'
+  const cls = 'group relative overflow-hidden rounded-2xl border border-white/15 bg-gradient-to-br from-white/8 to-black/20 p-4 text-white shadow-lg shadow-black/20 backdrop-blur-[3px] transition-all'
   return to
     ? <Link to={to} className={`${cls} hover:-translate-y-0.5 hover:border-white/25`}>{inner}</Link>
     : <div className={cls}>{inner}</div>

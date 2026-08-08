@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { differenceInCalendarDays, format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Plus, Pencil, CheckCircle2, Circle, Trash2, Layers, CalendarClock } from 'lucide-react'
+import { Plus, Pencil, CheckCircle2, Circle, Trash2, Layers, CalendarClock, NotebookPen } from 'lucide-react'
 import { useHorizon } from '../lib/store'
-import { Card, Badge, ProgressBar, DomainDot, Modal, EmptyState, Seg } from '../components/ui'
+import { Card, Badge, ProgressBar, DomainDot, Modal, EmptyState, Seg, NoteArea } from '../components/ui'
 import { TaskForm } from '../components/TaskForm'
 import type { Project, ProjectStatus, Step, Task } from '../lib/types'
 
@@ -19,6 +19,7 @@ export function ProjectsView() {
   const [editing, setEditing] = useState<Project | null>(null)
   const [creating, setCreating] = useState(false)
   const [openProject, setOpenProject] = useState<Project | null>(null)
+  const [noteProject, setNoteProject] = useState<Project | null>(null)
 
   const wip = s.settings?.wip_limit ?? 5
   const actifs = s.projects.filter((p) => p.status === 'actif')
@@ -36,9 +37,7 @@ export function ProjectsView() {
     <div className="rise space-y-4 pt-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Projets</h1>
-          <p className="text-sm text-ink-3">Où en sont mes projets ? Peu de projets, mais qui avancent.</p>
-        </div>
+          <h1 className="text-xl font-semibold">Projets</h1>        </div>
         <button onClick={() => setCreating(true)} className="btn-sun flex items-center gap-1.5 px-4 py-2 text-sm">
           <Plus size={15} /> Nouveau projet
         </button>
@@ -85,8 +84,8 @@ export function ProjectsView() {
                       {domain?.name}{objective && <> · sert « {objective.title} »</>}
                     </p>
                   </div>
-                  <button onClick={(e) => { e.stopPropagation(); setEditing(p) }}
-                    className="btn-ghost shrink-0 p-1.5" aria-label="Modifier">
+                  <button onClick={(e) => { e.stopPropagation(); setNoteProject(p) }}
+                    className="btn-ghost shrink-0 p-1.5" aria-label="Note du projet" title="Note du projet">
                     <Pencil size={14} />
                   </button>
                 </div>
@@ -123,17 +122,40 @@ export function ProjectsView() {
       {openLive && (
         <ProjectDetail project={openLive}
           onEdit={() => { setEditing(openLive); setOpenProject(null) }}
+          onNote={() => { setNoteProject(openLive); setOpenProject(null) }}
           onClose={() => setOpenProject(null)} />
       )}
+
+      {noteProject && <NoteModal project={noteProject} onClose={() => setNoteProject(null)} />}
     </div>
+  )
+}
+
+/** Note libre d'un projet : idées du moment, texte avec puces. */
+function NoteModal({ project, onClose }: { project: Project; onClose: () => void }) {
+  const s = useHorizon()
+  const live = s.projects.find((p) => p.id === project.id) ?? project
+  const [text, setText] = useState(live.notes ?? '')
+  const save = () => { void s.update('projects', project.id, { notes: text.trim() || null }); onClose() }
+  return (
+    <Modal open onClose={save} title={`Note — ${project.title}`} wide>
+      <div className="space-y-3">
+        <p className="text-xs text-ink-3">Tes idées du moment sur ce projet. « Entrée » continue la puce.</p>
+        <NoteArea value={text} onChange={setText} rows={12}
+          placeholder="• Une idée&#10;• Une autre…" />
+        <div className="flex justify-end">
+          <button onClick={save} className="btn-sun px-5 py-2">Enregistrer</button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 
 // ---------------------------------------------------------------------------
 // Détail d'un projet : tâches directes + étapes (avec leurs tâches)
 // ---------------------------------------------------------------------------
-function ProjectDetail({ project, onEdit, onClose }: {
-  project: Project; onEdit: () => void; onClose: () => void
+function ProjectDetail({ project, onEdit, onNote, onClose }: {
+  project: Project; onEdit: () => void; onNote: () => void; onClose: () => void
 }) {
   const s = useHorizon()
   const domain = s.domains.find((d) => d.id === project.domain_id)
@@ -173,9 +195,14 @@ function ProjectDetail({ project, onEdit, onClose }: {
             </div>
             {project.description && <p className="mt-1 text-sm text-ink-3">{project.description}</p>}
           </div>
-          <button onClick={onEdit} className="btn-ghost flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-sm">
-            <Pencil size={14} /> Modifier
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button onClick={onNote} className="btn-ghost flex items-center gap-1.5 px-3 py-1.5 text-sm">
+              <NotebookPen size={14} /> Note
+            </button>
+            <button onClick={onEdit} className="btn-ghost flex items-center gap-1.5 px-3 py-1.5 text-sm">
+              <Pencil size={14} /> Modifier
+            </button>
+          </div>
         </div>
         <div className="space-y-1">
           <div className="flex items-center justify-between text-xs text-ink-3">

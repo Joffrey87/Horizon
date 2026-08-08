@@ -169,9 +169,7 @@ export function WorkspaceView() {
     <div className="rise flex h-[calc(100vh-6rem)] flex-col space-y-3 pt-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Espace visuel</h1>
-          <p className="text-sm text-ink-3">Comment tout est relié ? Déplace librement, Horizon peut réaligner.</p>
-        </div>
+          <h1 className="text-xl font-semibold">Espace visuel</h1>        </div>
         <div className="flex flex-wrap items-center gap-2">
           <select value={layoutId} className="field w-auto"
             onChange={(e) => {

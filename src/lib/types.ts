@@ -48,6 +48,7 @@ export interface Project {
   objective_id: UUID | null
   title: string
   description: string | null
+  notes: string | null
   status: ProjectStatus
   progress: number
   next_action: string | null
@@ -88,7 +89,8 @@ export interface Task {
   urgence: number | null // 1..3
   effort: number | null // 1..3
   due_date: string | null
-  scheduled_date: string | null
+  scheduled_date: string | null   // planifié (ferme) : sera fait ce jour-là
+  ideal_date: string | null       // idéal (souhait) : idéalement ce jour-là, pas encore décidé
   end_date: string | null   // durée « jusqu'à une date »
   duration_min: number | null
   is_task: boolean          // false = simple évènement calendaire (hors Priorités)

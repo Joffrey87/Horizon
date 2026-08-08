@@ -25,6 +25,11 @@
   --color-sun-2: #fb923c;
   --color-sun-soft: #fbbf24;
 
+  /* Accents « logo Horizon » — ciel & rivière (complément froid du soleil) */
+  --color-sky: #7ec8e6;
+  --color-teal: #17a9c9;
+  --color-teal-soft: #4cc6df;
+
   /* Statuts (réservés, jamais réutilisés comme série) */
   --color-good: #199e70;
   --color-warn: #d97706;
@@ -54,11 +59,13 @@ body {
   letter-spacing: 0.01em;
 }
 
-/* Halo « lever de soleil » discret en haut de page */
+/* Halo « lever de soleil » : soleil chaud en haut, rivière fraîche en bas
+   (écho du logo Horizon) */
 .sunrise-veil {
   background:
-    radial-gradient(1100px 420px at 18% -8%, rgba(245, 158, 11, 0.09), transparent 60%),
-    radial-gradient(900px 380px at 85% -12%, rgba(251, 146, 60, 0.05), transparent 55%);
+    radial-gradient(1100px 420px at 18% -8%, rgba(245, 158, 11, 0.10), transparent 60%),
+    radial-gradient(900px 380px at 85% -12%, rgba(251, 146, 60, 0.05), transparent 55%),
+    radial-gradient(1000px 460px at 50% 118%, rgba(23, 169, 201, 0.07), transparent 60%);
 }
 
 /* Carte standard */

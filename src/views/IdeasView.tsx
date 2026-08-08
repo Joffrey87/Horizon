@@ -26,9 +26,7 @@ export function IdeasView() {
     <div className="rise space-y-4 pt-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Idées</h1>
-          <p className="text-sm text-ink-3">Et si… ? Tout est conservé, rien n'interrompt le travail en cours.</p>
-        </div>
+          <h1 className="text-xl font-semibold">Idées</h1>        </div>
         <button onClick={() => setEditing('new')} className="btn-sun flex items-center gap-1.5 px-4 py-2 text-sm">
           <Plus size={15} /> Nouvelle idée
         </button>

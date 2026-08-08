@@ -42,7 +42,10 @@ export function Shell({ children }: { children: ReactNode }) {
           <Link to="/" onClick={() => setMenuOpen(false)}
             className="flex items-center gap-3 transition-opacity hover:opacity-80"
             aria-label="Retour à l'accueil">
-            <img src="/favicon.svg" alt="" className="h-9 w-9" />
+            <span className="h-9 w-9 shrink-0 overflow-hidden rounded-full ring-1 ring-white/10">
+              <img src="/logo.png" alt="Horizon" className="h-full w-full object-cover"
+                style={{ transform: 'scale(2.1)', transformOrigin: '50% 41%' }} />
+            </span>
             <div>
               <p className="text-sm font-bold tracking-[0.22em]">HORIZON</p>
               <p className="text-[10px] uppercase tracking-wider text-ink-3">Cap · Clarté · Focus</p>
@@ -102,7 +105,10 @@ export function Shell({ children }: { children: ReactNode }) {
               </button>
             </div>
             <Link to="/" aria-label="Retour à l'accueil">
-              <img src="/favicon.svg" alt="Horizon" className="h-8 w-8" />
+              <span className="block h-8 w-8 overflow-hidden rounded-full ring-1 ring-white/10">
+                <img src="/logo.png" alt="Horizon" className="h-full w-full object-cover"
+                  style={{ transform: 'scale(2.1)', transformOrigin: '50% 41%' }} />
+              </span>
             </Link>
           </div>
           {children}

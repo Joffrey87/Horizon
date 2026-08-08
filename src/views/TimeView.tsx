@@ -7,7 +7,7 @@ import { fr } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, RotateCw, Layers, Star, Target } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import { compareTasksByTitleTime, extractHourMinute, iso, tasksForDay, recurrenceLabel, timeQuoteOfDay } from '../lib/logic'
-import { Card, DomainDot, Seg, Modal } from '../components/ui'
+import { Card, Seg, Modal } from '../components/ui'
 import { TaskForm } from '../components/TaskForm'
 import type { Objective, Step, Task } from '../lib/types'
 
@@ -164,7 +164,8 @@ function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
           const done = !t.is_recurring && t.status === 'fait'
           const domain = s.domains.find((d) => d.id === (t.domain_id ?? s.projects.find((p) => p.id === t.project_id)?.domain_id))
           return (
-            <div key={t.id} className="group flex items-start gap-1"
+            <div key={t.id} className="group flex items-start gap-1 rounded px-1 py-0.5"
+              style={{ background: domain ? `${domain.color}2b` : 'var(--color-panel-3)', borderLeft: domain ? `3px solid ${domain.color}` : undefined }}
               draggable={!t.is_recurring} onDragStart={dragData('task', t.id)}
               onClick={(e) => e.stopPropagation()}>
               <button className="mt-0.5 shrink-0"
@@ -178,11 +179,10 @@ function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
                     : <Circle size={12} className="text-ink-3 group-hover:text-sun" />}
               </button>
               <button onClick={() => onEdit(t)} className="min-w-0 flex-1 text-left" title={t.is_recurring ? recurrenceLabel(t.recurrence_rule) : t.title}>
-                <span className={`block truncate text-[11px] leading-tight ${done ? 'text-ink-3 line-through' : 'text-ink-2'}`}>
+                <span className={`block truncate text-[11px] leading-tight ${done ? 'text-ink-3 line-through' : 'text-ink'}`}>
                   {t.notable && <Star size={9} className="mr-0.5 inline text-sun" />}{t.title}
                 </span>
               </button>
-              {domain && <DomainDot color={domain.color} size={5} />}
             </div>
           )
         })}

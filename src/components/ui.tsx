@@ -1,6 +1,62 @@
-import type { MouseEvent, ReactNode } from 'react'
+import { useRef, type MouseEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
+import { X, List } from 'lucide-react'
+
+const BULLET = '• '
+
+/** Zone de note : texte libre avec puces. Entrée continue la puce en cours
+ *  (une ligne « • » vide sort de la liste). Bouton pour insérer une puce. */
+export function NoteArea({ value, onChange, placeholder, rows = 6 }: {
+  value: string; onChange: (v: string) => void; placeholder?: string; rows?: number
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+
+  const putCursor = (pos: number) => {
+    requestAnimationFrame(() => {
+      const el = ref.current
+      if (el) { el.focus(); el.setSelectionRange(pos, pos) }
+    })
+  }
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== 'Enter' || e.shiftKey) return
+    const el = e.currentTarget
+    const pos = el.selectionStart
+    const before = value.slice(0, pos)
+    const lineStart = before.lastIndexOf('\n') + 1
+    const line = before.slice(lineStart)
+    if (!line.startsWith(BULLET)) return
+    e.preventDefault()
+    if (line.trim() === BULLET.trim()) {
+      // puce vide → on sort de la liste (retire la puce)
+      const next = value.slice(0, lineStart) + value.slice(pos)
+      onChange(next); putCursor(lineStart)
+    } else {
+      const next = before + '\n' + BULLET + value.slice(pos)
+      onChange(next); putCursor(pos + 1 + BULLET.length)
+    }
+  }
+
+  const addBullet = () => {
+    const el = ref.current
+    const pos = el ? el.selectionStart : value.length
+    const atLineStart = pos === 0 || value[pos - 1] === '\n'
+    const ins = (atLineStart ? '' : '\n') + BULLET
+    const next = value.slice(0, pos) + ins + value.slice(pos)
+    onChange(next); putCursor(pos + ins.length)
+  }
+
+  return (
+    <div className="space-y-1">
+      <textarea ref={ref} value={value} onChange={(e) => onChange(e.target.value)} onKeyDown={onKeyDown}
+        placeholder={placeholder} rows={rows} className="field w-full resize-y leading-relaxed" />
+      <button type="button" onClick={addBullet}
+        className="btn-ghost flex items-center gap-1.5 px-2.5 py-1 text-xs">
+        <List size={13} /> Puce
+      </button>
+    </div>
+  )
+}
 
 export function Card({ children, className = '', title, action, onClick }: {
   children: ReactNode; className?: string; title?: string; action?: ReactNode

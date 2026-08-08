@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useHorizon } from '../lib/store'
-import { Modal, Scale3 } from './ui'
+import { Modal, Scale3, NoteArea } from './ui'
 import type { Task } from '../lib/types'
 
 /** Une tâche est ancrée à un projet OU librement à un domaine (jamais nulle part). */
@@ -201,6 +201,12 @@ export function TaskForm({ open, task, defaultDate, overrideScheduled, defaultIs
             )}
           </div>
         )}
+
+        <div className="space-y-1 text-xs text-ink-3">
+          Note
+          <NoteArea value={current.notes as string} onChange={(v) => setF('notes', v)}
+            placeholder="Idées, détails, points à suivre… (Entrée continue la puce)" rows={4} />
+        </div>
 
         {incoherent && (
           <p className="rounded-lg border border-[#ec7f97]/40 bg-[#ec7f97]/10 px-3 py-2 text-xs text-[#ec7f97]">

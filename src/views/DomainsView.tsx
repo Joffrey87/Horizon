@@ -11,7 +11,10 @@ const HORIZON_LABEL: Record<ObjectiveHorizon, string> = {
   long_terme: 'Long terme (3-5 ans)', libre: 'Libre',
 }
 
-const PALETTE = ['#d97706', '#0d9488', '#8b5cf6', '#dc4a6b', '#3987e5', '#65a30d']
+const PALETTE = [
+  '#d97706', '#0d9488', '#8b5cf6', '#dc4a6b', '#3987e5', '#65a30d',
+  '#eab308', '#06b6d4', '#e0499c', '#ef6f4c',
+]
 
 const fmtTarget = (o: Objective) => {
   if (!o.target_date) return null
@@ -44,9 +47,7 @@ export function DomainsView() {
     <div className="rise space-y-4 pt-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Domaines & objectifs</h1>
-          <p className="text-sm text-ink-3">Clique l'entête d'un domaine (ou dans le vide) pour ajouter un objectif.</p>
-        </div>
+          <h1 className="text-xl font-semibold">Domaines & objectifs</h1>        </div>
         <button onClick={() => setEditDomain('new')} className="btn-sun flex items-center gap-1.5 px-4 py-2 text-sm">
           <Plus size={15} /> Nouveau domaine
         </button>
@@ -128,7 +129,7 @@ function DomainForm({ state, onClose }: { state: Domain | 'new' | null; onClose:
       <form onSubmit={save} className="space-y-3">
         <input required value={current.name} onChange={(e) => setForm({ ...current, name: e.target.value })}
           placeholder="Nom du domaine" className="field" autoFocus />
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {PALETTE.map((c) => (
             <button key={c} type="button" onClick={() => setForm({ ...current, color: c })}
               className={`h-8 w-8 rounded-full border-2 transition-transform ${current.color === c ? 'scale-110 border-ink' : 'border-transparent'}`}

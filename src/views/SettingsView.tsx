@@ -62,9 +62,7 @@ export function SettingsView() {
   return (
     <div className="rise mx-auto max-w-xl space-y-4 pt-4">
       <header>
-        <h1 className="text-xl font-semibold">Paramètres</h1>
-        <p className="text-sm text-ink-3">Peu de réglages, volontairement.</p>
-      </header>
+        <h1 className="text-xl font-semibold">Paramètres</h1>      </header>
 
       <Card title="Profil">
         <label className="block space-y-1 text-xs text-ink-3">
