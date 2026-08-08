@@ -181,6 +181,29 @@ export interface Birthday {
   created_at: string
 }
 
+export type CheckKind = 'periodique' | 'messe_travail'
+
+/** Vérification = alerte configurable par l'utilisateur.
+ *  - 'periodique' : à revoir tous les `interval_days` jours ;
+ *  - 'messe_travail' : remonte les jours d'obligation travaillés (dimanche,
+ *    1er vendredi, 1er samedi) où il faut trouver une messe. */
+export interface Check {
+  id: UUID
+  user_id: UUID
+  title: string
+  kind: CheckKind
+  domain_id: UUID | null
+  link: string | null
+  interval_days: number | null   // cadence (periodique)
+  window_months: number          // fenêtre d'évaluation
+  config: Record<string, unknown>
+  resolved: string[]             // dates ISO déjà traitées (messe_travail)
+  last_done_at: string | null    // dernier « vérifié » (periodique)
+  active: boolean
+  sort_order: number
+  created_at: string
+}
+
 export interface Settings {
   user_id: UUID
   wip_limit: number

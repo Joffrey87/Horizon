@@ -2,12 +2,12 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight, AlertTriangle, Info, CheckCircle2, Circle,
-  LayoutDashboard, X, Flag, FolderKanban, Repeat, Plus,
+  LayoutDashboard, X, Flag, FolderKanban, Repeat, Plus, ShieldCheck,
 } from 'lucide-react'
 import type { Project } from '../lib/types'
 import { useHorizon } from '../lib/store'
 import {
-  computeAlerts, dayPhraseOfDay, domainBalance, eveningPhraseOfWeek, fmtDay,
+  checksDueCount, computeAlerts, dayPhraseOfDay, domainBalance, eveningPhraseOfWeek, fmtDay,
   focusOfDay, greetingKind, habitStats, habitsForDay, isRecentlyDone, quoteOfDay,
   suggestedReview, tasksForDay, todayIso, wallpaperOfDay,
 } from '../lib/logic'
@@ -45,6 +45,7 @@ export function Dashboard() {
     projects: s.projects, habits: s.habits, logs: s.habitLogs, reviews: s.reviews, settings: s.settings,
   }), [s.projects, s.habits, s.habitLogs, s.reviews, s.settings])
   const balance = useMemo(() => domainBalance(s.domains, s.projects, s.tasks), [s.domains, s.projects, s.tasks])
+  const checksDue = useMemo(() => checksDueCount(s.checks, s.tasks), [s.checks, s.tasks])
 
   const actifs = s.projects.filter((p) => p.status === 'actif')
   const quote = quoteOfDay()
@@ -245,10 +246,20 @@ export function Dashboard() {
 
         {/* Alertes */}
         <Card title="Alertes">
-          {alerts.length === 0 ? (
+          {alerts.length === 0 && checksDue === 0 ? (
             <EmptyState>Tout est calme. Rien à signaler.</EmptyState>
           ) : (
             <ul className="space-y-2.5">
+              {checksDue > 0 && (
+                <li>
+                  <Link to="/verifications" className="group flex gap-2.5" onClick={() => setCockpitOpen(false)}>
+                    <ShieldCheck size={15} className="mt-0.5 shrink-0 text-sun" />
+                    <p className="text-sm leading-snug text-ink-2 group-hover:text-ink">
+                      {checksDue} vérification{checksDue > 1 ? 's' : ''} à regarder
+                    </p>
+                  </Link>
+                </li>
+              )}
               {alerts.map((a) => (
                 <li key={a.id}>
                   <Link to={a.link ?? '/'} className="group flex gap-2.5"

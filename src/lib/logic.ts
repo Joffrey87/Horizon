@@ -4,11 +4,11 @@
 // ================================================================
 
 import {
-  differenceInCalendarDays, format, getDate, getISODay, isSaturday, isSunday,
-  parseISO, startOfWeek, subDays,
+  addMonths, differenceInCalendarDays, eachDayOfInterval, format, getDate, getISODay,
+  isSaturday, isSunday, parseISO, startOfWeek, subDays,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import type { Alert, Birthday, Domain, Habit, HabitLog, Project, Review, Settings, Task } from './types'
+import type { Alert, Birthday, Check, Domain, Habit, HabitLog, Project, Review, Settings, Task } from './types'
 
 /** Anniversaires tombant un jour donné (récurrence annuelle : jour + mois). */
 export function birthdaysForDay(list: Birthday[], day: Date): Birthday[] {
@@ -239,6 +239,77 @@ export function computeAlerts(opts: {
   }
 
   return alerts.slice(0, 6) // le cockpit n'est jamais exhaustif
+}
+
+// ---- Vérifications configurables -----------------------------------------
+
+/** Jour d'obligation dominicale / dévotions : dimanche, 1er vendredi, 1er samedi du mois. */
+export function isObligationDay(day: Date): boolean {
+  const wd = getISODay(day) // 1 = lundi … 7 = dimanche
+  if (wd === 7) return true
+  const firstOfKind = getDate(day) <= 7 // 1er de ce jour dans le mois
+  if (wd === 5 && firstOfKind) return true // 1er vendredi
+  if (wd === 6 && firstOfKind) return true // 1er samedi
+  return false
+}
+
+/** Motif du jour d'obligation, pour l'affichage. */
+export function obligationLabel(day: Date): string {
+  const wd = getISODay(day)
+  if (wd === 7) return 'dimanche'
+  if (wd === 5) return '1er vendredi'
+  if (wd === 6) return '1er samedi'
+  return ''
+}
+
+/** Est-ce que je travaille ce jour-là ? = un évènement importé du planning CAPS
+ *  (notes « source:caps ») ce jour, qui n'est pas un congé posé (V / Vf). */
+export function worksOn(tasks: Task[], day: Date): boolean {
+  const d = iso(day)
+  return tasks.some((t) =>
+    (t.notes?.includes('source:caps') ?? false)
+    && t.scheduled_date === d
+    && !/ - Vf?$/.test(t.title))
+}
+
+export interface CheckStatus {
+  due: boolean
+  /** messe_travail : jours à venir qui réclament une messe (non résolus). */
+  dates: { date: string; label: string }[]
+  /** periodique : nb de jours écoulés au-delà de l'échéance (≥ 0) une fois due. */
+  overdueDays: number | null
+  /** periodique : dans combien de jours la prochaine échéance (si pas encore due). */
+  nextDueInDays: number | null
+}
+
+/** État d'une vérification à l'instant présent. */
+export function checkStatus(check: Check, tasks: Task[], now = new Date()): CheckStatus {
+  if (check.kind === 'messe_travail') {
+    const resolved = new Set(check.resolved ?? [])
+    const days = eachDayOfInterval({ start: now, end: addMonths(now, check.window_months) })
+    const dates = days
+      .filter(isObligationDay)
+      .filter((d) => worksOn(tasks, d))
+      .filter((d) => !resolved.has(iso(d)))
+      .map((d) => ({ date: iso(d), label: obligationLabel(d) }))
+    return { due: dates.length > 0, dates, overdueDays: null, nextDueInDays: null }
+  }
+  // périodique
+  const interval = check.interval_days ?? 30
+  if (!check.last_done_at) return { due: true, dates: [], overdueDays: 0, nextDueInDays: null }
+  const daysSince = differenceInCalendarDays(now, parseISO(check.last_done_at))
+  if (daysSince >= interval) return { due: true, dates: [], overdueDays: daysSince - interval, nextDueInDays: null }
+  return { due: false, dates: [], overdueDays: null, nextDueInDays: interval - daysSince }
+}
+
+/** Nb total de points « à vérifier maintenant » sur toutes les vérifications actives. */
+export function checksDueCount(checks: Check[], tasks: Task[], now = new Date()): number {
+  return checks
+    .filter((c) => c.active)
+    .reduce((n, c) => {
+      const st = checkStatus(c, tasks, now)
+      return n + (c.kind === 'messe_travail' ? st.dates.length : st.due ? 1 : 0)
+    }, 0)
 }
 
 /** Équilibre des domaines : part de l'activité récente (tâches faites 14 j) par domaine. */

@@ -13,6 +13,7 @@ import { PlanningView } from './views/PlanningView'
 import { IdeasView } from './views/IdeasView'
 import { HabitsView } from './views/HabitsView'
 import { ReviewsView } from './views/ReviewsView'
+import { VerificationsView } from './views/VerificationsView'
 import { WorkspaceView } from './views/WorkspaceView'
 import { SettingsView } from './views/SettingsView'
 
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/idees" element={<IdeasView />} />
         <Route path="/habitudes" element={<HabitsView />} />
         <Route path="/revues" element={<ReviewsView />} />
+        <Route path="/verifications" element={<VerificationsView />} />
         <Route path="/espace" element={<WorkspaceView />} />
         <Route path="/parametres" element={<SettingsView />} />
         <Route path="*" element={<Navigate to="/" replace />} />

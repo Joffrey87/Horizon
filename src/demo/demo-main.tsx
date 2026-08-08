@@ -19,6 +19,7 @@ import { PlanningView } from '../views/PlanningView'
 import { IdeasView } from '../views/IdeasView'
 import { HabitsView } from '../views/HabitsView'
 import { ReviewsView } from '../views/ReviewsView'
+import { VerificationsView } from '../views/VerificationsView'
 import { WorkspaceView } from '../views/WorkspaceView'
 import { SettingsView } from '../views/SettingsView'
 import '../index.css'
@@ -31,7 +32,7 @@ useHorizon.setState({
   ready: true, loading: false,
   session: { user: { id: uid, email: 'demo@horizon.local' } } as unknown as Session,
   domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
-  habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], settings: null,
+  habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], settings: null,
 })
 
 // Mode démo pleinement interactif : les mutations restent locales (aucun réseau,
@@ -39,7 +40,7 @@ useHorizon.setState({
 const KEY: Record<string, keyof ReturnType<typeof useHorizon.getState>> = {
   domains: 'domains', objectives: 'objectives', projects: 'projects', steps: 'steps',
   tasks: 'tasks', ideas: 'ideas', habits: 'habits', habit_logs: 'habitLogs',
-  reviews: 'reviews', layouts: 'layouts', birthdays: 'birthdays',
+  reviews: 'reviews', layouts: 'layouts', birthdays: 'birthdays', checks: 'checks',
 }
 let seq = 1000
 const genId = () => `demo-${seq++}`
@@ -122,6 +123,7 @@ root.render(
             <Route path="/idees" element={<IdeasView />} />
             <Route path="/habitudes" element={<HabitsView />} />
             <Route path="/revues" element={<ReviewsView />} />
+            <Route path="/verifications" element={<VerificationsView />} />
             <Route path="/espace" element={<WorkspaceView />} />
             <Route path="/parametres" element={<SettingsView />} />
             <Route path="*" element={<Navigate to="/" replace />} />
