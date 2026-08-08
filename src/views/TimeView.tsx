@@ -175,26 +175,52 @@ function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
             // Bord « ouvert » = la bande se prolonge vers le jour voisin (même semaine) : pas d'arrondi, on déborde dans la gouttière.
             const openLeft = !weekStart && (part === 'middle' || part === 'end')
             const openRight = !weekEnd && (part === 'start' || part === 'middle')
-            const showTitle = part === 'start' || weekStart
+            const cap = part === 'start' || part === 'end' // 1er / dernier jour → capuchon plein ; sinon simple connecteur fin
             const vacation = / - Vf?$/.test(t.title)
+            const rad = { // arrondi seulement du côté fermé (le côté ouvert file dans la gouttière)
+              borderTopLeftRadius: openLeft ? 0 : 5, borderBottomLeftRadius: openLeft ? 0 : 5,
+              borderTopRightRadius: openRight ? 0 : 5, borderBottomRightRadius: openRight ? 0 : 5,
+            }
+            // Côté « ouvert » d'un capuchon : on le taille en courbe concave (h-5 → 7 px) pour une descente douce
+            // et arrondie vers le connecteur — polygone multi-points qui approxime un bézier.
+            const taperR = part === 'start' && openRight
+            const taperL = part === 'end' && openLeft
+            const clipPath = taperR
+              ? 'polygon(0 0, calc(100% - 18px) 0, calc(100% - 7px) 1.5px, calc(100% - 2.5px) 3.6px, 100% 6.5px, 100% 13.5px, calc(100% - 2.5px) 16.4px, calc(100% - 7px) 18.5px, calc(100% - 18px) 100%, 0 100%)'
+              : taperL
+                ? 'polygon(18px 0, 100% 0, 100% 100%, 18px 100%, 7px 18.5px, 2.5px 16.4px, 0 13.5px, 0 6.5px, 2.5px 3.6px, 7px 1.5px)'
+                : undefined
+            const drag = { draggable: !t.is_recurring, onDragStart: dragData('task', t.id) }
+            const edit = (e: React.MouseEvent) => { e.stopPropagation(); onEdit(t) }
+            // Fond du capuchon : dégradé d'opacité qui fond vers le connecteur du côté biseauté (sinon plein).
+            const capBg = taperR ? `linear-gradient(to right, ${fill}c2 0%, ${fill}c2 55%, ${fill}5c 100%)`
+              : taperL ? `linear-gradient(to left, ${fill}c2 0%, ${fill}c2 55%, ${fill}5c 100%)`
+                : `${fill}c2`
             return (
-              <button key={t.id} draggable={!t.is_recurring} onDragStart={dragData('task', t.id)}
-                onClick={(e) => { e.stopPropagation(); onEdit(t) }} title={t.title}
-                style={{
-                  background: `${fill}70`,
-                  marginLeft: openLeft ? -11 : undefined,
-                  marginRight: openRight ? -11 : undefined,
-                  borderTopLeftRadius: openLeft ? 0 : undefined,
-                  borderBottomLeftRadius: openLeft ? 0 : undefined,
-                  borderTopRightRadius: openRight ? 0 : undefined,
-                  borderBottomRightRadius: openRight ? 0 : undefined,
-                  boxShadow: openLeft ? undefined : `inset 3px 0 0 ${fill}`, // liseré plein au vrai départ / reprise de semaine
-                }}
-                className="flex h-5 w-full items-center overflow-hidden rounded px-1.5 text-left">
-                <span className={`truncate text-[10px] font-medium leading-none text-ink ${showTitle ? '' : 'opacity-0'} ${vacation ? 'line-through' : ''}`}>
-                  {t.title}
-                </span>
-              </button>
+              <div key={t.id} className="relative h-5">
+                {!cap ? (
+                  // Jour intermédiaire : le fin connecteur traverse la cellule et déborde à DROITE dans la gouttière.
+                  <button {...drag} onClick={edit} title={t.title}
+                    className="absolute top-1/2 block -translate-y-1/2"
+                    style={{ left: 0, right: openRight ? -21 : 0, height: 7, background: `${fill}5c`, ...rad }} />
+                ) : part === 'start' && openRight ? (
+                  // Jour de départ : uniquement le petit pont à DROITE du capuchon (jamais derrière lui).
+                  <button {...drag} onClick={edit} title={t.title}
+                    className="absolute top-1/2 block -translate-y-1/2"
+                    style={{ left: '100%', width: 21, height: 7, background: `${fill}5c` }} />
+                ) : null}
+                {/* Capuchon plein pleine hauteur aux extrémités, biseauté + dégradé vers le connecteur, avec le titre.
+                    (Le jour de fin n'a pas de connecteur : c'est la veille qui comble la gouttière de gauche.) */}
+                {cap && (
+                  <button {...drag} onClick={edit} title={t.title}
+                    className="absolute inset-0 flex items-center overflow-hidden text-left"
+                    style={{ background: capBg, ...rad, clipPath, paddingLeft: taperL ? 20 : 6, paddingRight: taperR ? 20 : 6 }}>
+                    <span className={`truncate text-[10px] font-medium leading-none text-ink ${vacation ? 'line-through' : ''}`}>
+                      {t.title}
+                    </span>
+                  </button>
+                )}
+              </div>
             )
           })}
         </div>
