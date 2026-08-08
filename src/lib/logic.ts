@@ -302,6 +302,47 @@ export function checkStatus(check: Check, tasks: Task[], now = new Date()): Chec
   return { due: false, dates: [], overdueDays: null, nextDueInDays: interval - daysSince }
 }
 
+/** Parse la garde CAPS depuis son titre (« 6h-14h M1 », « 15h-20h45 S2 - Ext »).
+ *  Renvoie début/fin en minutes depuis minuit (fin + 24 h si la garde franchit minuit). */
+export function parseShift(title: string): { start: number; end: number } | null {
+  const m = title.match(/(\d{1,2})h(\d{2})?\s*[-–]\s*(\d{1,2})h(\d{2})?/)
+  if (!m) return null
+  const start = Number(m[1]) * 60 + (m[2] ? Number(m[2]) : 0)
+  let end = Number(m[3]) * 60 + (m[4] ? Number(m[4]) : 0)
+  if (end < start) end += 24 * 60
+  return { start, end }
+}
+
+/** La garde travaillée (CAPS, hors congé V/Vf) d'un jour donné, si elle existe.
+ *  `code` = le code de journée CAPS (M1, J, S1, N…) extrait du titre. */
+export function workShiftOn(tasks: Task[], dayIso: string): { start: number; end: number; code: string } | null {
+  const t = tasks.find((x) => (x.notes?.includes('source:caps') ?? false)
+    && x.scheduled_date === dayIso && !/ - Vf?$/.test(x.title))
+  if (!t) return null
+  const shift = parseShift(t.title)
+  if (!shift) return null
+  const code = t.title.match(/\d{1,2}h\d{0,2}\s*[-–]\s*\d{1,2}h\d{0,2}\s+(\S+)/)
+  return { ...shift, code: code ? code[1] : '' }
+}
+
+/** Formate des minutes depuis minuit en « 6h » / « 20h45 ». */
+export function fmtMinutes(min: number): string {
+  const h = Math.floor(min / 60) % 24, m = min % 60
+  return m ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`
+}
+
+/** Une messe (heure « HH:MM ») est-elle compatible avec la garde ?
+ *  Il faut une marge de `buffer` min avant/après le travail ; on suppose une
+ *  messe de `massMin` min (par défaut 60). Compatible = finie avant le début
+ *  (– marge) OU commencée après la fin (+ marge) de la garde. */
+export function massFitsShift(time: string, shift: { start: number; end: number },
+  buffer = 30, massMin = 60): boolean {
+  const [h, mm] = time.split(':').map(Number)
+  const massStart = h * 60 + mm
+  const massEnd = massStart + massMin
+  return massEnd <= shift.start - buffer || massStart >= shift.end + buffer
+}
+
 /** Nb total de points « à vérifier maintenant » sur toutes les vérifications actives. */
 export function checksDueCount(checks: Check[], tasks: Task[], now = new Date()): number {
   return checks

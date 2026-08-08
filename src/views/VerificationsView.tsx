@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import { supabase } from '../lib/supabase'
-import { checkStatus } from '../lib/logic'
+import { checkStatus, workShiftOn, massFitsShift, fmtMinutes } from '../lib/logic'
 import { Card, Modal, Seg, DomainDot, Badge, EmptyState } from '../components/ui'
 import type { Check as CheckRow, CheckKind, MassSlot } from '../lib/types'
 
@@ -134,17 +134,25 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
       {/* ---- État ---- */}
       {check.kind === 'messe_travail' ? (
         <div className="space-y-2">
-          {/* Barre : fraîcheur de la liste + rafraîchir */}
+          {/* Barre : fraîcheur de la liste + lien unique + rafraîchir */}
           <div className="flex items-center justify-between gap-2 text-[11px] text-ink-3">
             <span>
               {cfg.refreshed_at
                 ? `Liste des messes vérifiée le ${format(parseISO(cfg.refreshed_at), 'd MMM', { locale: fr })}`
                 : 'Liste des messes non renseignée'}
             </span>
-            <button onClick={() => void refreshMasses()} disabled={refreshing}
-              className="btn-ghost flex items-center gap-1 px-2 py-0.5 hover:text-ink disabled:opacity-50" title="Rafraîchir depuis la source">
-              <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} /> {refreshing ? 'Maj…' : 'Rafraîchir'}
-            </button>
+            <div className="flex items-center gap-2">
+              {check.link && (
+                <a href={check.link} target="_blank" rel="noopener noreferrer"
+                  className="btn-ghost flex items-center gap-1 px-2 py-0.5 hover:text-ink" title="Ouvrir messes.info (Reims)">
+                  <ExternalLink size={11} /> messes.info
+                </a>
+              )}
+              <button onClick={() => void refreshMasses()} disabled={refreshing}
+                className="btn-ghost flex items-center gap-1 px-2 py-0.5 hover:text-ink disabled:opacity-50" title="Rafraîchir depuis la source">
+                <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} /> {refreshing ? 'Maj…' : 'Rafraîchir'}
+              </button>
+            </div>
           </div>
 
           {status.dates.length === 0 ? (
@@ -156,22 +164,21 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
               <p className="text-xs font-medium text-sun-soft">{status.dates.length} messe{status.dates.length > 1 ? 's' : ''} à trouver</p>
               <ul className="space-y-1.5">
                 {shown.map(({ date, label }) => {
-                  const options = massesForDate(date)
+                  const shift = workShiftOn(s.tasks, date)
+                  const all = massesForDate(date)
+                  // Ne proposer que les messes compatibles avec la garde (30 min de marge avant/après).
+                  const options = shift ? all.filter((m) => massFitsShift(m.t, shift)) : all
+                  const hidden = all.length - options.length
                   return (
                     <li key={date} className="rounded-lg bg-panel-2/60 px-2 py-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className="min-w-0 flex-1 truncate text-xs">
-                          <span className="capitalize text-ink">{format(parseISO(date), 'EEEE d MMMM', { locale: fr })}</span>
-                          <span className="text-ink-3"> — {label}</span>
-                        </span>
-                        {check.link && (
-                          <a href={check.link} target="_blank" rel="noopener noreferrer"
-                            className="btn-ghost flex shrink-0 items-center gap-1 px-1.5 py-0.5 text-[11px]" title="Ouvrir messes.info (Reims)">
-                            <ExternalLink size={11} /> messes.info
-                          </a>
+                      <div className="text-xs">
+                        <span className="capitalize text-ink">{format(parseISO(date), 'EEEE d MMMM', { locale: fr })}</span>
+                        <span className="text-ink-3"> — {label}</span>
+                        {shift && (
+                          <span className="text-ink-3"> · garde {shift.code && <span className="font-medium text-ink-2">{shift.code}</span>} {fmtMinutes(shift.start)}–{fmtMinutes(shift.end)}</span>
                         )}
                       </div>
-                      <div className="mt-1 flex items-center gap-1.5">
+                      <div className="mt-1">
                         {options.length > 0 ? (
                           <select defaultValue="" onChange={(e) => { if (e.target.value) resolveDate(date, e.target.value) }}
                             className="field w-full py-1 text-xs">
@@ -181,12 +188,20 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
                             ))}
                           </select>
                         ) : (
-                          <button onClick={() => resolveDate(date)}
-                            className="btn-ghost flex items-center gap-1 px-2 py-0.5 text-[11px] text-[#4cc79a]" title="Marquer comme réglé">
-                            <Check size={12} /> trouvée
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] text-ink-3">
+                              {all.length > 0 ? 'Aucune messe compatible avec ta garde.' : 'Aucune messe connue ce jour.'}
+                            </span>
+                            <button onClick={() => resolveDate(date)}
+                              className="btn-ghost flex shrink-0 items-center gap-1 px-2 py-0.5 text-[11px] text-[#4cc79a]" title="Marquer comme réglé">
+                              <Check size={12} /> réglé
+                            </button>
+                          </div>
                         )}
                       </div>
+                      {hidden > 0 && options.length > 0 && (
+                        <p className="mt-0.5 text-[10px] text-ink-3">{hidden} écartée{hidden > 1 ? 's' : ''} (horaire incompatible avec ta garde)</p>
+                      )}
                     </li>
                   )
                 })}
