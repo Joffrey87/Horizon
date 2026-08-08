@@ -97,7 +97,7 @@ export function isRecentlyDone(t: Task, now = new Date()): boolean {
 
 /** Le focus du jour : ~3 tâches maximum (cockpit, jamais exhaustif). */
 export function focusOfDay(tasks: Task[], day: Date, weekFocusIds: string[]): Task[] {
-  const due = tasksForDay(tasks, day).filter((t) => t.status !== 'fait')
+  const due = tasksForDay(tasks, day).filter((t) => t.status !== 'fait' && t.is_task !== false)
   const score = (t: Task) => {
     let s = (t.importance ?? 2) * 3 + (t.urgence ?? 2) * 2
     if (weekFocusIds.includes(t.id)) s += 10
@@ -274,8 +274,11 @@ export function worksOn(tasks: Task[], day: Date): boolean {
 
 export interface CheckStatus {
   due: boolean
-  /** messe_travail : jours à venir qui réclament une messe (non résolus). */
+  /** messe_travail : TOUS les jours d'obligation travaillés de la fenêtre (dans l'ordre,
+   *  réglés compris — l'app garde chaque date à sa place). */
   dates: { date: string; label: string }[]
+  /** Nb de points encore à traiter (messe : dates ni réglées ni choisies ; periodique : 0/1). */
+  pending: number
   /** periodique : nb de jours écoulés au-delà de l'échéance (≥ 0) une fois due. */
   overdueDays: number | null
   /** periodique : dans combien de jours la prochaine échéance (si pas encore due). */
@@ -286,20 +289,21 @@ export interface CheckStatus {
 export function checkStatus(check: Check, tasks: Task[], now = new Date()): CheckStatus {
   if (check.kind === 'messe_travail') {
     const resolved = new Set(check.resolved ?? [])
+    const chosen = ((check.config?.chosen) ?? {}) as Record<string, string>
     const days = eachDayOfInterval({ start: now, end: addMonths(now, check.window_months) })
     const dates = days
       .filter(isObligationDay)
       .filter((d) => worksOn(tasks, d))
-      .filter((d) => !resolved.has(iso(d)))
       .map((d) => ({ date: iso(d), label: obligationLabel(d) }))
-    return { due: dates.length > 0, dates, overdueDays: null, nextDueInDays: null }
+    const pending = dates.filter((d) => !resolved.has(d.date) && !chosen[d.date]).length
+    return { due: pending > 0, dates, pending, overdueDays: null, nextDueInDays: null }
   }
   // périodique
   const interval = check.interval_days ?? 30
-  if (!check.last_done_at) return { due: true, dates: [], overdueDays: 0, nextDueInDays: null }
+  if (!check.last_done_at) return { due: true, dates: [], pending: 1, overdueDays: 0, nextDueInDays: null }
   const daysSince = differenceInCalendarDays(now, parseISO(check.last_done_at))
-  if (daysSince >= interval) return { due: true, dates: [], overdueDays: daysSince - interval, nextDueInDays: null }
-  return { due: false, dates: [], overdueDays: null, nextDueInDays: interval - daysSince }
+  if (daysSince >= interval) return { due: true, dates: [], pending: 1, overdueDays: daysSince - interval, nextDueInDays: null }
+  return { due: false, dates: [], pending: 0, overdueDays: null, nextDueInDays: interval - daysSince }
 }
 
 /** Parse la garde CAPS depuis son titre (« 6h-14h M1 », « 15h-20h45 S2 - Ext »).
@@ -347,10 +351,7 @@ export function massFitsShift(time: string, shift: { start: number; end: number 
 export function checksDueCount(checks: Check[], tasks: Task[], now = new Date()): number {
   return checks
     .filter((c) => c.active)
-    .reduce((n, c) => {
-      const st = checkStatus(c, tasks, now)
-      return n + (c.kind === 'messe_travail' ? st.dates.length : st.due ? 1 : 0)
-    }, 0)
+    .reduce((n, c) => n + checkStatus(c, tasks, now).pending, 0)
 }
 
 /** Équilibre des domaines : part de l'activité récente (tâches faites 14 j) par domaine. */

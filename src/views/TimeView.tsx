@@ -4,7 +4,7 @@ import {
   isSameMonth, isToday, parseISO, startOfMonth, startOfWeek,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, RotateCw, Layers, Star, Target } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, RotateCw, Layers, Star, Target, Church } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import { compareTasksByTitleTime, extractHourMinute, iso, tasksForDay, recurrenceLabel, timeQuoteOfDay, spanPart, birthdaysForDay } from '../lib/logic'
 import { Card, Seg, Modal } from '../components/ui'
@@ -185,9 +185,15 @@ function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
           const done = !t.is_recurring && !isEvent && t.status === 'fait'
           const vacation = / - Vf?$/.test(t.title) // garde posée en congé (V / Vf) → barrée
           const struck = done || vacation
+          const checkMass = t.notes?.startsWith('source:check') ?? false // messe issue d'une vérification
           return (
             <div key={t.id} className="group flex items-start gap-1 rounded px-1 py-0.5"
-              style={{ background: c ? `${c}2b` : 'var(--color-panel-3)', borderLeft: c ? `3px solid ${c}` : undefined }}
+              style={{
+                background: checkMass ? 'rgba(167,139,250,0.14)' : c ? `${c}2b` : 'var(--color-panel-3)',
+                borderLeft: !checkMass && c ? `3px solid ${c}` : undefined,
+                outline: checkMass ? '1.5px dashed #a78bfa' : undefined,
+                outlineOffset: checkMass ? '-1px' : undefined,
+              }}
               draggable={!t.is_recurring} onDragStart={dragData('task', t.id)}
               onClick={(e) => e.stopPropagation()}>
               {!isEvent && (
@@ -204,6 +210,7 @@ function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
               )}
               <button onClick={() => onEdit(t)} className="min-w-0 flex-1 text-left" title={t.is_recurring ? recurrenceLabel(t.recurrence_rule) : t.title}>
                 <span className={`block truncate text-[11px] leading-tight ${struck ? 'text-ink-3 line-through' : 'text-ink'}`}>
+                  {checkMass && <Church size={9} className="mr-0.5 inline text-[#a78bfa]" />}
                   {t.notable && <Star size={9} className="mr-0.5 inline text-sun" />}{t.title}
                 </span>
               </button>
@@ -384,13 +391,19 @@ function HourColumn({ day, hours, onEdit, onCreate, onMove }: {
         const top = (hm.hour - HOUR_START + hm.minute / 60) * ROW_H
         const height = Math.max(20, (t.duration_min ?? 30) / 60 * ROW_H)
         const done = !t.is_recurring && t.status === 'fait'
+        const checkMass = t.notes?.startsWith('source:check') ?? false
         const domain = s.domains.find((d) => d.id === (t.domain_id ?? s.projects.find((p) => p.id === t.project_id)?.domain_id))
         return (
           <button key={t.id} draggable={!t.is_recurring} onDragStart={dragData('task', t.id)}
             onClick={(e) => { e.stopPropagation(); onEdit(t) }}
-            className="absolute left-0.5 right-0.5 overflow-hidden rounded-md border border-sun/30 bg-panel-2 px-1 py-0.5 text-left"
-            style={{ top, height, borderLeftColor: domain?.color, borderLeftWidth: 3 }}>
-            <span className={`block truncate text-[10px] leading-tight ${done ? 'text-ink-3 line-through' : 'text-ink'}`}>{t.title}</span>
+            className={`absolute left-0.5 right-0.5 overflow-hidden rounded-md px-1 py-0.5 text-left ${
+              checkMass ? 'bg-[#a78bfa]/15' : 'border border-sun/30 bg-panel-2'}`}
+            style={checkMass
+              ? { top, height, outline: '1.5px dashed #a78bfa', outlineOffset: '-1px' }
+              : { top, height, borderLeftColor: domain?.color, borderLeftWidth: 3 }}>
+            <span className={`block truncate text-[10px] leading-tight ${done ? 'text-ink-3 line-through' : 'text-ink'}`}>
+              {checkMass && <Church size={9} className="mr-0.5 inline text-[#a78bfa]" />}{t.title}
+            </span>
           </button>
         )
       })}

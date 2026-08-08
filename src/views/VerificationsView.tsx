@@ -72,21 +72,43 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
   const chosen = cfg.chosen ?? {}
   const massesForDate = (date: string): MassSlot[] => masses[String(getISODay(parseISO(date)))] ?? []
 
-  const resolveDate = (date: string, pick?: string) =>
-    void s.update('checks', check.id, {
-      resolved: [...(check.resolved ?? []), date],
-      config: pick ? { ...cfg, chosen: { ...chosen, [date]: pick } } : cfg,
+  // Marqueur des évènements « messe » posés au calendrier par cette vérification.
+  const massTag = `source:check:${check.id}`
+  const addMassEvent = async (date: string, time: string, church: string) => {
+    await s.insert('tasks', {
+      title: `Messe ${time.replace(':', 'h')} — ${church}`,
+      is_task: false, scheduled_date: date, domain_id: check.domain_id,
+      duration_min: 60, notes: massTag, status: 'a_faire',
     })
-  const unresolveDate = (date: string) => {
+  }
+  const removeMassEvent = async (date: string) => {
+    const ev = s.tasks.find((t) => t.notes === massTag && t.scheduled_date === date)
+    if (ev) await s.remove('tasks', ev.id)
+  }
+
+  // Choisir une messe : mémorise le choix ET pose l'évènement au calendrier.
+  const chooseMass = async (date: string, m: MassSlot) => {
+    await s.update('checks', check.id, { config: { ...cfg, chosen: { ...chosen, [date]: `${m.t} ${m.c}` } } })
+    await addMassEvent(date, m.t, m.c)
+  }
+  // Jour sans messe possible : on l'écarte (aucun évènement posé).
+  const markHandled = (date: string) =>
+    void s.update('checks', check.id, { resolved: [...(check.resolved ?? []), date] })
+  // Revenir en arrière sur une date : retire choix/écart et l'évènement calendaire.
+  const undoDate = async (date: string) => {
     const nextChosen = { ...chosen }; delete nextChosen[date]
-    void s.update('checks', check.id, {
+    await s.update('checks', check.id, {
       resolved: (check.resolved ?? []).filter((d) => d !== date),
       config: { ...cfg, chosen: nextChosen },
     })
+    await removeMassEvent(date)
   }
   const markDone = () =>
     void s.update('checks', check.id, { last_done_at: new Date().toISOString() })
-  const resetResolved = () => void s.update('checks', check.id, { resolved: [], config: { ...cfg, chosen: {} } })
+  const resetAll = async () => {
+    await s.update('checks', check.id, { resolved: [], config: { ...cfg, chosen: {} } })
+    for (const ev of s.tasks.filter((t) => t.notes === massTag)) await s.remove('tasks', ev.id)
+  }
 
   // Rafraîchit la liste des messes (fonction Edge qui relit la source publique).
   const refreshMasses = async () => {
@@ -98,9 +120,7 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
     setRefreshing(false)
   }
 
-  const settled = (check.resolved ?? []).filter((d) => chosen[d]).sort()
-  const shown = status.dates.slice(0, 6)
-  const extra = status.dates.length - shown.length
+  const hasSettled = Object.keys(chosen).length > 0 || (check.resolved?.length ?? 0) > 0
 
   return (
     <Card className={`flex flex-col gap-3 ${!check.active ? 'opacity-60' : ''}`}>
@@ -161,16 +181,24 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
             </p>
           ) : (
             <>
-              <p className="text-xs font-medium text-sun-soft">{status.dates.length} messe{status.dates.length > 1 ? 's' : ''} à trouver</p>
+              <p className="text-xs font-medium text-sun-soft">
+                {status.pending > 0
+                  ? `${status.pending} messe${status.pending > 1 ? 's' : ''} à trouver sur ${status.dates.length} jour${status.dates.length > 1 ? 's' : ''}`
+                  : `Toutes les messes sont choisies (${status.dates.length})`}
+              </p>
               <ul className="space-y-1.5">
-                {shown.map(({ date, label }) => {
+                {status.dates.map(({ date, label }) => {
                   const shift = workShiftOn(s.tasks, date)
                   const all = massesForDate(date)
                   // Ne proposer que les messes compatibles avec la garde (30 min de marge avant/après).
                   const options = shift ? all.filter((m) => massFitsShift(m.t, shift)) : all
                   const hidden = all.length - options.length
+                  const chosenVal = chosen[date]
+                  const isHandled = (check.resolved ?? []).includes(date)
+                  const noMass = !chosenVal && !isHandled && options.length === 0
                   return (
-                    <li key={date} className="rounded-lg bg-panel-2/60 px-2 py-1.5">
+                    <li key={date}
+                      className={`rounded-lg px-2 py-1.5 ${noMass ? 'border border-[#ef4444]/60 bg-[#ef4444]/12' : 'bg-panel-2/60'}`}>
                       <div className="text-xs">
                         <span className="capitalize text-ink">{format(parseISO(date), 'EEEE d MMMM', { locale: fr })}</span>
                         <span className="text-ink-3"> — {label}</span>
@@ -179,8 +207,25 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
                         )}
                       </div>
                       <div className="mt-1">
-                        {options.length > 0 ? (
-                          <select defaultValue="" onChange={(e) => { if (e.target.value) resolveDate(date, e.target.value) }}
+                        {chosenVal ? (
+                          <div className="flex items-center gap-2">
+                            <Church size={12} className="shrink-0 text-[#a78bfa]" />
+                            <span className="min-w-0 flex-1 truncate text-[11px] text-ink">{chosenVal}</span>
+                            <span className="shrink-0 text-[10px] text-ink-3">au calendrier</span>
+                            <button onClick={() => void undoDate(date)} className="btn-ghost shrink-0 p-1 text-ink-3 hover:text-ink" title="Changer / annuler">
+                              <Undo2 size={12} />
+                            </button>
+                          </div>
+                        ) : isHandled ? (
+                          <div className="flex items-center gap-2">
+                            <Check size={12} className="shrink-0 text-[#4cc79a]" />
+                            <span className="flex-1 text-[11px] text-ink-3">réglé (sans messe)</span>
+                            <button onClick={() => void undoDate(date)} className="btn-ghost shrink-0 p-1 text-ink-3 hover:text-ink" title="Revenir">
+                              <Undo2 size={12} />
+                            </button>
+                          </div>
+                        ) : options.length > 0 ? (
+                          <select defaultValue="" onChange={(e) => { const m = options.find((o) => `${o.t} ${o.c}` === e.target.value); if (m) void chooseMass(date, m) }}
                             className="field w-full py-1 text-xs">
                             <option value="">Choisir une messe…</option>
                             {options.map((m) => (
@@ -189,49 +234,29 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
                           </select>
                         ) : (
                           <div className="flex items-center gap-2">
-                            <span className="text-[11px] text-ink-3">
-                              {all.length > 0 ? 'Aucune messe compatible avec ta garde.' : 'Aucune messe connue ce jour.'}
+                            <span className="min-w-0 flex-1 text-[11px] font-medium text-[#ef4444]">
+                              {all.length > 0 ? 'Aucune messe compatible avec ta garde' : 'Aucune messe connue ce jour'}
                             </span>
-                            <button onClick={() => resolveDate(date)}
-                              className="btn-ghost flex shrink-0 items-center gap-1 px-2 py-0.5 text-[11px] text-[#4cc79a]" title="Marquer comme réglé">
-                              <Check size={12} /> réglé
+                            <button onClick={() => markHandled(date)}
+                              className="btn-ghost shrink-0 px-2 py-0.5 text-[11px] text-ink-3" title="Ne rien planifier ce jour">
+                              Ignorer
                             </button>
                           </div>
                         )}
                       </div>
-                      {hidden > 0 && options.length > 0 && (
+                      {hidden > 0 && options.length > 0 && !chosenVal && (
                         <p className="mt-0.5 text-[10px] text-ink-3">{hidden} écartée{hidden > 1 ? 's' : ''} (horaire incompatible avec ta garde)</p>
                       )}
                     </li>
                   )
                 })}
               </ul>
-              {extra > 0 && <p className="text-[11px] text-ink-3">+ {extra} autre{extra > 1 ? 's' : ''} plus loin dans la fenêtre.</p>}
+              {hasSettled && (
+                <button onClick={() => void resetAll()} className="inline-flex items-center gap-1 text-[10px] text-ink-3 underline hover:text-ink-2">
+                  <RotateCcw size={10} /> tout réinitialiser
+                </button>
+              )}
             </>
-          )}
-
-          {/* Messes déjà choisies */}
-          {settled.length > 0 && (
-            <div className="border-t border-line-2/50 pt-1.5">
-              <p className="mb-1 text-[10px] uppercase tracking-wide text-ink-3">Messes choisies</p>
-              <ul className="space-y-0.5">
-                {settled.map((date) => (
-                  <li key={date} className="flex items-center gap-2 text-[11px]">
-                    <Check size={11} className="shrink-0 text-[#4cc79a]" />
-                    <span className="min-w-0 flex-1 truncate">
-                      <span className="capitalize text-ink-2">{format(parseISO(date), 'EEE d MMM', { locale: fr })}</span>
-                      <span className="text-ink-3"> · {chosen[date]}</span>
-                    </span>
-                    <button onClick={() => unresolveDate(date)} className="btn-ghost shrink-0 p-1 text-ink-3 hover:text-ink" title="Annuler ce choix">
-                      <Undo2 size={11} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <button onClick={resetResolved} className="mt-1 inline-flex items-center gap-1 text-[10px] text-ink-3 underline hover:text-ink-2">
-                <RotateCcw size={10} /> tout réinitialiser
-              </button>
-            </div>
           )}
         </div>
       ) : (
