@@ -3,12 +3,16 @@ import { format, getISODay, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import {
   Plus, Check, ExternalLink, Pencil, Trash2, Church, BellRing, RotateCcw, ShieldCheck, RefreshCw, Undo2,
+  ListChecks, ChevronDown, X, CheckCircle2, Circle,
 } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { checkStatus, workShiftOn, massFitsShift, fmtMinutes, hasMaintainedMasses, massesInfoUrl, citySlug } from '../lib/logic'
+import { checklistTemplate, checklistProgress, uid } from '../lib/checklist'
 import { Card, Modal, Seg, DomainDot, Badge, EmptyState } from '../components/ui'
-import type { Check as CheckRow, CheckKind, MassSlot } from '../lib/types'
+import type { Check as CheckRow, CheckKind, MassSlot, ChecklistConfig, ChecklistSection } from '../lib/types'
+
+const MASS_PREVIEW = 4 // nb de jours de messe affichés avant de déplier la liste
 
 const INTERVAL_OPTIONS: { value: number; label: string }[] = [
   { value: 7, label: 'Chaque semaine' },
@@ -28,9 +32,11 @@ export function VerificationsView() {
   const checks = useMemo(
     () => [...s.checks].sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at)),
     [s.checks])
+  const lists = checks.filter((c) => c.kind === 'checklist')
+  const alerts = checks.filter((c) => c.kind !== 'checklist')
 
   return (
-    <div className="rise space-y-4 pt-4">
+    <div className="rise space-y-6 pt-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold"><ShieldCheck size={20} className="text-sun" /> Vérifications</h1>
@@ -42,15 +48,37 @@ export function VerificationsView() {
       </header>
 
       {checks.length === 0 ? (
-        <EmptyState hint="Ex. « trouver une messe quand je travaille un dimanche », « poser mes congés 6 mois à l'avance »…">
+        <EmptyState hint="Ex. « trouver une messe quand je travaille un dimanche », « ma checklist Vacances »…">
           Aucune vérification pour l'instant.
         </EmptyState>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
-          {checks.map((c) => (
-            <CheckCard key={c.id} check={c} onEdit={() => setEditing(c)} />
-          ))}
-        </div>
+        <>
+          {/* ---- Listes de vérification (checklists) ---- */}
+          {lists.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-ink-2">
+                <ListChecks size={16} className="text-sun" /> Mes listes
+              </h2>
+              <div className="grid gap-3 md:grid-cols-2">
+                {lists.map((c) => <ChecklistCard key={c.id} check={c} onEdit={() => setEditing(c)} />)}
+              </div>
+            </section>
+          )}
+
+          {/* ---- Alertes (périodiques / messe) ---- */}
+          {alerts.length > 0 && (
+            <section className="space-y-3">
+              {lists.length > 0 && (
+                <h2 className="flex items-center gap-2 text-sm font-semibold text-ink-2">
+                  <BellRing size={16} className="text-sun" /> Alertes
+                </h2>
+              )}
+              <div className="grid gap-3 md:grid-cols-2">
+                {alerts.map((c) => <CheckCard key={c.id} check={c} onEdit={() => setEditing(c)} />)}
+              </div>
+            </section>
+          )}
+        </>
       )}
 
       <CheckForm
@@ -64,6 +92,7 @@ export function VerificationsView() {
 function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
   const s = useHorizon()
   const [refreshing, setRefreshing] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const domain = s.domains.find((d) => d.id === check.domain_id)
   const status = useMemo(() => checkStatus(check, s.tasks, { homeCity: s.settings?.home_city ?? undefined }), [check, s.tasks, s.settings])
 
@@ -207,7 +236,7 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
                   : `Toutes les messes sont choisies (${status.dates.length})`}
               </p>
               <ul className="space-y-1.5">
-                {status.dates.map(({ date, label, location }) => {
+                {(expanded ? status.dates : status.dates.slice(0, MASS_PREVIEW)).map(({ date, location }) => {
                   const shift = workShiftOn(s.tasks, date)
                   const hasTimed = Object.keys(cityMasses(location)).length > 0 // liste horaire dispo pour ce lieu ?
                   const all = massesForDate(location, date)
@@ -222,10 +251,9 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
                       className={`rounded-lg px-2 py-1.5 ${noMass ? 'border border-[#ef4444]/60 bg-[#ef4444]/12' : 'bg-panel-2/60'}`}>
                       <div className="text-xs">
                         <span className="capitalize text-ink">{format(parseISO(date), 'EEEE d MMMM', { locale: fr })}</span>
-                        <span className="text-ink-3"> — {label}</span>
                         {location !== homeCity && <span className="font-medium text-[#a78bfa]"> · à {location}</span>}
                         {shift && (
-                          <span className="text-ink-3"> · jour de travail {shift.code && <span className="font-medium text-ink-2">{shift.code}</span>} {fmtMinutes(shift.start)}–{fmtMinutes(shift.end)}</span>
+                          <span className="text-ink-3"> · <span className="font-medium text-ink-2" title={`${fmtMinutes(shift.start)}–${fmtMinutes(shift.end)}`}>{shift.code || `${fmtMinutes(shift.start)}–${fmtMinutes(shift.end)}`}</span></span>
                         )}
                       </div>
                       <div className="mt-1">
@@ -297,6 +325,13 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
                   )
                 })}
               </ul>
+              {status.dates.length > MASS_PREVIEW && (
+                <button onClick={() => setExpanded((v) => !v)}
+                  className="flex w-full items-center justify-center gap-1 rounded-lg border border-line-2/60 py-1 text-[11px] text-ink-3 hover:bg-panel-2/40 hover:text-ink">
+                  <ChevronDown size={12} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                  {expanded ? 'Réduire' : `Voir les ${status.dates.length - MASS_PREVIEW} autre${status.dates.length - MASS_PREVIEW > 1 ? 's' : ''} jour${status.dates.length - MASS_PREVIEW > 1 ? 's' : ''}`}
+                </button>
+              )}
               {hasSettled && (
                 <button onClick={() => void resetAll()} className="inline-flex items-center gap-1 text-[10px] text-ink-3 underline hover:text-ink-2">
                   <RotateCcw size={10} /> tout réinitialiser
@@ -329,6 +364,124 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
   )
 }
 
+// ---- Carte « liste de vérification » (checklist éditable) ------------------
+
+function ChecklistCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
+  const s = useHorizon()
+  const [open, setOpen] = useState(false) // repliée par défaut : on n'affiche que le titre + la progression
+  const domain = s.domains.find((d) => d.id === check.domain_id)
+  const cfg = (check.config ?? {}) as unknown as ChecklistConfig
+  const sections = cfg.sections ?? []
+  const { done, total } = checklistProgress(cfg)
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0
+
+  const persist = (next: ChecklistSection[]) => void s.update('checks', check.id, { config: { ...cfg, sections: next } })
+  const mapSection = (id: string, fn: (sec: ChecklistSection) => ChecklistSection) =>
+    persist(sections.map((sec) => (sec.id === id ? fn(sec) : sec)))
+
+  const toggleItem = (secId: string, itemId: string) =>
+    mapSection(secId, (sec) => ({ ...sec, items: sec.items.map((it) => (it.id === itemId ? { ...it, done: !it.done } : it)) }))
+  const renameItem = (secId: string, itemId: string, label: string) =>
+    mapSection(secId, (sec) => ({
+      ...sec,
+      items: label.trim()
+        ? sec.items.map((it) => (it.id === itemId ? { ...it, label: label.trim() } : it))
+        : sec.items.filter((it) => it.id !== itemId), // vidé → on retire l'item
+    }))
+  const addItem = (secId: string, label: string) => {
+    if (!label.trim()) return
+    mapSection(secId, (sec) => ({ ...sec, items: [...sec.items, { id: uid(), label: label.trim(), done: false }] }))
+  }
+  const removeItem = (secId: string, itemId: string) =>
+    mapSection(secId, (sec) => ({ ...sec, items: sec.items.filter((it) => it.id !== itemId) }))
+  const renameSection = (secId: string, title: string) =>
+    mapSection(secId, (sec) => ({ ...sec, title: title.trim() || 'Section' }))
+  const addSection = () => persist([...sections, { id: uid(), title: 'Nouvelle section', items: [] }])
+  const removeSection = (secId: string) => {
+    const sec = sections.find((x) => x.id === secId)
+    if (sec && sec.items.length > 0 && !confirm(`Supprimer la section « ${sec.title} » et ses ${sec.items.length} tâches ?`)) return
+    persist(sections.filter((x) => x.id !== secId))
+  }
+
+  return (
+    <Card className="flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-2">
+        <button onClick={() => setOpen((v) => !v)} className="flex min-w-0 items-start gap-2 text-left">
+          {domain ? <DomainDot color={domain.color} size={9} /> : <ListChecks size={15} className="mt-0.5 shrink-0 text-sun" />}
+          <div className="min-w-0">
+            <p className="flex items-center gap-1.5 text-sm font-medium leading-snug">
+              <ChevronDown size={14} className={`shrink-0 text-ink-3 transition-transform ${open ? '' : '-rotate-90'}`} />
+              {check.title}
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              {cfg.category && <Badge tone="info">{cfg.category}</Badge>}
+              <span className="text-xs text-ink-3">{done}/{total} fait{done > 1 ? 's' : ''}</span>
+            </div>
+          </div>
+        </button>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button onClick={onEdit} className="btn-ghost p-1.5 text-ink-3 hover:text-ink" title="Renommer / catégorie"><Pencil size={14} /></button>
+          <button onClick={() => { if (confirm('Supprimer cette liste ?')) void s.remove('checks', check.id) }}
+            className="btn-ghost p-1.5 text-ink-3 hover:text-[#ec7f97]" title="Supprimer"><Trash2 size={14} /></button>
+        </div>
+      </div>
+
+      {/* Barre de progression */}
+      <div className="h-1.5 overflow-hidden rounded-full bg-panel-2">
+        <div className="h-full rounded-full bg-good transition-all" style={{ width: `${pct}%` }} />
+      </div>
+
+      {open && (
+        <div className="space-y-3">
+          {sections.map((sec) => {
+            const secDone = sec.items.filter((it) => it.done).length
+            return (
+              <div key={sec.id} className="rounded-lg bg-panel-2/40 p-2">
+                <div className="mb-1 flex items-center gap-1.5">
+                  <input defaultValue={sec.title} key={sec.title}
+                    onBlur={(e) => { if (e.target.value.trim() !== sec.title) renameSection(sec.id, e.target.value) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                    className="min-w-0 flex-1 bg-transparent text-xs font-semibold uppercase tracking-wide text-ink-2 outline-none focus:text-ink" />
+                  <span className="shrink-0 text-[10px] text-ink-3">{secDone}/{sec.items.length}</span>
+                  <button onClick={() => removeSection(sec.id)} className="btn-ghost shrink-0 p-1 text-ink-3 hover:text-[#ec7f97]" title="Supprimer la section">
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+                <ul className="space-y-0.5">
+                  {sec.items.map((it) => (
+                    <li key={it.id} className="group flex items-center gap-1.5">
+                      <button onClick={() => toggleItem(sec.id, it.id)} className="shrink-0" aria-label={it.done ? 'Décocher' : 'Cocher'}>
+                        {it.done ? <CheckCircle2 size={15} className="text-[#4cc79a]" /> : <Circle size={15} className="text-ink-3 hover:text-sun" />}
+                      </button>
+                      <input defaultValue={it.label} key={it.label}
+                        onBlur={(e) => { if (e.target.value.trim() !== it.label) renameItem(sec.id, it.id, e.target.value) }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                        className={`min-w-0 flex-1 bg-transparent text-[13px] outline-none ${it.done ? 'text-ink-3 line-through' : 'text-ink'}`} />
+                      <button onClick={() => removeItem(sec.id, it.id)}
+                        className="btn-ghost shrink-0 p-0.5 text-ink-3 opacity-0 transition-opacity hover:text-[#ec7f97] group-hover:opacity-100" title="Supprimer">
+                        <X size={13} />
+                      </button>
+                    </li>
+                  ))}
+                  <li className="flex items-center gap-1.5">
+                    <Plus size={14} className="shrink-0 text-ink-3" />
+                    <input placeholder="Ajouter une tâche…"
+                      onKeyDown={(e) => { if (e.key === 'Enter') { addItem(sec.id, e.currentTarget.value); e.currentTarget.value = '' } }}
+                      className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-3" />
+                  </li>
+                </ul>
+              </div>
+            )
+          })}
+          <button onClick={addSection} className="flex items-center gap-1 text-[11px] text-ink-3 hover:text-ink">
+            <Plus size={12} /> Ajouter une section
+          </button>
+        </div>
+      )}
+    </Card>
+  )
+}
+
 function CheckForm({ open, check, onClose }: { open: boolean; check: CheckRow | null; onClose: () => void }) {
   const s = useHorizon()
   const [title, setTitle] = useState('')
@@ -337,6 +490,7 @@ function CheckForm({ open, check, onClose }: { open: boolean; check: CheckRow | 
   const [link, setLink] = useState('')
   const [intervalDays, setIntervalDays] = useState(30)
   const [windowMonths, setWindowMonths] = useState(6)
+  const [category, setCategory] = useState('Vacances')
   const [initFor, setInitFor] = useState<string | null>(null)
 
   // (Ré)initialise les champs à chaque ouverture / changement de cible.
@@ -349,6 +503,7 @@ function CheckForm({ open, check, onClose }: { open: boolean; check: CheckRow | 
     setLink(check?.link ?? '')
     setIntervalDays(check?.interval_days ?? 30)
     setWindowMonths(check?.window_months ?? 6)
+    setCategory(((check?.config as unknown as ChecklistConfig | undefined)?.category) ?? 'Vacances')
   }
   if (open && initFor === null) setInitFor(key)
   if (!open && initFor !== null) setInitFor(null)
@@ -357,6 +512,25 @@ function CheckForm({ open, check, onClose }: { open: boolean; check: CheckRow | 
 
   const save = async () => {
     if (!title.trim()) return
+    if (kind === 'checklist') {
+      if (check) {
+        // Édition : on garde les sections existantes, on met à jour titre / catégorie / domaine.
+        const cfg = (check.config ?? {}) as unknown as ChecklistConfig
+        await s.update('checks', check.id, {
+          title: title.trim(), kind, domain_id: domainId || null,
+          config: { ...cfg, category: category.trim() || undefined },
+        })
+      } else {
+        // Création : liste pré-remplie d'après le modèle de la catégorie.
+        await s.insert('checks', {
+          title: title.trim(), kind, domain_id: domainId || null, link: null,
+          interval_days: null, window_months: 6, active: true, resolved: [],
+          config: checklistTemplate(category), sort_order: s.checks.length,
+        })
+      }
+      onClose()
+      return
+    }
     const values = {
       title: title.trim(),
       kind,
@@ -376,21 +550,40 @@ function CheckForm({ open, check, onClose }: { open: boolean; check: CheckRow | 
         <div>
           <label className="mb-1 block text-xs text-ink-3">Intitulé</label>
           <input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus
-            placeholder="Ex. Vérifier mes inscriptions aux stages" className="field w-full" />
+            placeholder={kind === 'checklist' ? 'Ex. Vacances Août 2026' : 'Ex. Vérifier mes inscriptions aux stages'} className="field w-full" />
         </div>
 
         <div>
           <label className="mb-1 block text-xs text-ink-3">Type</label>
           <Seg value={kind} onChange={setKind} options={[
             { value: 'periodique', label: 'Périodique' },
-            { value: 'messe_travail', label: 'Messe si je travaille' },
+            { value: 'messe_travail', label: 'Messe' },
+            { value: 'checklist', label: 'Liste' },
           ]} />
           <p className="mt-1 text-xs text-ink-3">
             {kind === 'periodique'
               ? 'Revient à intervalle régulier jusqu\'à ce que tu la marques « vérifiée ».'
-              : 'Remonte les jours d\'obligation travaillés (dimanche, 1er vendredi, 1er samedi) où il faut trouver une messe.'}
+              : kind === 'messe_travail'
+                ? 'Remonte les jours d\'obligation travaillés (dimanche, 1er vendredi, 1er samedi) où il faut trouver une messe.'
+                : 'Une liste de tâches à cocher, groupées par section. La catégorie regroupe les listes d\'une même famille (ex. Vacances).'}
           </p>
         </div>
+
+        {kind === 'checklist' && (
+          <div>
+            <label className="mb-1 block text-xs text-ink-3">Catégorie</label>
+            <input value={category} onChange={(e) => setCategory(e.target.value)} list="checklist-categories"
+              placeholder="Vacances" className="field w-full" />
+            <datalist id="checklist-categories">
+              {[...new Set(s.checks.filter((c) => c.kind === 'checklist').map((c) => (c.config as unknown as ChecklistConfig)?.category).filter(Boolean))]
+                .map((c) => <option key={c} value={c as string} />)}
+              <option value="Vacances" />
+            </datalist>
+            {!check && (
+              <p className="mt-1 text-xs text-ink-3">La catégorie « Vacances » crée une liste pré-remplie (départ, maison, route, retour) — à ajuster ensuite.</p>
+            )}
+          </div>
+        )}
 
         {kind === 'periodique' && (
           <div>
@@ -409,18 +602,22 @@ function CheckForm({ open, check, onClose }: { open: boolean; check: CheckRow | 
               {s.domains.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
-          <div>
-            <label className="mb-1 block text-xs text-ink-3">Fenêtre (mois)</label>
-            <input type="number" min={1} max={24} value={windowMonths}
-              onChange={(e) => setWindowMonths(Math.max(1, Number(e.target.value) || 1))} className="field w-full" />
-          </div>
+          {kind !== 'checklist' && (
+            <div>
+              <label className="mb-1 block text-xs text-ink-3">Fenêtre (mois)</label>
+              <input type="number" min={1} max={24} value={windowMonths}
+                onChange={(e) => setWindowMonths(Math.max(1, Number(e.target.value) || 1))} className="field w-full" />
+            </div>
+          )}
         </div>
 
-        <div>
-          <label className="mb-1 block text-xs text-ink-3">Lien utile (facultatif)</label>
-          <input value={link} onChange={(e) => setLink(e.target.value)} type="url"
-            placeholder="https://messes.info/horaires/reims" className="field w-full" />
-        </div>
+        {kind !== 'checklist' && (
+          <div>
+            <label className="mb-1 block text-xs text-ink-3">Lien utile (facultatif)</label>
+            <input value={link} onChange={(e) => setLink(e.target.value)} type="url"
+              placeholder="https://messes.info/horaires/reims" className="field w-full" />
+          </div>
+        )}
 
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="btn-ghost px-4 py-2 text-sm">Annuler</button>

@@ -182,10 +182,21 @@ export interface Birthday {
   created_at: string
 }
 
-export type CheckKind = 'periodique' | 'messe_travail'
+export type CheckKind = 'periodique' | 'messe_travail' | 'checklist'
 
 /** Un créneau de messe : heure « HH:MM » et lieu (église). */
 export interface MassSlot { t: string; c: string }
+
+/** Une tâche cochable d'une liste de vérification. */
+export interface ChecklistItem { id: string; label: string; done: boolean }
+
+/** Un groupe de tâches d'une liste (ex. « Départ », « Retour »). */
+export interface ChecklistSection { id: string; title: string; items: ChecklistItem[] }
+
+/** Contenu typé de `Check.config` pour le type checklist.
+ *  `category` = famille de listes (ex. « Vacances ») ; le titre du check porte le nom de l'instance
+ *  (ex. « Vacances Août 2026 »). */
+export interface ChecklistConfig { category?: string; sections: ChecklistSection[] }
 
 /** Contenu typé de `Check.config` pour le type messe_travail. */
 export interface MassConfig {
