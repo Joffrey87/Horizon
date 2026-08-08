@@ -225,7 +225,7 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
                         <span className="text-ink-3"> — {label}</span>
                         {location !== homeCity && <span className="font-medium text-[#a78bfa]"> · à {location}</span>}
                         {shift && (
-                          <span className="text-ink-3"> · garde {shift.code && <span className="font-medium text-ink-2">{shift.code}</span>} {fmtMinutes(shift.start)}–{fmtMinutes(shift.end)}</span>
+                          <span className="text-ink-3"> · jour de travail {shift.code && <span className="font-medium text-ink-2">{shift.code}</span>} {fmtMinutes(shift.start)}–{fmtMinutes(shift.end)}</span>
                         )}
                       </div>
                       <div className="mt-1">
@@ -258,7 +258,7 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
                           ) : (
                             <div className="flex items-center gap-2">
                               <span className="min-w-0 flex-1 text-[11px] font-medium text-[#ef4444]">
-                                {all.length > 0 ? 'Aucune messe compatible avec ta garde' : 'Aucune messe connue ce jour'}
+                                {all.length > 0 ? 'Aucune messe compatible avec ton jour de travail' : 'Aucune messe connue ce jour'}
                               </span>
                               <button onClick={() => markHandled(date)}
                                 className="btn-ghost shrink-0 px-2 py-0.5 text-[11px] text-ink-3" title="Ne rien planifier ce jour">
@@ -285,7 +285,7 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
                         )}
                       </div>
                       {hidden > 0 && options.length > 0 && !chosenVal && (
-                        <p className="mt-0.5 text-[10px] text-ink-3">{hidden} écartée{hidden > 1 ? 's' : ''} (horaire incompatible avec ta garde)</p>
+                        <p className="mt-0.5 text-[10px] text-ink-3">{hidden} écartée{hidden > 1 ? 's' : ''} (horaire incompatible avec ton jour de travail)</p>
                       )}
                       {hasTimed && location !== homeCity && !chosenVal && (
                         <a href={massesInfoUrl(location)} target="_blank" rel="noopener noreferrer"
