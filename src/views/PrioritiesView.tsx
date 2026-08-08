@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useHorizon } from '../lib/store'
 import { quadrant, todayIso } from '../lib/logic'
-import { Card, Badge, DomainDot, Modal, Seg, Scale3 } from '../components/ui'
+import { Badge, DomainDot, Modal, Seg, Scale3 } from '../components/ui'
 import type { Idea, Task } from '../lib/types'
 
 type Item = { kind: 'idee'; idea: Idea } | { kind: 'tache'; task: Task }
@@ -12,6 +12,14 @@ const QUADRANTS = [
   { q: 3 as const, title: 'Urgent, peu important', hint: 'Vite fait ou délégué', tone: 'text-[#6ea8ee]' },
   { q: 4 as const, title: 'Ni urgent ni important', hint: 'Abandonner ou différer', tone: 'text-ink-3' },
 ]
+
+// importance / urgence correspondant à chaque quadrant (au drop)
+const QUADRANT_SCALES: Record<1 | 2 | 3 | 4, { importance: number; urgence: number }> = {
+  1: { importance: 3, urgence: 3 },
+  2: { importance: 3, urgence: 1 },
+  3: { importance: 1, urgence: 3 },
+  4: { importance: 1, urgence: 1 },
+}
 
 /** Vue de priorisation : compare idées et tâches sous l'angle urgence/importance.
  *  Elle PUISE dans les listes existantes — rien n'y est dupliqué. */
@@ -25,7 +33,7 @@ export function PrioritiesView() {
       .filter((i) => i.status === 'active')
       .map((idea) => ({ kind: 'idee', idea }))
     const tasks: Item[] = s.tasks
-      .filter((t) => (t.status === 'a_faire' || t.status === 'en_cours') && !t.is_recurring)
+      .filter((t) => (t.status === 'a_faire' || t.status === 'en_cours') && !t.is_recurring && t.is_task !== false)
       .map((task) => ({ kind: 'tache', task }))
     if (source === 'idees') return ideas
     if (source === 'taches') return tasks
@@ -36,6 +44,12 @@ export function PrioritiesView() {
     const x = it.kind === 'idee' ? it.idea : it.task
     return quadrant(x.importance, x.urgence) === q
   })
+
+  // déplacer un item dans un quadrant : ajuste importance/urgence en conséquence
+  const moveToQuadrant = (q: 1 | 2 | 3 | 4, kind: 'idee' | 'tache', id: string) => {
+    const table = kind === 'idee' ? 'ideas' : 'tasks'
+    void s.update(table, id, QUADRANT_SCALES[q])
+  }
 
   return (
     <div className="rise space-y-4 pt-4">
@@ -53,13 +67,9 @@ export function PrioritiesView() {
         {QUADRANTS.map(({ q, title, hint, tone }) => {
           const list = byQuadrant(q)
           return (
-            <Card key={q}>
-              <header className="mb-2">
-                <h3 className={`text-sm font-semibold ${tone}`}>{title}</h3>
-                <p className="text-xs text-ink-3">{hint}</p>
-              </header>
+            <QuadrantCard key={q} q={q} title={title} hint={hint} tone={tone} onDropItem={moveToQuadrant}>
               {list.length === 0 ? (
-                <p className="py-3 text-center text-xs text-ink-3">Rien ici.</p>
+                <p className="py-3 text-center text-xs text-ink-3">Glisse un item ici.</p>
               ) : (
                 <ul className="space-y-1">
                   {list.map((it) => {
@@ -70,7 +80,9 @@ export function PrioritiesView() {
                     return (
                       <li key={x.id}>
                         <button onClick={() => setSelected(it)}
-                          className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-panel-2">
+                          draggable
+                          onDragStart={(e) => e.dataTransfer.setData('application/horizon-prio', JSON.stringify({ kind: it.kind, id: x.id }))}
+                          className="flex w-full cursor-grab items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-panel-2 active:cursor-grabbing">
                           {domain && <DomainDot color={domain.color} size={7} />}
                           <span className="min-w-0 flex-1 truncate text-sm text-ink-2">{x.title}</span>
                           <Badge tone={it.kind === 'idee' ? 'sun' : 'info'}>{it.kind}</Badge>
@@ -80,12 +92,38 @@ export function PrioritiesView() {
                   })}
                 </ul>
               )}
-            </Card>
+            </QuadrantCard>
           )
         })}
       </div>
 
       <DecisionModal item={selected} onClose={() => setSelected(null)} />
+    </div>
+  )
+}
+
+/** Quadrant : zone de dépôt pour le drag & drop. */
+function QuadrantCard({ q, title, hint, tone, onDropItem, children }: {
+  q: 1 | 2 | 3 | 4; title: string; hint: string; tone: string
+  onDropItem: (q: 1 | 2 | 3 | 4, kind: 'idee' | 'tache', id: string) => void
+  children: React.ReactNode
+}) {
+  const [over, setOver] = useState(false)
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setOver(false)
+    const raw = e.dataTransfer.getData('application/horizon-prio')
+    if (!raw) return
+    const { kind, id } = JSON.parse(raw)
+    onDropItem(q, kind, id)
+  }
+  return (
+    <div onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={onDrop}
+      className={`card p-4 transition-colors ${over ? 'ring-2 ring-sun/60' : ''}`}>
+      <header className="mb-2">
+        <h3 className={`text-sm font-semibold ${tone}`}>{title}</h3>
+        <p className="text-xs text-ink-3">{hint}</p>
+      </header>
+      {children}
     </div>
   )
 }

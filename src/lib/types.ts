@@ -17,6 +17,13 @@ export interface Domain {
 export type ObjectiveHorizon = 'court_terme' | 'annuel' | 'trimestriel' | 'long_terme' | 'libre'
 export type ObjectiveStatus = 'actif' | 'atteint' | 'abandonne'
 
+export interface ObjectiveCriterion {
+  label: string
+  done: boolean
+}
+
+export type ObjectiveGranularity = 'jour' | 'semaine' | 'mois'
+
 export interface Objective {
   id: UUID
   user_id: UUID
@@ -25,6 +32,9 @@ export interface Objective {
   description: string | null
   horizon: ObjectiveHorizon
   status: ObjectiveStatus
+  target_date: string | null
+  target_granularity: ObjectiveGranularity | null
+  criteria: ObjectiveCriterion[]
   sort_order: number
   created_at: string
 }
@@ -47,12 +57,29 @@ export interface Project {
   created_at: string
 }
 
+export type StepStatus = 'actif' | 'termine'
+
+/** Étape = sous-projet d'un projet : un titre, une échéance, et ses propres tâches. */
+export interface Step {
+  id: UUID
+  user_id: UUID
+  project_id: UUID
+  title: string
+  due_date: string | null
+  scheduled_date: string | null // placée dans le calendrier
+  status: StepStatus
+  notable: boolean // apparaît dans les vues trimestre / année
+  sort_order: number
+  created_at: string
+}
+
 export type TaskStatus = 'a_faire' | 'en_cours' | 'fait' | 'annule'
 
 export interface Task {
   id: UUID
   user_id: UUID
   project_id: UUID | null
+  step_id: UUID | null
   domain_id: UUID | null
   title: string
   notes: string | null
@@ -62,9 +89,12 @@ export interface Task {
   effort: number | null // 1..3
   due_date: string | null
   scheduled_date: string | null
+  end_date: string | null   // durée « jusqu'à une date »
   duration_min: number | null
+  is_task: boolean          // false = simple évènement calendaire (hors Priorités)
   is_recurring: boolean
   recurrence_rule: string | null // 'daily' | 'weekly:1,3,5' | 'monthly:15'
+  notable: boolean // apparaît dans les vues trimestre / année
   done_at: string | null
   created_at: string
 }
@@ -97,6 +127,8 @@ export interface Habit {
   description: string | null
   frequency_type: 'daily' | 'weekly'
   weekly_target: number
+  weekdays: string | null   // ex '2,4,6' (jours ISO) ; si défini, l'habitude est attendue ces jours-là
+  time_of_day: string | null // ex '07:30' ; heure indicative
   anchor_state: AnchorState
   active: boolean
   start_date: string

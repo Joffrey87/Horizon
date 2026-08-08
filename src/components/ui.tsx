@@ -1,11 +1,13 @@
-import type { ReactNode } from 'react'
+import type { MouseEvent, ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
-export function Card({ children, className = '', title, action }: {
+export function Card({ children, className = '', title, action, onClick }: {
   children: ReactNode; className?: string; title?: string; action?: ReactNode
+  onClick?: (e: MouseEvent<HTMLElement>) => void
 }) {
   return (
-    <section className={`card p-4 ${className}`}>
+    <section className={`card p-4 ${className}`} onClick={onClick}>
       {(title || action) && (
         <header className="mb-3 flex items-center justify-between gap-2">
           {title && <h3 className="block-title">{title}</h3>}
@@ -54,7 +56,7 @@ export function Modal({ open, onClose, title, children, wide = false }: {
   open: boolean; onClose: () => void; title: string; children: ReactNode; wide?: boolean
 }) {
   if (!open) return null
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 p-4 backdrop-blur-sm"
       onClick={onClose}>
       <div className={`card rise mx-auto my-6 w-full ${wide ? 'max-w-2xl' : 'max-w-md'} p-5 sm:my-10`}
@@ -65,7 +67,8 @@ export function Modal({ open, onClose, title, children, wide = false }: {
         </header>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

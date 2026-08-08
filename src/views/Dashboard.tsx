@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight, AlertTriangle, Info, CheckCircle2, Circle,
-  LayoutDashboard, X,
+  LayoutDashboard, X, Flag, FolderKanban, Repeat, Plus,
 } from 'lucide-react'
+import type { Project } from '../lib/types'
 import { useHorizon } from '../lib/store'
 import {
   computeAlerts, dayPhraseOfDay, domainBalance, eveningPhraseOfWeek, fmtDay,
@@ -263,7 +264,7 @@ export function Dashboard() {
   return (
     <div className="rise space-y-4">
       {/* ---- Accueil immersif : paysage seul, plus de contenu au scroll ---- */}
-      <section className="relative mt-4 h-[calc(100vh-6rem)] min-h-[520px] overflow-hidden rounded-2xl border border-line">
+      <section className="relative mt-4 h-[calc(100vh-7rem)] min-h-[520px] overflow-hidden rounded-2xl border border-line">
         <img src="/horizon-bg.jpg" alt="" aria-hidden
           className="absolute inset-0 h-full w-full object-cover" />
         {/* voiles pour la lisibilité */}
@@ -279,6 +280,66 @@ export function Dashboard() {
             <span className="rounded-full border border-white/20 bg-black/30 px-3 py-1 text-xs capitalize text-white/85 backdrop-blur-md">
               {fmtDay(now)}
             </span>
+          </div>
+
+          {/* ---- Modules essentiels du cockpit, translucides sur le paysage ---- */}
+          <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            {/* Priorités du jour */}
+            <GlassTile icon={<Flag size={15} />} accent="#f59e0b" title="Priorités du jour">
+              {focus.length === 0 ? (
+                <p className="text-sm text-white/60">Cap libre aujourd'hui.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {focus.map((t) => (
+                    <li key={t.id}>
+                      <button onClick={() => void s.update('tasks', t.id, { status: 'fait', done_at: new Date().toISOString() })}
+                        className="group flex w-full items-center gap-2 text-left">
+                        <Circle size={15} className="shrink-0 text-white/50 transition-colors group-hover:text-sun" />
+                        <span className="truncate text-sm text-white/90">{t.title}</span>
+                        {weekFocusIds.includes(t.id) && <Badge tone="sun">focus</Badge>}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </GlassTile>
+
+            {/* Projets prioritaires */}
+            <GlassTile icon={<FolderKanban size={15} />} accent="#3987e5" title="Projets prioritaires">
+              {actifs.length === 0 ? (
+                <p className="text-sm text-white/60">Aucun projet actif.</p>
+              ) : (
+                <ul className="space-y-2.5">
+                  {actifs.slice(0, 3).map((p) => <ProjectRow key={p.id} project={p} />)}
+                </ul>
+              )}
+            </GlassTile>
+
+            {/* Habitudes du jour */}
+            <GlassTile icon={<Repeat size={15} />} accent="#0d9488" title="Habitudes du jour">
+              {todaysHabits.length === 0 ? (
+                <p className="text-sm text-white/60">Rien de prévu.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {todaysHabits.map((h) => {
+                    const done = s.habitLogs.some((l) => l.habit_id === h.id && l.log_date === today && l.done)
+                    return (
+                      <li key={h.id}>
+                        <button onClick={() => void s.toggleHabitToday(h.id, today)}
+                          className="group flex w-full items-center gap-2 text-left">
+                          <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-md border transition-colors ${
+                            done ? 'border-good/70 bg-good/70 text-white' : 'border-white/40 group-hover:border-white/70'
+                          }`}>
+                            {done && <CheckCircle2 size={12} />}
+                          </span>
+                          <span className={`truncate text-sm ${done ? 'text-white/50 line-through' : 'text-white/90'}`}>{h.title}</span>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </GlassTile>
           </div>
 
           {/* Citation discrète en bas, uniquement si activée */}
@@ -331,6 +392,85 @@ export function Dashboard() {
       </aside>
     </div>
   )
+}
+
+/** Ligne d'un projet sur l'accueil : prochaine tâche + « + » pour dérouler les autres. */
+function ProjectRow({ project }: { project: Project }) {
+  const s = useHorizon()
+  const [open, setOpen] = useState(false)
+  const domain = s.domains.find((d) => d.id === project.domain_id)
+  const openTasks = s.tasks.filter((t) => t.project_id === project.id && !t.is_recurring
+    && (t.status === 'a_faire' || t.status === 'en_cours'))
+  const next = openTasks[0]
+  const rest = openTasks.slice(1)
+
+  const toggle = (id: string) => void s.update('tasks', id, { status: 'fait', done_at: new Date().toISOString() })
+
+  return (
+    <li>
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-sm font-medium text-white/90">{project.title}</span>
+        <span className="shrink-0 text-xs tabular-nums text-white/60">{project.progress}%</span>
+      </div>
+      <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/15">
+        <div className="h-full rounded-full" style={{ width: `${project.progress}%`, background: domain?.color ?? '#f59e0b' }} />
+      </div>
+      <div className="mt-1.5 flex items-center gap-1.5">
+        {next ? (
+          <button onClick={() => toggle(next.id)} className="group flex min-w-0 flex-1 items-center gap-1.5 text-left">
+            <Circle size={13} className="shrink-0 text-white/50 group-hover:text-sun" />
+            <span className="truncate text-xs text-white/80">{next.title}</span>
+          </button>
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-xs text-white/50">
+            {project.next_action ?? 'Pas de tâche à faire'}
+          </span>
+        )}
+        {rest.length > 0 && (
+          <button onClick={() => setOpen((v) => !v)}
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-white/25 text-white/70 transition-colors hover:bg-white/10"
+            title={open ? 'Masquer' : `Voir ${rest.length} autre${rest.length > 1 ? 's' : ''}`}
+            aria-label="Voir les autres tâches">
+            {open ? <X size={12} /> : <Plus size={12} />}
+          </button>
+        )}
+      </div>
+      {open && rest.length > 0 && (
+        <ul className="mt-1 space-y-1 pl-4">
+          {rest.map((t) => (
+            <li key={t.id}>
+              <button onClick={() => toggle(t.id)} className="group flex w-full items-center gap-1.5 text-left">
+                <Circle size={12} className="shrink-0 text-white/40 group-hover:text-sun" />
+                <span className="truncate text-xs text-white/70">{t.title}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
+  )
+}
+
+/** Tuile translucide de l'accueil : icône colorée, léger dégradé, halo teinté. */
+function GlassTile({ icon, accent, title, to, children }: {
+  icon: React.ReactNode; accent: string; title: string; to?: string; children: React.ReactNode
+}) {
+  const inner = (
+    <>
+      <div className="mb-2.5 flex items-center gap-2">
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg"
+          style={{ background: `${accent}33`, color: accent, boxShadow: `0 0 16px ${accent}55` }}>
+          {icon}
+        </span>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/75">{title}</p>
+      </div>
+      {children}
+    </>
+  )
+  const cls = 'group relative overflow-hidden rounded-2xl border border-white/15 bg-gradient-to-br from-white/12 to-black/35 p-4 text-white shadow-lg shadow-black/30 backdrop-blur-md transition-all'
+  return to
+    ? <Link to={to} className={`${cls} hover:-translate-y-0.5 hover:border-white/25`}>{inner}</Link>
+    : <div className={cls}>{inner}</div>
 }
 
 function StatCard({ value, label, to, warn = false }: { value: string; label: string; to: string; warn?: boolean }) {

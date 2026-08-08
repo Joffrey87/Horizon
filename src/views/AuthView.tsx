@@ -3,9 +3,23 @@ import { supabase } from '../lib/supabase'
 
 type Mode = 'signin' | 'signup'
 
+// Correspondance prénom -> email, fournie par VITE_LOGIN_MAP (hors dépôt public).
+const LOGIN_MAP: Record<string, string> = (() => {
+  try { return JSON.parse(import.meta.env.VITE_LOGIN_MAP ?? '{}') } catch { return {} }
+})()
+
+/** Résout un prénom en email. Accepte aussi un email tapé directement. */
+function resolveEmail(input: string): string | null {
+  const v = input.trim().toLowerCase()
+  if (!v) return null
+  if (LOGIN_MAP[v]) return LOGIN_MAP[v]
+  if (v.includes('@')) return v
+  return null
+}
+
 export function AuthView() {
   const [mode, setMode] = useState<Mode>('signin')
-  const [email, setEmail] = useState('')
+  const [name, setName] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -13,11 +27,13 @@ export function AuthView() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    const email = resolveEmail(name)
+    if (!email) { setError('Prénom inconnu.'); return }
     setBusy(true); setError(null); setNotice(null)
     if (mode === 'signin') {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       setBusy(false)
-      if (error) setError('Email ou mot de passe incorrect.')
+      if (error) setError('Prénom ou mot de passe incorrect.')
     } else {
       const { data, error } = await supabase.auth.signUp({
         email, password,
@@ -30,7 +46,8 @@ export function AuthView() {
   }
 
   const forgot = async () => {
-    if (!email) { setError('Entre d\'abord ton email ci-dessus, puis reclique.'); return }
+    const email = resolveEmail(name)
+    if (!email) { setError('Entre d\'abord ton prénom ci-dessus, puis reclique.'); return }
     setBusy(true); setError(null); setNotice(null)
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: window.location.origin,
@@ -57,8 +74,8 @@ export function AuthView() {
         <p className="mb-6 mt-1 text-xs uppercase tracking-widest text-white/60">Tableau de bord personnel</p>
 
         <form onSubmit={submit} className="space-y-3 text-left">
-          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-            placeholder="ton@email.fr" autoComplete="email" autoFocus
+          <input type="text" required value={name} onChange={(e) => setName(e.target.value)}
+            placeholder="Ton prénom" autoComplete="username" autoFocus
             className="field w-full" />
           <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
             placeholder="Mot de passe" minLength={6}

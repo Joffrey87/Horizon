@@ -4,48 +4,71 @@ import { Modal, Scale3 } from './ui'
 import type { Task } from '../lib/types'
 
 /** Une tâche est ancrée à un projet OU librement à un domaine (jamais nulle part). */
-export function TaskForm({ open, task, defaultDate, onClose }: {
-  open: boolean; task: Task | null; defaultDate?: string; onClose: () => void
+export function TaskForm({ open, task, defaultDate, overrideScheduled, onClose }: {
+  open: boolean; task: Task | null; defaultDate?: string; overrideScheduled?: string; onClose: () => void
 }) {
   const s = useHorizon()
   const [form, setForm] = useState<Record<string, unknown> | null>(null)
 
   if (!open) return null
 
+  const initDur = (() => {
+    const m = task?.duration_min
+    if (!m) return { value: '', unit: 'min' }
+    if (m % 1440 === 0) return { value: String(m / 1440), unit: 'jour' }
+    if (m % 60 === 0) return { value: String(m / 60), unit: 'heure' }
+    return { value: String(m), unit: 'min' }
+  })()
+
   const current = form ?? {
     title: task?.title ?? '',
     anchor: task?.project_id ? `p:${task.project_id}` : `d:${task?.domain_id ?? s.domains[0]?.id ?? ''}`,
-    scheduled_date: task?.scheduled_date ?? defaultDate ?? '',
+    scheduled_date: overrideScheduled ?? task?.scheduled_date ?? defaultDate ?? '',
     due_date: task?.due_date ?? '',
-    duration_min: task?.duration_min ?? '',
+    dur_value: initDur.value,
+    dur_unit: initDur.unit,
+    end_date: task?.end_date ?? '',
+    is_task: task?.is_task ?? false,
     importance: task?.importance ?? null,
     urgence: task?.urgence ?? null,
     is_recurring: task?.is_recurring ?? false,
     recur_kind: task?.recurrence_rule?.split(':')[0] ?? 'weekly',
     recur_days: task?.recurrence_rule?.startsWith('weekly') ? (task.recurrence_rule.split(':')[1] ?? '') : '1',
     recur_dom: task?.recurrence_rule?.startsWith('monthly') ? (task.recurrence_rule.split(':')[1] ?? '1') : '1',
+    notable: task?.notable ?? false,
     notes: task?.notes ?? '',
   }
   const setF = (k: string, v: unknown) => setForm({ ...current, [k]: v })
   const close = () => { setForm(null); onClose() }
 
+  // Cohérence : une tâche planifiée ne peut pas l'être après son échéance.
+  const sched = current.scheduled_date as string
+  const due = current.due_date as string
+  const incoherent = !!sched && !!due && sched > due
+
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (incoherent) return
     const anchor = current.anchor as string
     const rule = current.is_recurring
       ? (current.recur_kind === 'daily' ? 'daily'
         : current.recur_kind === 'weekly' ? `weekly:${current.recur_days || '1'}`
           : `monthly:${current.recur_dom || '1'}`)
       : null
+    const factor = current.dur_unit === 'jour' ? 1440 : current.dur_unit === 'heure' ? 60 : 1
+    const durMin = current.end_date ? null : (current.dur_value ? Number(current.dur_value) * factor : null)
     const values = {
       title: (current.title as string).trim(),
       project_id: anchor.startsWith('p:') ? anchor.slice(2) : null,
       domain_id: anchor.startsWith('d:') ? anchor.slice(2) : null,
       scheduled_date: current.scheduled_date || null,
       due_date: current.due_date || null,
-      duration_min: current.duration_min ? Number(current.duration_min) : null,
+      end_date: current.end_date || null,
+      duration_min: durMin,
+      is_task: current.is_task,
       importance: current.importance, urgence: current.urgence,
       is_recurring: current.is_recurring, recurrence_rule: rule,
+      notable: current.notable,
       notes: (current.notes as string).trim() || null,
     }
     if (task) await s.update('tasks', task.id, values)
@@ -76,7 +99,7 @@ export function TaskForm({ open, task, defaultDate, onClose }: {
           </select>
         </label>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <label className="space-y-1 text-xs text-ink-3">
             Planifiée le
             <input type="date" value={current.scheduled_date as string}
@@ -87,12 +110,35 @@ export function TaskForm({ open, task, defaultDate, onClose }: {
             <input type="date" value={current.due_date as string}
               onChange={(e) => setF('due_date', e.target.value)} className="field" />
           </label>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1 text-xs text-ink-3">
+            Durée
+            <div className="flex gap-2">
+              <input type="number" min={1} step={1} value={current.dur_value as string}
+                onChange={(e) => setF('dur_value', e.target.value)} className="field w-20"
+                placeholder="—" disabled={!!current.end_date} />
+              <select value={current.dur_unit as string} onChange={(e) => setF('dur_unit', e.target.value)}
+                className="field flex-1" disabled={!!current.end_date}>
+                <option value="min">minutes</option>
+                <option value="heure">heures</option>
+                <option value="jour">jours</option>
+              </select>
+            </div>
+          </div>
           <label className="space-y-1 text-xs text-ink-3">
-            Durée (min)
-            <input type="number" min={5} step={5} value={current.duration_min as string}
-              onChange={(e) => setF('duration_min', e.target.value)} className="field" placeholder="—" />
+            … ou jusqu'à une date
+            <input type="date" value={current.end_date as string}
+              onChange={(e) => setF('end_date', e.target.value)} className="field" />
           </label>
         </div>
+
+        <label className="flex items-center gap-2 text-sm text-ink-2">
+          <input type="checkbox" checked={current.is_task as boolean}
+            onChange={(e) => setF('is_task', e.target.checked)} className="accent-[#f59e0b]" />
+          C'est une tâche (apparaît dans Priorités)
+        </label>
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
@@ -111,6 +157,12 @@ export function TaskForm({ open, task, defaultDate, onClose }: {
           <input type="checkbox" checked={current.is_recurring as boolean}
             onChange={(e) => setF('is_recurring', e.target.checked)} className="accent-[#f59e0b]" />
           Responsabilité récurrente (poubelles, factures…)
+        </label>
+
+        <label className="flex items-center gap-2 text-sm text-ink-2">
+          <input type="checkbox" checked={current.notable as boolean}
+            onChange={(e) => setF('notable', e.target.checked)} className="accent-[#f59e0b]" />
+          Notable
         </label>
 
         {(current.is_recurring as boolean) && (
@@ -149,12 +201,21 @@ export function TaskForm({ open, task, defaultDate, onClose }: {
           </div>
         )}
 
+        {incoherent && (
+          <p className="rounded-lg border border-[#ec7f97]/40 bg-[#ec7f97]/10 px-3 py-2 text-xs text-[#ec7f97]">
+            Incohérence : la date planifiée est après l'échéance. Corrige l'une des deux pour valider.
+          </p>
+        )}
+
         <div className="flex justify-between gap-2 pt-1">
           {task ? (
             <button type="button" onClick={() => { void s.remove('tasks', task.id); close() }}
               className="btn-ghost px-3 py-2 text-sm text-[#ec7f97]">Supprimer</button>
           ) : <span />}
-          <button type="submit" className="btn-sun px-5 py-2">{task ? 'Enregistrer' : 'Créer'}</button>
+          <button type="submit" disabled={incoherent}
+            className="btn-sun px-5 py-2 disabled:cursor-not-allowed disabled:opacity-50">
+            {task ? 'Enregistrer' : 'Créer'}
+          </button>
         </div>
       </form>
     </Modal>

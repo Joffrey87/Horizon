@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { Plus, Pencil, Target } from 'lucide-react'
+import { format, parseISO } from 'date-fns'
+import { fr } from 'date-fns/locale'
+import { Plus, Target, CalendarClock, X } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import { Card, Badge, DomainDot, Modal, EmptyState } from '../components/ui'
-import type { Domain, Objective, ObjectiveHorizon } from '../lib/types'
+import type { Domain, Objective, ObjectiveCriterion, ObjectiveHorizon } from '../lib/types'
 
 const HORIZON_LABEL: Record<ObjectiveHorizon, string> = {
   court_terme: 'Court terme (30 j)', trimestriel: 'Trimestriel', annuel: 'Annuel',
@@ -10,6 +12,28 @@ const HORIZON_LABEL: Record<ObjectiveHorizon, string> = {
 }
 
 const PALETTE = ['#d97706', '#0d9488', '#8b5cf6', '#dc4a6b', '#3987e5', '#65a30d']
+
+const fmtTarget = (o: Objective) => {
+  if (!o.target_date) return null
+  const d = parseISO(o.target_date)
+  if (o.target_granularity === 'mois') return format(d, 'MMM yyyy', { locale: fr })
+  if (o.target_granularity === 'semaine') return 'sem. ' + format(d, "w '·' MMM", { locale: fr })
+  return format(d, 'd MMM yyyy', { locale: fr })
+}
+
+/** Barres = nombre de critères ; remplies = critères atteints. */
+function CriteriaBars({ criteria, color }: { criteria: ObjectiveCriterion[]; color: string }) {
+  if (!criteria || criteria.length === 0) return null
+  const done = criteria.filter((c) => c.done).length
+  return (
+    <span className="mt-1 flex items-center gap-1" title={`${done}/${criteria.length} critères atteints`}>
+      {criteria.map((c, i) => (
+        <span key={i} className="h-1.5 flex-1 rounded-full"
+          style={{ background: c.done ? color : 'var(--color-panel-3)', minWidth: 8 }} />
+      ))}
+    </span>
+  )
+}
 
 export function DomainsView() {
   const s = useHorizon()
@@ -21,7 +45,7 @@ export function DomainsView() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Domaines & objectifs</h1>
-          <p className="text-sm text-ink-3">Où va ma vie, et quels domaines sont servis ?</p>
+          <p className="text-sm text-ink-3">Clique l'entête d'un domaine (ou dans le vide) pour ajouter un objectif.</p>
         </div>
         <button onClick={() => setEditDomain('new')} className="btn-sun flex items-center gap-1.5 px-4 py-2 text-sm">
           <Plus size={15} /> Nouveau domaine
@@ -34,52 +58,45 @@ export function DomainsView() {
         <div className="grid gap-3 md:grid-cols-2">
           {s.domains.map((d) => {
             const objectives = s.objectives.filter((o) => o.domain_id === d.id && o.status !== 'abandonne')
-            const projects = s.projects.filter((p) => p.domain_id === d.id && p.status === 'actif')
-            const habits = s.habits.filter((h) => h.domain_id === d.id && h.active)
-            const ideas = s.ideas.filter((i) => i.domain_id === d.id && (i.status === 'active' || i.status === 'reportee'))
             return (
-              <Card key={d.id} className="card-hover">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
+              <Card key={d.id} className="card-hover cursor-pointer"
+                onClick={() => setEditObjective({ obj: null, domainId: d.id })}>
+                <div className="flex items-center gap-2.5" onClick={(e) => e.stopPropagation()}>
+                  <button onClick={() => setEditDomain(d)}
+                    className="flex items-center gap-2.5 text-left transition-opacity hover:opacity-70"
+                    title="Modifier le domaine">
                     <DomainDot color={d.color} size={12} />
                     <h3 className="font-medium">{d.name}</h3>
-                  </div>
-                  <button onClick={() => setEditDomain(d)} className="btn-ghost p-1.5" aria-label="Modifier"><Pencil size={14} /></button>
+                  </button>
                 </div>
 
-                <p className="mt-1.5 text-xs text-ink-3">
-                  {projects.length} projet{projects.length > 1 ? 's' : ''} actif{projects.length > 1 ? 's' : ''} ·{' '}
-                  {habits.length} habitude{habits.length > 1 ? 's' : ''} · {ideas.length} idée{ideas.length > 1 ? 's' : ''}
-                </p>
-
-                <div className="mt-3 space-y-2">
-                  {objectives.length === 0
-                    ? <p className="text-xs text-ink-3">Pas encore d'objectif : quel résultat ce domaine devrait-il viser ?</p>
-                    : objectives.map((o) => {
-                      const serving = s.projects.filter((p) => p.objective_id === o.id && p.status === 'actif')
+                {objectives.length === 0 ? (
+                  <p className="mt-3 text-xs text-ink-3">Pas encore d'objectif : quel résultat viser ?</p>
+                ) : (
+                  <div className="mt-3 grid grid-cols-1 gap-1.5 sm:grid-cols-2" onClick={(e) => e.stopPropagation()}>
+                    {objectives.map((o) => {
+                      const target = fmtTarget(o)
                       return (
                         <button key={o.id} onClick={() => setEditObjective({ obj: o, domainId: d.id })}
-                          className="flex w-full items-start gap-2 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-panel-2">
-                          <Target size={14} className="mt-0.5 shrink-0" style={{ color: d.color }} />
-                          <span className="min-w-0 flex-1">
-                            <span className={`block truncate text-sm ${o.status === 'atteint' ? 'text-ink-3 line-through' : 'text-ink-2'}`}>
+                          className="flex flex-col rounded-lg border border-line-2/60 px-2 py-1.5 text-left transition-colors hover:bg-panel-2">
+                          <span className="flex items-start gap-1.5">
+                            <Target size={13} className="mt-0.5 shrink-0" style={{ color: d.color }} />
+                            <span className={`min-w-0 flex-1 truncate text-sm ${o.status === 'atteint' ? 'text-ink-3 line-through' : 'text-ink-2'}`}>
                               {o.title}
                             </span>
-                            <span className="text-xs text-ink-3">
-                              {HORIZON_LABEL[o.horizon]}
-                              {serving.length > 0 && <> · servi par {serving.map((p) => p.title).join(', ')}</>}
-                            </span>
+                            {o.status === 'atteint' && <Badge tone="good">✓</Badge>}
                           </span>
-                          {o.status === 'atteint' && <Badge tone="good">atteint</Badge>}
+                          <CriteriaBars criteria={o.criteria} color={d.color} />
+                          {target && (
+                            <span className="mt-1 flex items-center gap-1 text-[10px] text-ink-3">
+                              <CalendarClock size={10} /> {target}
+                            </span>
+                          )}
                         </button>
                       )
                     })}
-                </div>
-
-                <button onClick={() => setEditObjective({ obj: null, domainId: d.id })}
-                  className="mt-3 text-xs text-ink-3 transition-colors hover:text-sun-soft">
-                  + Ajouter un objectif
-                </button>
+                  </div>
+                )}
               </Card>
             )
           })}
@@ -138,18 +155,37 @@ function ObjectiveForm({ state, onClose }: {
   state: { obj: Objective | null; domainId: string } | null; onClose: () => void
 }) {
   const s = useHorizon()
-  const [form, setForm] = useState<Record<string, string> | null>(null)
+  const [form, setForm] = useState<Record<string, unknown> | null>(null)
   if (!state) return null
   const { obj, domainId } = state
   const current = form ?? {
-    title: obj?.title ?? '', horizon: obj?.horizon ?? 'libre', status: obj?.status ?? 'actif',
+    title: obj?.title ?? '',
+    horizon: obj?.horizon ?? 'libre',
+    status: obj?.status ?? 'actif',
     description: obj?.description ?? '',
+    target_date: obj?.target_date ?? '',
+    target_granularity: obj?.target_granularity ?? 'mois',
+    criteria: (obj?.criteria ?? []) as ObjectiveCriterion[],
   }
+  const setF = (k: string, v: unknown) => setForm({ ...current, [k]: v })
+  const criteria = current.criteria as ObjectiveCriterion[]
   const close = () => { setForm(null); onClose() }
+
+  const setCrit = (next: ObjectiveCriterion[]) => setF('criteria', next)
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
-    const values = { ...current, description: current.description.trim() || null, domain_id: domainId }
+    const cleaned = criteria.filter((c) => c.label.trim()).map((c) => ({ label: c.label.trim(), done: c.done }))
+    const values = {
+      title: (current.title as string).trim(),
+      horizon: current.horizon,
+      status: current.status,
+      description: (current.description as string).trim() || null,
+      target_date: (current.target_date as string) || null,
+      target_granularity: current.target_date ? current.target_granularity : null,
+      criteria: cleaned,
+      domain_id: domainId,
+    }
     if (obj) await s.update('objectives', obj.id, values)
     else await s.insert('objectives', { ...values, sort_order: s.objectives.length })
     close()
@@ -158,25 +194,63 @@ function ObjectiveForm({ state, onClose }: {
   return (
     <Modal open onClose={close} title={obj ? 'Modifier l’objectif' : 'Nouvel objectif'}>
       <form onSubmit={save} className="space-y-3">
-        <input required value={current.title} onChange={(e) => setForm({ ...current, title: e.target.value })}
+        <input required value={current.title as string} onChange={(e) => setF('title', e.target.value)}
           placeholder="Résultat souhaité (vers quoi ?)" className="field" autoFocus />
         <div className="grid grid-cols-2 gap-3">
           <label className="space-y-1 text-xs text-ink-3">
             Horizon
-            <select value={current.horizon} onChange={(e) => setForm({ ...current, horizon: e.target.value })} className="field">
+            <select value={current.horizon as string} onChange={(e) => setF('horizon', e.target.value)} className="field">
               {Object.entries(HORIZON_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </label>
           <label className="space-y-1 text-xs text-ink-3">
             Statut
-            <select value={current.status} onChange={(e) => setForm({ ...current, status: e.target.value })} className="field">
+            <select value={current.status as string} onChange={(e) => setF('status', e.target.value)} className="field">
               <option value="actif">Actif</option>
               <option value="atteint">Atteint</option>
               <option value="abandonne">Abandonné</option>
             </select>
           </label>
         </div>
-        <textarea value={current.description} onChange={(e) => setForm({ ...current, description: e.target.value })}
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="space-y-1 text-xs text-ink-3">
+            Échéance
+            <input type="date" value={current.target_date as string}
+              onChange={(e) => setF('target_date', e.target.value)} className="field" />
+          </label>
+          <label className="space-y-1 text-xs text-ink-3">
+            Précision
+            <select value={current.target_granularity as string} onChange={(e) => setF('target_granularity', e.target.value)}
+              className="field" disabled={!current.target_date}>
+              <option value="jour">Un jour</option>
+              <option value="semaine">Une semaine</option>
+              <option value="mois">Un mois</option>
+            </select>
+          </label>
+        </div>
+
+        {/* Critères de réussite (barres) */}
+        <div className="space-y-1.5">
+          <p className="text-xs text-ink-3">Critères de réussite (chaque critère = une barre qui se remplit)</p>
+          {criteria.map((c, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input type="checkbox" checked={c.done} className="accent-[#f59e0b]"
+                onChange={(e) => setCrit(criteria.map((x, j) => j === i ? { ...x, done: e.target.checked } : x))} />
+              <input value={c.label} placeholder={`Critère ${i + 1}`}
+                onChange={(e) => setCrit(criteria.map((x, j) => j === i ? { ...x, label: e.target.value } : x))}
+                className="field flex-1 py-1.5 text-sm" />
+              <button type="button" onClick={() => setCrit(criteria.filter((_, j) => j !== i))}
+                className="shrink-0 text-ink-3 hover:text-[#ec7f97]" aria-label="Retirer"><X size={14} /></button>
+            </div>
+          ))}
+          <button type="button" onClick={() => setCrit([...criteria, { label: '', done: false }])}
+            className="btn-ghost flex items-center gap-1 px-2.5 py-1.5 text-sm">
+            <Plus size={14} /> Ajouter un critère
+          </button>
+        </div>
+
+        <textarea value={current.description as string} onChange={(e) => setF('description', e.target.value)}
           placeholder="Pourquoi cet objectif ? (optionnel)" rows={2} className="field" />
         <div className="flex justify-between gap-2 pt-1">
           {obj ? (

@@ -7,11 +7,11 @@ import { create } from 'zustand'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import type {
-  Domain, Habit, HabitLog, Idea, Layout, Objective, Project, Review, Settings, Task,
+  Domain, Habit, HabitLog, Idea, Layout, Objective, Project, Review, Settings, Step, Task,
 } from './types'
 
 type Table =
-  | 'domains' | 'objectives' | 'projects' | 'tasks' | 'ideas'
+  | 'domains' | 'objectives' | 'projects' | 'steps' | 'tasks' | 'ideas'
   | 'habits' | 'habit_logs' | 'reviews' | 'layouts'
 
 interface HorizonState {
@@ -22,6 +22,7 @@ interface HorizonState {
   domains: Domain[]
   objectives: Objective[]
   projects: Project[]
+  steps: Step[]
   tasks: Task[]
   ideas: Idea[]
   habits: Habit[]
@@ -42,7 +43,7 @@ interface HorizonState {
 }
 
 const COLLECTION: Record<Table, keyof HorizonState> = {
-  domains: 'domains', objectives: 'objectives', projects: 'projects', tasks: 'tasks',
+  domains: 'domains', objectives: 'objectives', projects: 'projects', steps: 'steps', tasks: 'tasks',
   ideas: 'ideas', habits: 'habits', habit_logs: 'habitLogs', reviews: 'reviews', layouts: 'layouts',
 }
 
@@ -51,7 +52,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   recovery: false,
   ready: false,
   loading: false,
-  domains: [], objectives: [], projects: [], tasks: [], ideas: [],
+  domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
   habits: [], habitLogs: [], reviews: [], layouts: [], settings: null,
 
   init: async () => {
@@ -64,7 +65,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       if (session && session.user.id !== prev?.user.id) void get().loadAll()
       if (!session) {
         set({
-          domains: [], objectives: [], projects: [], tasks: [], ideas: [],
+          domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
           habits: [], habitLogs: [], reviews: [], layouts: [], settings: null,
         })
       }
@@ -74,10 +75,11 @@ export const useHorizon = create<HorizonState>((set, get) => ({
 
   loadAll: async () => {
     set({ loading: true })
-    const [dom, obj, pro, tas, ide, hab, log, rev, lay, setg] = await Promise.all([
+    const [dom, obj, pro, stp, tas, ide, hab, log, rev, lay, setg] = await Promise.all([
       supabase.from('domains').select('*').order('sort_order'),
       supabase.from('objectives').select('*').order('sort_order'),
       supabase.from('projects').select('*').order('created_at'),
+      supabase.from('steps').select('*').order('sort_order'),
       supabase.from('tasks').select('*').order('created_at'),
       supabase.from('ideas').select('*').order('created_at', { ascending: false }),
       supabase.from('habits').select('*').order('created_at'),
@@ -88,7 +90,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
     ])
     set({
       domains: dom.data ?? [], objectives: obj.data ?? [], projects: pro.data ?? [],
-      tasks: tas.data ?? [], ideas: ide.data ?? [], habits: hab.data ?? [],
+      steps: stp.data ?? [], tasks: tas.data ?? [], ideas: ide.data ?? [], habits: hab.data ?? [],
       habitLogs: log.data ?? [], reviews: rev.data ?? [], layouts: lay.data ?? [],
       settings: setg.data ?? null, loading: false,
     })
@@ -121,7 +123,14 @@ export const useHorizon = create<HorizonState>((set, get) => ({
     set({ [key]: (get()[key] as { id: string }[]).filter((row) => row.id !== id) } as Partial<HorizonState>)
     // cohérence locale minimale des cascades
     if (table === 'projects') {
-      set({ tasks: get().tasks.filter((t) => t.project_id !== id) })
+      set({
+        tasks: get().tasks.filter((t) => t.project_id !== id),
+        steps: get().steps.filter((st) => st.project_id !== id),
+      })
+    }
+    if (table === 'steps') {
+      // les tâches de l'étape restent, rattachées au projet mais détachées de l'étape
+      set({ tasks: get().tasks.map((t) => (t.step_id === id ? { ...t, step_id: null } : t)) })
     }
     if (table === 'domains') void get().loadAll()
     if (table === 'habits') {

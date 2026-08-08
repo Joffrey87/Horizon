@@ -50,7 +50,12 @@ export function tasksForDay(tasks: Task[], day: Date): Task[] {
   return tasks.filter((t) => {
     if (t.status === 'annule') return false
     if (t.is_recurring) return recurrenceDueOn(t.recurrence_rule, day)
-    if (t.status === 'fait') return t.done_at?.slice(0, 10) === dayIso
+    if (t.status === 'fait') {
+      // une tâche cochée reste à sa place (date planifiée / échéance) ;
+      // à défaut de date, on la montre au jour où elle a été faite.
+      if (t.scheduled_date === dayIso || t.due_date === dayIso) return true
+      return !t.scheduled_date && !t.due_date && t.done_at?.slice(0, 10) === dayIso
+    }
     if (t.scheduled_date === dayIso || t.due_date === dayIso) return true
     // une tâche en retard remonte sur le jour courant, pas sur tous les jours
     return dayIso === today && t.due_date !== null && t.due_date < today
@@ -70,11 +75,17 @@ export function focusOfDay(tasks: Task[], day: Date, weekFocusIds: string[]): Ta
   return [...due].sort((a, b) => score(b) - score(a)).slice(0, 3)
 }
 
-/** Habitudes attendues aujourd'hui. */
+/** Habitudes attendues un jour donné.
+ *  - jours précis (weekdays) : uniquement ces jours ISO ;
+ *  - sinon quotidienne ou hebdomadaire : candidate chaque jour. */
 export function habitsForDay(habits: Habit[], day: Date): Habit[] {
-  return habits.filter((h) => h.active && (h.frequency_type === 'daily' || h.weekly_target > 0))
-    .filter((h) => (h.frequency_type === 'daily' ? true : true))
+  return habits
+    .filter((h) => h.active)
     .filter((h) => parseISO(h.start_date) <= day)
+    .filter((h) => {
+      if (h.weekdays) return h.weekdays.split(',').map(Number).includes(getISODay(day))
+      return true
+    })
 }
 
 export interface HabitStats {
@@ -219,20 +230,45 @@ export function suggestedReview(now = new Date()): { kind: 'hebdo' | 'confirmati
   return { kind: null, label: '' }
 }
 
-/** Citations du jour — inspiration sobre (option 5). */
+/** Verset du jour — une phrase de la Bible, en rotation quotidienne. */
 const QUOTES: [string, string][] = [
   ['Là où se trouve ton trésor, là aussi sera ton cœur.', 'Mt 6,21'],
-  ['La discipline d’aujourd’hui construit la liberté de demain.', ''],
-  ['Ce qui compte le plus ne doit jamais être à la merci de ce qui compte le moins.', 'Goethe'],
-  ['Un peu chaque jour finit par faire beaucoup.', ''],
   ['Qui est fidèle en peu de choses le sera aussi en beaucoup.', 'Lc 16,10'],
-  ['Simplifier, c’est déjà avancer.', ''],
-  ['Bonne idée — mais ce sera pour dans 6 mois.', 'Horizon'],
+  ['Cherchez d’abord le Royaume de Dieu et sa justice.', 'Mt 6,33'],
+  ['Le Seigneur est mon berger : je ne manque de rien.', 'Ps 23,1'],
+  ['Tout ce que vous faites, faites-le de bon cœur, comme pour le Seigneur.', 'Col 3,23'],
+  ['Remets ton sort au Seigneur, compte sur lui : il agira.', 'Ps 37,5'],
+  ['Je puis tout en celui qui me rend fort.', 'Ph 4,13'],
+  ['Ta parole est une lampe pour mes pas, une lumière sur ma route.', 'Ps 119,105'],
+  ['À chaque jour suffit sa peine.', 'Mt 6,34'],
+  ['Confie au Seigneur tes œuvres, et tes projets se réaliseront.', 'Pr 16,3'],
+  ['Sois fort et courageux : le Seigneur ton Dieu est avec toi.', 'Jos 1,9'],
+  ['Il y a un temps pour tout, un temps pour toute chose sous le ciel.', 'Qo 3,1'],
+  ['Que tout se fasse chez vous dans la charité.', '1 Co 16,14'],
+  ['Veillez et priez, pour ne pas entrer en tentation.', 'Mt 26,41'],
 ]
 
 export function quoteOfDay(now = new Date()): { text: string; source: string } {
   const dayIndex = Math.floor(now.getTime() / 86_400_000) % QUOTES.length
   const [text, source] = QUOTES[dayIndex]
+  return { text, source }
+}
+
+/** Phrases inspirantes sur le temps (vue Temps) — en rotation quotidienne. */
+const TIME_QUOTES: [string, string][] = [
+  ['On a toujours le temps pour ce qui compte vraiment.', ''],
+  ['Il y a un temps pour tout, un temps pour toute chose sous le ciel.', 'Qo 3,1'],
+  ['Ce n’est pas que nous ayons peu de temps, c’est que nous en perdons beaucoup.', 'Sénèque'],
+  ['Enseigne-nous à compter nos jours, que nous venions au cœur de la sagesse.', 'Ps 90,12'],
+  ['Le temps bien employé ne se rattrape pas, il se savoure.', ''],
+  ['Ordonne ta journée, ou elle t’ordonnera.', ''],
+  ['Rachetez le temps présent, car les jours sont mauvais.', 'Ep 5,16'],
+  ['Une chose à la fois, faite avec soin, vaut dix commencées.', ''],
+]
+
+export function timeQuoteOfDay(now = new Date()): { text: string; source: string } {
+  const i = Math.floor(now.getTime() / 86_400_000) % TIME_QUOTES.length
+  const [text, source] = TIME_QUOTES[i]
   return { text, source }
 }
 
