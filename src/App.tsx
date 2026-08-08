@@ -9,6 +9,7 @@ import { ProjectsView } from './views/ProjectsView'
 import { DomainsView } from './views/DomainsView'
 import { PrioritiesView } from './views/PrioritiesView'
 import { TimeView } from './views/TimeView'
+import { PlanningView } from './views/PlanningView'
 import { IdeasView } from './views/IdeasView'
 import { HabitsView } from './views/HabitsView'
 import { ReviewsView } from './views/ReviewsView'
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/domaines" element={<DomainsView />} />
         <Route path="/priorites" element={<PrioritiesView />} />
         <Route path="/temps" element={<TimeView />} />
+        <Route path="/planification" element={<PlanningView />} />
         <Route path="/idees" element={<IdeasView />} />
         <Route path="/habitudes" element={<HabitsView />} />
         <Route path="/revues" element={<ReviewsView />} />

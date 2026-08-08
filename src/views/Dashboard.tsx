@@ -8,8 +8,8 @@ import type { Project } from '../lib/types'
 import { useHorizon } from '../lib/store'
 import {
   computeAlerts, dayPhraseOfDay, domainBalance, eveningPhraseOfWeek, fmtDay,
-  focusOfDay, greetingKind, habitStats, habitsForDay, quoteOfDay,
-  suggestedReview, todayIso,
+  focusOfDay, greetingKind, habitStats, habitsForDay, isRecentlyDone, quoteOfDay,
+  suggestedReview, tasksForDay, todayIso,
 } from '../lib/logic'
 import { Card, Badge, ProgressBar, DomainDot, EmptyState } from '../components/ui'
 import { DomainRadar } from '../components/charts'
@@ -36,6 +36,10 @@ export function Dashboard() {
   const weekFocusIds = useMemo(() => lastFocusReview?.week_focus ?? [], [lastFocusReview])
 
   const focus = useMemo(() => focusOfDay(s.tasks, now, weekFocusIds), [s.tasks, weekFocusIds]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Tâches faites depuis 4h : affichées rayées jusqu'au prochain seuil, puis elles disparaissent.
+  const doneToday = useMemo(
+    () => tasksForDay(s.tasks, now).filter((t) => t.status === 'fait' && t.is_task !== false && isRecentlyDone(t, now)),
+    [s.tasks]) // eslint-disable-line react-hooks/exhaustive-deps
   const todaysHabits = useMemo(() => habitsForDay(s.habits, now), [s.habits]) // eslint-disable-line react-hooks/exhaustive-deps
   const alerts = useMemo(() => computeAlerts({
     projects: s.projects, habits: s.habits, logs: s.habitLogs, reviews: s.reviews, settings: s.settings,
@@ -132,7 +136,7 @@ export function Dashboard() {
       <div className="grid gap-4 lg:grid-cols-3">
         {/* Aujourd'hui */}
         <Card title="Aujourd'hui" className="lg:col-span-2">
-          {focus.length === 0 && todaysHabits.length === 0 ? (
+          {focus.length === 0 && doneToday.length === 0 && todaysHabits.length === 0 ? (
             <EmptyState hint="Planifie des tâches dans « Temps » ou confirme ton focus le dimanche.">
               Rien d'imposé aujourd'hui. Cap libre.
             </EmptyState>
@@ -154,6 +158,21 @@ export function Dashboard() {
                     </div>
                     {domain && <DomainDot color={domain.color} />}
                     {weekFocusIds.includes(t.id) && <Badge tone="sun">focus</Badge>}
+                  </button>
+                )
+              })}
+              {doneToday.map((t) => {
+                const project = s.projects.find((p) => p.id === t.project_id)
+                const domain = s.domains.find((d) => d.id === (t.domain_id ?? project?.domain_id))
+                return (
+                  <button key={t.id}
+                    onClick={() => void s.update('tasks', t.id, { status: 'a_faire', done_at: null })}
+                    className="group flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-panel-2" title="Décocher">
+                    <CheckCircle2 size={16} className="shrink-0 text-[#4cc79a]" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-ink-3 line-through">{t.title}</p>
+                    </div>
+                    {domain && <DomainDot color={domain.color} />}
                   </button>
                 )
               })}
@@ -286,7 +305,7 @@ export function Dashboard() {
           <div className="mt-6 grid gap-3 sm:grid-cols-3">
             {/* Priorités du jour */}
             <GlassTile icon={<Flag size={15} />} accent="#f59e0b" title="Priorités du jour">
-              {focus.length === 0 ? (
+              {focus.length === 0 && doneToday.length === 0 ? (
                 <p className="text-sm text-white/60">Cap libre aujourd'hui.</p>
               ) : (
                 <ul className="space-y-1.5">
@@ -297,6 +316,15 @@ export function Dashboard() {
                         <Circle size={15} className="shrink-0 text-white/50 transition-colors group-hover:text-sun" />
                         <span className="truncate text-sm text-white/90">{t.title}</span>
                         {weekFocusIds.includes(t.id) && <Badge tone="sun">focus</Badge>}
+                      </button>
+                    </li>
+                  ))}
+                  {doneToday.map((t) => (
+                    <li key={t.id}>
+                      <button onClick={() => void s.update('tasks', t.id, { status: 'a_faire', done_at: null })}
+                        className="group flex w-full items-center gap-2 text-left" title="Décocher">
+                        <CheckCircle2 size={15} className="shrink-0 text-[#4cc79a]" />
+                        <span className="truncate text-sm text-white/50 line-through">{t.title}</span>
                       </button>
                     </li>
                   ))}

@@ -57,10 +57,28 @@ export function tasksForDay(tasks: Task[], day: Date): Task[] {
       return !t.scheduled_date && !t.due_date && t.done_at?.slice(0, 10) === dayIso
     }
     if (t.scheduled_date === dayIso || t.due_date === dayIso) return true
+    // évènement qui s'étend « jusqu'à une date » : présent chaque jour de la plage
+    if (t.end_date && t.scheduled_date && t.scheduled_date <= dayIso && dayIso <= t.end_date) return true
     // une tâche en retard remonte sur le jour courant, pas sur tous les jours
     return dayIso === today && t.due_date !== null && t.due_date < today
       && (t.scheduled_date === null || t.scheduled_date <= today)
   })
+}
+
+/** Bascule de journée « perso » à 4h du matin : renvoie le seuil courant.
+ *  Une tâche faite avant ce seuil est considérée comme d'un jour révolu. */
+export function dayCutoff(now = new Date()): Date {
+  const c = new Date(now)
+  c.setHours(4, 0, 0, 0)
+  if (now.getHours() < 4) c.setDate(c.getDate() - 1)
+  return c
+}
+
+/** Tâche faite « récemment » : cochée depuis le dernier seuil de 4h.
+ *  On la garde affichée (rayée) jusqu'au lendemain 4h, puis elle disparaît. */
+export function isRecentlyDone(t: Task, now = new Date()): boolean {
+  if (t.status !== 'fait' || !t.done_at) return false
+  return new Date(t.done_at) >= dayCutoff(now)
 }
 
 /** Le focus du jour : ~3 tâches maximum (cockpit, jamais exhaustif). */

@@ -4,8 +4,9 @@ import { Modal, Scale3 } from './ui'
 import type { Task } from '../lib/types'
 
 /** Une tâche est ancrée à un projet OU librement à un domaine (jamais nulle part). */
-export function TaskForm({ open, task, defaultDate, overrideScheduled, onClose }: {
-  open: boolean; task: Task | null; defaultDate?: string; overrideScheduled?: string; onClose: () => void
+export function TaskForm({ open, task, defaultDate, overrideScheduled, defaultIsTask = false, onClose }: {
+  open: boolean; task: Task | null; defaultDate?: string; overrideScheduled?: string
+  defaultIsTask?: boolean; onClose: () => void
 }) {
   const s = useHorizon()
   const [form, setForm] = useState<Record<string, unknown> | null>(null)
@@ -28,7 +29,7 @@ export function TaskForm({ open, task, defaultDate, overrideScheduled, onClose }
     dur_value: initDur.value,
     dur_unit: initDur.unit,
     end_date: task?.end_date ?? '',
-    is_task: task?.is_task ?? false,
+    is_task: task?.is_task ?? defaultIsTask,
     importance: task?.importance ?? null,
     urgence: task?.urgence ?? null,
     is_recurring: task?.is_recurring ?? false,

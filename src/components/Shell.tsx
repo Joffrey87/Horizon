@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import {
-  Home, FolderKanban, ListTodo, Compass, CalendarDays, Lightbulb,
+  Home, FolderKanban, ListTodo, Compass, CalendarDays, CalendarRange, Lightbulb,
   Repeat, ClipboardCheck, Network, Settings, Sparkles, Plus, LogOut, Menu, ArrowLeft,
 } from 'lucide-react'
 import { useHorizon } from '../lib/store'
@@ -14,6 +14,7 @@ const NAV = [
   { to: '/priorites', label: 'Priorités', icon: ListTodo },
   { to: '/domaines', label: 'Domaines & objectifs', icon: Compass },
   { to: '/temps', label: 'Temps', icon: CalendarDays },
+  { to: '/planification', label: 'Planification', icon: CalendarRange },
   { to: '/idees', label: 'Idées', icon: Lightbulb },
   { to: '/habitudes', label: 'Habitudes', icon: Repeat },
   { to: '/revues', label: 'Revues', icon: ClipboardCheck },
