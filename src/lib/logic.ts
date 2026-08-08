@@ -357,12 +357,13 @@ export function workShiftOn(tasks: Task[], dayIso: string): { start: number; end
   return { ...shift, code: code ? code[1] : '' }
 }
 
-/** Dimanche travaillé avec un début à 15h ou avant (M1, M2, J, S1, S2 ; pas N).
- *  Ces jours-là, marché dominical + stationnement compliqués → alerte « Marché / Parking ». */
+/** Dimanche travaillé avec un début strictement avant 15h (M1, M2, J, S1 ; pas N).
+ *  Ces jours-là, marché dominical + stationnement compliqués → alerte « Marché / Parking ».
+ *  Un début à 15h pile ne déclenche pas l'alerte (le marché est terminé). */
 export function isMarketParkingDay(tasks: Task[], day: Date): boolean {
   if (getISODay(day) !== 7) return false
   const shift = workShiftOn(tasks, iso(day))
-  return !!shift && shift.start <= 15 * 60
+  return !!shift && shift.start < 15 * 60
 }
 
 /** Formate des minutes depuis minuit en « 6h » / « 20h45 ». */
