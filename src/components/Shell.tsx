@@ -5,6 +5,7 @@ import {
   Repeat, ClipboardCheck, Network, Settings, Sparkles, Plus, LogOut, Menu, ArrowLeft,
 } from 'lucide-react'
 import { useHorizon } from '../lib/store'
+import { wallpaperOfDay } from '../lib/logic'
 import { QuickCapture } from './QuickCapture'
 import { AssistantPanel } from './AssistantPanel'
 
@@ -30,6 +31,12 @@ export function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen overflow-x-hidden">
+      {/* ---- Fond paysage du jour, très assombri (pages hors accueil) ---- */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
+        <img src={wallpaperOfDay()} alt="" className="h-full w-full object-cover blur-sm" />
+        <div className="absolute inset-0 bg-bg/92" />
+      </div>
+
       {/* ---- Barre latérale (style options 1/3) ---- */}
       <aside className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-line bg-panel
         transition-transform lg:static lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
@@ -48,7 +55,6 @@ export function Shell({ children }: { children: ReactNode }) {
             </span>
             <div>
               <p className="text-sm font-bold tracking-[0.22em]">HORIZON</p>
-              <p className="text-[10px] uppercase tracking-wider text-ink-3">Cap · Clarté · Focus</p>
             </div>
           </Link>
         </div>

@@ -31,7 +31,7 @@ useHorizon.setState({
   ready: true, loading: false,
   session: { user: { id: uid, email: 'demo@horizon.local' } } as unknown as Session,
   domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
-  habits: [], habitLogs: [], reviews: [], layouts: [], settings: null,
+  habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], settings: null,
 })
 
 // Mode démo pleinement interactif : les mutations restent locales (aucun réseau,
@@ -39,7 +39,7 @@ useHorizon.setState({
 const KEY: Record<string, keyof ReturnType<typeof useHorizon.getState>> = {
   domains: 'domains', objectives: 'objectives', projects: 'projects', steps: 'steps',
   tasks: 'tasks', ideas: 'ideas', habits: 'habits', habit_logs: 'habitLogs',
-  reviews: 'reviews', layouts: 'layouts',
+  reviews: 'reviews', layouts: 'layouts', birthdays: 'birthdays',
 }
 let seq = 1000
 const genId = () => `demo-${seq++}`

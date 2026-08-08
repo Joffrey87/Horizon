@@ -8,7 +8,13 @@ import {
   parseISO, startOfWeek, subDays,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import type { Alert, Domain, Habit, HabitLog, Project, Review, Settings, Task } from './types'
+import type { Alert, Birthday, Domain, Habit, HabitLog, Project, Review, Settings, Task } from './types'
+
+/** Anniversaires tombant un jour donné (récurrence annuelle : jour + mois). */
+export function birthdaysForDay(list: Birthday[], day: Date): Birthday[] {
+  const d = day.getDate(), m = day.getMonth() + 1
+  return list.filter((b) => b.day === d && b.month === m)
+}
 
 export const fmtDay = (d: Date) => format(d, 'EEEE d MMMM yyyy', { locale: fr })
 export const fmtShort = (d: Date) => format(d, 'd MMM', { locale: fr })
@@ -63,6 +69,14 @@ export function tasksForDay(tasks: Task[], day: Date): Task[] {
     return dayIso === today && t.due_date !== null && t.due_date < today
       && (t.scheduled_date === null || t.scheduled_date <= today)
   })
+}
+
+/** Position d'un item multi-jours (end_date) sur un jour donné, pour un rendu continu. */
+export function spanPart(t: Task, dayIso: string): 'single' | 'start' | 'middle' | 'end' {
+  if (!t.end_date || !t.scheduled_date || t.end_date <= t.scheduled_date) return 'single'
+  if (dayIso === t.scheduled_date) return 'start'
+  if (dayIso === t.end_date) return 'end'
+  return 'middle'
 }
 
 /** Bascule de journée « perso » à 4h du matin : renvoie le seuil courant.

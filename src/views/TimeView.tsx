@@ -6,7 +6,7 @@ import {
 import { fr } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, RotateCw, Layers, Star, Target } from 'lucide-react'
 import { useHorizon } from '../lib/store'
-import { compareTasksByTitleTime, extractHourMinute, iso, tasksForDay, recurrenceLabel, timeQuoteOfDay } from '../lib/logic'
+import { compareTasksByTitleTime, extractHourMinute, iso, tasksForDay, recurrenceLabel, timeQuoteOfDay, spanPart, birthdaysForDay } from '../lib/logic'
 import { Card, Seg, Modal } from '../components/ui'
 import { TaskForm } from '../components/TaskForm'
 import type { Objective, Step, Task } from '../lib/types'
@@ -123,6 +123,8 @@ function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
   const list = [...tasksForDay(s.tasks, day)].sort(compareTasksByTitleTime)
   const steps = stepsForDay(s.steps, day)
   const today = isToday(day)
+  const dayIso = iso(day)
+  const birthdays = birthdaysForDay(s.birthdays, day)
 
   const handleVoid = (e: React.MouseEvent<HTMLElement>) => {
     if (e.target === e.currentTarget) onCreate(iso(day))
@@ -142,13 +144,19 @@ function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
       className={`flex min-h-28 cursor-pointer flex-col rounded-lg border p-1.5 transition-colors ${
         today ? 'border-sun/50 bg-sun/5' : over ? 'border-sun/70 bg-sun/10' : 'border-line-2/60 hover:bg-panel-2/40'
       }`}>
-      <header className="mb-1 flex items-center justify-between" onClick={(e) => e.stopPropagation()}>
+      <header className="mb-1 flex items-center justify-between gap-1" onClick={(e) => e.stopPropagation()}>
         <p className={`text-xs font-medium ${today ? 'text-sun-soft' : 'text-ink-3'}`}>
           {format(day, 'EEE d', { locale: fr })}
         </p>
-        <button onClick={() => onCreate(iso(day))} className="text-ink-3 transition-colors hover:text-sun" aria-label="Ajouter une tâche">
-          <Plus size={13} />
-        </button>
+        <div className="flex items-center gap-1">
+          {birthdays.length > 0 && (
+            <span title={`Anniversaire${birthdays.length > 1 ? 's' : ''} : ${birthdays.map((b) => b.name).join(', ')}`}
+              className="cursor-default text-xs leading-none">🎂</span>
+          )}
+          <button onClick={() => onCreate(iso(day))} className="text-ink-3 transition-colors hover:text-sun" aria-label="Ajouter une tâche">
+            <Plus size={13} />
+          </button>
+        </div>
       </header>
       <div className="min-h-0 flex-1 space-y-1" onClick={handleVoid}>
         {steps.map((st) => (
@@ -161,25 +169,41 @@ function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
           </button>
         ))}
         {list.map((t) => {
-          const done = !t.is_recurring && t.status === 'fait'
           const domain = s.domains.find((d) => d.id === (t.domain_id ?? s.projects.find((p) => p.id === t.project_id)?.domain_id))
+          const c = domain?.color
+          const isEvent = t.is_task === false
+          const part = spanPart(t, dayIso)
+          // Jours intermédiaires / fin d'un évènement multi-jours : barre fine continue, sans titre ni coche.
+          if (part === 'middle' || part === 'end') {
+            return (
+              <button key={t.id} draggable onDragStart={dragData('task', t.id)}
+                onClick={(e) => { e.stopPropagation(); onEdit(t) }} title={t.title}
+                style={{ background: c ? `${c}59` : 'var(--color-line-2)' }}
+                className="block h-1.5 w-full rounded-full" />
+            )
+          }
+          const done = !t.is_recurring && !isEvent && t.status === 'fait'
+          const vacation = / - Vf?$/.test(t.title) // garde posée en congé (V / Vf) → barrée
+          const struck = done || vacation
           return (
             <div key={t.id} className="group flex items-start gap-1 rounded px-1 py-0.5"
-              style={{ background: domain ? `${domain.color}2b` : 'var(--color-panel-3)', borderLeft: domain ? `3px solid ${domain.color}` : undefined }}
+              style={{ background: c ? `${c}2b` : 'var(--color-panel-3)', borderLeft: c ? `3px solid ${c}` : undefined }}
               draggable={!t.is_recurring} onDragStart={dragData('task', t.id)}
               onClick={(e) => e.stopPropagation()}>
-              <button className="mt-0.5 shrink-0"
-                onClick={() => {
-                  if (t.is_recurring) return
-                  void s.update('tasks', t.id, done ? { status: 'a_faire', done_at: null } : { status: 'fait', done_at: new Date().toISOString() })
-                }}
-                aria-label={done ? 'Marquer à faire' : 'Marquer fait'}>
-                {t.is_recurring ? <RotateCw size={11} className="text-ink-3" />
-                  : done ? <CheckCircle2 size={12} className="text-[#4cc79a]" />
-                    : <Circle size={12} className="text-ink-3 group-hover:text-sun" />}
-              </button>
+              {!isEvent && (
+                <button className="mt-0.5 shrink-0"
+                  onClick={() => {
+                    if (t.is_recurring) return
+                    void s.update('tasks', t.id, done ? { status: 'a_faire', done_at: null } : { status: 'fait', done_at: new Date().toISOString() })
+                  }}
+                  aria-label={done ? 'Marquer à faire' : 'Marquer fait'}>
+                  {t.is_recurring ? <RotateCw size={11} className="text-ink-3" />
+                    : done ? <CheckCircle2 size={12} className="text-[#4cc79a]" />
+                      : <Circle size={12} className="text-ink-3 group-hover:text-sun" />}
+                </button>
+              )}
               <button onClick={() => onEdit(t)} className="min-w-0 flex-1 text-left" title={t.is_recurring ? recurrenceLabel(t.recurrence_rule) : t.title}>
-                <span className={`block truncate text-[11px] leading-tight ${done ? 'text-ink-3 line-through' : 'text-ink'}`}>
+                <span className={`block truncate text-[11px] leading-tight ${struck ? 'text-ink-3 line-through' : 'text-ink'}`}>
                   {t.notable && <Star size={9} className="mr-0.5 inline text-sun" />}{t.title}
                 </span>
               </button>

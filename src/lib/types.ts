@@ -172,6 +172,15 @@ export interface Layout {
   updated_at: string
 }
 
+export interface Birthday {
+  id: UUID
+  user_id: UUID
+  name: string
+  day: number   // 1..31
+  month: number // 1..12
+  created_at: string
+}
+
 export interface Settings {
   user_id: UUID
   wip_limit: number
