@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
   addMonths, addWeeks, eachDayOfInterval, endOfWeek, format, getDate, getDaysInMonth,
-  isSameMonth, isToday, parseISO, startOfMonth, startOfWeek,
+  getISODay, isSameMonth, isToday, parseISO, startOfMonth, startOfWeek,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, RotateCw, Layers, Star, Target, Church, AlertTriangle } from 'lucide-react'
@@ -13,6 +13,9 @@ import type { Objective, Step, Task } from '../lib/types'
 
 type View = '4sem' | 'semaine' | 'trimestre' | 'annee'
 type Kind = 'task' | 'step' | 'objective'
+
+// Couleur de repli pour un évènement multi-jours sans domaine (ex. vacances) : un teal « détente ».
+const EVENT_DEFAULT_COLOR = '#46b3a9'
 
 export function TimeView() {
   const s = useHorizon()
@@ -120,10 +123,13 @@ function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
 }) {
   const s = useHorizon()
   const [over, setOver] = useState(false)
-  const list = [...tasksForDay(s.tasks, day)].sort(compareTasksByTitleTime)
-  const steps = stepsForDay(s.steps, day)
   const today = isToday(day)
   const dayIso = iso(day)
+  const all = [...tasksForDay(s.tasks, day)].sort(compareTasksByTitleTime)
+  // Évènements multi-jours (vacances…) : bandes continues épinglées en haut ; le reste dans le flux.
+  const spans = all.filter((t) => spanPart(t, dayIso) !== 'single')
+  const list = all.filter((t) => spanPart(t, dayIso) === 'single')
+  const steps = stepsForDay(s.steps, day)
   const birthdays = birthdaysForDay(s.birthdays, day)
 
   const handleVoid = (e: React.MouseEvent<HTMLElement>) => {
@@ -144,13 +150,6 @@ function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
       className={`flex min-h-28 cursor-pointer flex-col rounded-lg border p-1.5 transition-colors ${
         today ? 'border-sun/50 bg-sun/5' : over ? 'border-sun/70 bg-sun/10' : 'border-line-2/60 hover:bg-panel-2/40'
       }`}>
-      {isMarketParkingDay(s.tasks, day) && (
-        <div onClick={(e) => e.stopPropagation()}
-          title="Dimanche travaillé (début ≤ 15h) — marché dominical & stationnement compliqués"
-          className="mb-1 flex items-center justify-center gap-1 rounded bg-[#ef4444]/20 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#ff6b6b] ring-1 ring-[#ef4444]/40">
-          <AlertTriangle size={10} /> Marché / Parking
-        </div>
-      )}
       <header className="mb-1 flex items-center justify-between gap-1" onClick={(e) => e.stopPropagation()}>
         <p className={`text-xs font-medium ${today ? 'text-sun-soft' : 'text-ink-3'}`}>
           {format(day, 'EEE d', { locale: fr })}
@@ -165,6 +164,48 @@ function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
           </button>
         </div>
       </header>
+      {spans.length > 0 && (
+        <div className="mb-1 space-y-0.5" onClick={(e) => e.stopPropagation()}>
+          {spans.map((t) => {
+            const domain = s.domains.find((d) => d.id === (t.domain_id ?? s.projects.find((p) => p.id === t.project_id)?.domain_id))
+            const fill = domain?.color ?? EVENT_DEFAULT_COLOR
+            const part = spanPart(t, dayIso)
+            const weekStart = getISODay(day) === 1
+            const weekEnd = getISODay(day) === 7
+            // Bord « ouvert » = la bande se prolonge vers le jour voisin (même semaine) : pas d'arrondi, on déborde dans la gouttière.
+            const openLeft = !weekStart && (part === 'middle' || part === 'end')
+            const openRight = !weekEnd && (part === 'start' || part === 'middle')
+            const showTitle = part === 'start' || weekStart
+            const vacation = / - Vf?$/.test(t.title)
+            return (
+              <button key={t.id} draggable={!t.is_recurring} onDragStart={dragData('task', t.id)}
+                onClick={(e) => { e.stopPropagation(); onEdit(t) }} title={t.title}
+                style={{
+                  background: `${fill}70`,
+                  marginLeft: openLeft ? -11 : undefined,
+                  marginRight: openRight ? -11 : undefined,
+                  borderTopLeftRadius: openLeft ? 0 : undefined,
+                  borderBottomLeftRadius: openLeft ? 0 : undefined,
+                  borderTopRightRadius: openRight ? 0 : undefined,
+                  borderBottomRightRadius: openRight ? 0 : undefined,
+                  boxShadow: openLeft ? undefined : `inset 3px 0 0 ${fill}`, // liseré plein au vrai départ / reprise de semaine
+                }}
+                className="flex h-5 w-full items-center overflow-hidden rounded px-1.5 text-left">
+                <span className={`truncate text-[10px] font-medium leading-none text-ink ${showTitle ? '' : 'opacity-0'} ${vacation ? 'line-through' : ''}`}>
+                  {t.title}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+      {isMarketParkingDay(s.tasks, day) && (
+        <div onClick={(e) => e.stopPropagation()}
+          title="Dimanche travaillé (début < 15h) — marché dominical & stationnement compliqués"
+          className="mb-1 flex items-center justify-center gap-1 rounded bg-[#ef4444]/20 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#ff6b6b] ring-1 ring-[#ef4444]/40">
+          <AlertTriangle size={10} /> Marché / Parking
+        </div>
+      )}
       <div className="min-h-0 flex-1 space-y-1" onClick={handleVoid}>
         {steps.map((st) => (
           <button key={st.id} draggable onDragStart={dragData('step', st.id)}
@@ -179,16 +220,6 @@ function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
           const domain = s.domains.find((d) => d.id === (t.domain_id ?? s.projects.find((p) => p.id === t.project_id)?.domain_id))
           const c = domain?.color
           const isEvent = t.is_task === false
-          const part = spanPart(t, dayIso)
-          // Jours intermédiaires / fin d'un évènement multi-jours : barre fine continue, sans titre ni coche.
-          if (part === 'middle' || part === 'end') {
-            return (
-              <button key={t.id} draggable onDragStart={dragData('task', t.id)}
-                onClick={(e) => { e.stopPropagation(); onEdit(t) }} title={t.title}
-                style={{ background: c ? `${c}59` : 'var(--color-line-2)' }}
-                className="block h-1.5 w-full rounded-full" />
-            )
-          }
           const done = !t.is_recurring && !isEvent && t.status === 'fait'
           const vacation = / - Vf?$/.test(t.title) // garde posée en congé (V / Vf) → barrée
           const struck = done || vacation
