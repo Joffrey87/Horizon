@@ -287,6 +287,12 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
                       {hidden > 0 && options.length > 0 && !chosenVal && (
                         <p className="mt-0.5 text-[10px] text-ink-3">{hidden} écartée{hidden > 1 ? 's' : ''} (horaire incompatible avec ta garde)</p>
                       )}
+                      {hasTimed && location !== homeCity && !chosenVal && (
+                        <a href={massesInfoUrl(location)} target="_blank" rel="noopener noreferrer"
+                          className="mt-0.5 inline-flex items-center gap-1 text-[10px] text-ink-3 hover:text-ink">
+                          <ExternalLink size={10} /> autres messes autour de {location}
+                        </a>
+                      )}
                     </li>
                   )
                 })}
