@@ -183,6 +183,16 @@ export interface Birthday {
 
 export type CheckKind = 'periodique' | 'messe_travail'
 
+/** Un créneau de messe : heure « HH:MM » et lieu (église). */
+export interface MassSlot { t: string; c: string }
+
+/** Contenu typé de `Check.config` pour le type messe_travail. */
+export interface MassConfig {
+  masses?: Record<string, MassSlot[]>  // clé = jour ISO ('5' ven, '6' sam, '7' dim)
+  chosen?: Record<string, string>       // date ISO -> messe choisie (« HH:MM Lieu »)
+  refreshed_at?: string                 // dernière mise à jour de la liste
+}
+
 /** Vérification = alerte configurable par l'utilisateur.
  *  - 'periodique' : à revoir tous les `interval_days` jours ;
  *  - 'messe_travail' : remonte les jours d'obligation travaillés (dimanche,

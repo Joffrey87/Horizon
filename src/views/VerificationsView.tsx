@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
-import { format, parseISO } from 'date-fns'
+import { format, getISODay, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import {
-  Plus, Check, ExternalLink, Pencil, Trash2, Church, BellRing, RotateCcw, ShieldCheck,
+  Plus, Check, ExternalLink, Pencil, Trash2, Church, BellRing, RotateCcw, ShieldCheck, RefreshCw, Undo2,
 } from 'lucide-react'
 import { useHorizon } from '../lib/store'
+import { supabase } from '../lib/supabase'
 import { checkStatus } from '../lib/logic'
 import { Card, Modal, Seg, DomainDot, Badge, EmptyState } from '../components/ui'
-import type { Check as CheckRow, CheckKind } from '../lib/types'
+import type { Check as CheckRow, CheckKind, MassSlot } from '../lib/types'
 
 const INTERVAL_OPTIONS: { value: number; label: string }[] = [
   { value: 7, label: 'Chaque semaine' },
@@ -62,15 +63,42 @@ export function VerificationsView() {
 
 function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
   const s = useHorizon()
+  const [refreshing, setRefreshing] = useState(false)
   const domain = s.domains.find((d) => d.id === check.domain_id)
   const status = useMemo(() => checkStatus(check, s.tasks), [check, s.tasks])
 
-  const resolveDate = (date: string) =>
-    void s.update('checks', check.id, { resolved: [...(check.resolved ?? []), date] })
+  const cfg = (check.config ?? {}) as { masses?: Record<string, MassSlot[]>; chosen?: Record<string, string>; refreshed_at?: string }
+  const masses = cfg.masses ?? {}
+  const chosen = cfg.chosen ?? {}
+  const massesForDate = (date: string): MassSlot[] => masses[String(getISODay(parseISO(date)))] ?? []
+
+  const resolveDate = (date: string, pick?: string) =>
+    void s.update('checks', check.id, {
+      resolved: [...(check.resolved ?? []), date],
+      config: pick ? { ...cfg, chosen: { ...chosen, [date]: pick } } : cfg,
+    })
+  const unresolveDate = (date: string) => {
+    const nextChosen = { ...chosen }; delete nextChosen[date]
+    void s.update('checks', check.id, {
+      resolved: (check.resolved ?? []).filter((d) => d !== date),
+      config: { ...cfg, chosen: nextChosen },
+    })
+  }
   const markDone = () =>
     void s.update('checks', check.id, { last_done_at: new Date().toISOString() })
-  const resetResolved = () => void s.update('checks', check.id, { resolved: [] })
+  const resetResolved = () => void s.update('checks', check.id, { resolved: [], config: { ...cfg, chosen: {} } })
 
+  // Rafraîchit la liste des messes (fonction Edge qui relit la source publique).
+  const refreshMasses = async () => {
+    setRefreshing(true)
+    try {
+      await supabase.functions.invoke('refresh-masses', { body: { check_id: check.id } })
+      await s.loadAll()
+    } catch { /* la liste déjà connue reste utilisable */ }
+    setRefreshing(false)
+  }
+
+  const settled = (check.resolved ?? []).filter((d) => chosen[d]).sort()
   const shown = status.dates.slice(0, 6)
   const extra = status.dates.length - shown.length
 
@@ -105,41 +133,92 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
 
       {/* ---- État ---- */}
       {check.kind === 'messe_travail' ? (
-        status.dates.length === 0 ? (
-          <p className="text-xs text-ink-3">
-            {check.active ? 'Rien à prévoir : aucun jour d\'obligation travaillé sur la fenêtre.' : 'En pause.'}
-            {(check.resolved?.length ?? 0) > 0 && (
-              <button onClick={resetResolved} className="ml-2 inline-flex items-center gap-1 text-ink-3 underline hover:text-ink-2">
-                <RotateCcw size={11} /> réafficher {check.resolved!.length} traité{check.resolved!.length > 1 ? 's' : ''}
-              </button>
-            )}
-          </p>
-        ) : (
-          <div className="space-y-1.5">
-            <p className="text-xs font-medium text-sun-soft">{status.dates.length} messe{status.dates.length > 1 ? 's' : ''} à trouver</p>
-            <ul className="space-y-1">
-              {shown.map(({ date, label }) => (
-                <li key={date} className="flex items-center gap-2 rounded-lg bg-panel-2/60 px-2 py-1.5">
-                  <span className="min-w-0 flex-1 truncate text-xs">
-                    <span className="capitalize text-ink">{format(parseISO(date), 'EEEE d MMMM', { locale: fr })}</span>
-                    <span className="text-ink-3"> — {label}</span>
-                  </span>
-                  {check.link && (
-                    <a href={check.link} target="_blank" rel="noopener noreferrer"
-                      className="btn-ghost flex shrink-0 items-center gap-1 px-2 py-1 text-[11px]" title="Chercher une messe">
-                      <ExternalLink size={12} /> Messes
-                    </a>
-                  )}
-                  <button onClick={() => resolveDate(date)}
-                    className="btn-ghost flex shrink-0 items-center gap-1 px-2 py-1 text-[11px] text-[#4cc79a]" title="Marquer comme réglé">
-                    <Check size={12} /> trouvée
-                  </button>
-                </li>
-              ))}
-            </ul>
-            {extra > 0 && <p className="text-[11px] text-ink-3">+ {extra} autre{extra > 1 ? 's' : ''} plus loin dans la fenêtre.</p>}
+        <div className="space-y-2">
+          {/* Barre : fraîcheur de la liste + rafraîchir */}
+          <div className="flex items-center justify-between gap-2 text-[11px] text-ink-3">
+            <span>
+              {cfg.refreshed_at
+                ? `Liste des messes vérifiée le ${format(parseISO(cfg.refreshed_at), 'd MMM', { locale: fr })}`
+                : 'Liste des messes non renseignée'}
+            </span>
+            <button onClick={() => void refreshMasses()} disabled={refreshing}
+              className="btn-ghost flex items-center gap-1 px-2 py-0.5 hover:text-ink disabled:opacity-50" title="Rafraîchir depuis la source">
+              <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} /> {refreshing ? 'Maj…' : 'Rafraîchir'}
+            </button>
           </div>
-        )
+
+          {status.dates.length === 0 ? (
+            <p className="text-xs text-ink-3">
+              {check.active ? 'Rien à prévoir : aucun jour d\'obligation travaillé sur la fenêtre.' : 'En pause.'}
+            </p>
+          ) : (
+            <>
+              <p className="text-xs font-medium text-sun-soft">{status.dates.length} messe{status.dates.length > 1 ? 's' : ''} à trouver</p>
+              <ul className="space-y-1.5">
+                {shown.map(({ date, label }) => {
+                  const options = massesForDate(date)
+                  return (
+                    <li key={date} className="rounded-lg bg-panel-2/60 px-2 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-xs">
+                          <span className="capitalize text-ink">{format(parseISO(date), 'EEEE d MMMM', { locale: fr })}</span>
+                          <span className="text-ink-3"> — {label}</span>
+                        </span>
+                        {check.link && (
+                          <a href={check.link} target="_blank" rel="noopener noreferrer"
+                            className="btn-ghost flex shrink-0 items-center gap-1 px-1.5 py-0.5 text-[11px]" title="Ouvrir messes.info (Reims)">
+                            <ExternalLink size={11} /> messes.info
+                          </a>
+                        )}
+                      </div>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        {options.length > 0 ? (
+                          <select defaultValue="" onChange={(e) => { if (e.target.value) resolveDate(date, e.target.value) }}
+                            className="field w-full py-1 text-xs">
+                            <option value="">Choisir une messe…</option>
+                            {options.map((m) => (
+                              <option key={m.t + m.c} value={`${m.t} ${m.c}`}>{m.t} — {m.c}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <button onClick={() => resolveDate(date)}
+                            className="btn-ghost flex items-center gap-1 px-2 py-0.5 text-[11px] text-[#4cc79a]" title="Marquer comme réglé">
+                            <Check size={12} /> trouvée
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+              {extra > 0 && <p className="text-[11px] text-ink-3">+ {extra} autre{extra > 1 ? 's' : ''} plus loin dans la fenêtre.</p>}
+            </>
+          )}
+
+          {/* Messes déjà choisies */}
+          {settled.length > 0 && (
+            <div className="border-t border-line-2/50 pt-1.5">
+              <p className="mb-1 text-[10px] uppercase tracking-wide text-ink-3">Messes choisies</p>
+              <ul className="space-y-0.5">
+                {settled.map((date) => (
+                  <li key={date} className="flex items-center gap-2 text-[11px]">
+                    <Check size={11} className="shrink-0 text-[#4cc79a]" />
+                    <span className="min-w-0 flex-1 truncate">
+                      <span className="capitalize text-ink-2">{format(parseISO(date), 'EEE d MMM', { locale: fr })}</span>
+                      <span className="text-ink-3"> · {chosen[date]}</span>
+                    </span>
+                    <button onClick={() => unresolveDate(date)} className="btn-ghost shrink-0 p-1 text-ink-3 hover:text-ink" title="Annuler ce choix">
+                      <Undo2 size={11} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <button onClick={resetResolved} className="mt-1 inline-flex items-center gap-1 text-[10px] text-ink-3 underline hover:text-ink-2">
+                <RotateCcw size={10} /> tout réinitialiser
+              </button>
+            </div>
+          )}
+        </div>
       ) : (
         <div className="flex items-center justify-between gap-2">
           {status.due ? (
