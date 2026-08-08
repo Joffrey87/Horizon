@@ -357,6 +357,14 @@ export function workShiftOn(tasks: Task[], dayIso: string): { start: number; end
   return { ...shift, code: code ? code[1] : '' }
 }
 
+/** Dimanche travaillé le matin/midi : garde démarrant avant 15h (M1, M2, J…).
+ *  Ces jours-là, marché dominical + stationnement compliqués → alerte « Marché / Parking ». */
+export function isMarketParkingDay(tasks: Task[], day: Date): boolean {
+  if (getISODay(day) !== 7) return false
+  const shift = workShiftOn(tasks, iso(day))
+  return !!shift && shift.start < 15 * 60
+}
+
 /** Formate des minutes depuis minuit en « 6h » / « 20h45 ». */
 export function fmtMinutes(min: number): string {
   const h = Math.floor(min / 60) % 24, m = min % 60
