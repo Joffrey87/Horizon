@@ -119,13 +119,15 @@ function ReviewWizard({ kind, onDone }: { kind: ReviewKind; onDone: () => void }
                     <span className="text-xs tabular-nums text-ink-3">{p.progress}%</span>
                   </div>
                   {calm >= 10 && <p className="mt-1 text-xs text-[#eda145]">Calme depuis {calm} j — toujours d'actualité ?</p>}
-                  <input className="field mt-2 text-sm" placeholder="Prochaine action pour la semaine"
-                    defaultValue={p.next_action ?? ''}
+                  <input className="field mt-2 text-sm" placeholder="+ Ajouter une tâche pour la semaine"
                     onBlur={(e) => {
-                      if (e.target.value !== (p.next_action ?? '')) {
-                        void s.update('projects', p.id, { next_action: e.target.value.trim() || null })
+                      const v = e.target.value.trim()
+                      if (v) {
+                        void s.insert('tasks', { title: v, project_id: p.id, status: 'a_faire', is_task: true, sort_order: -1 })
+                        e.target.value = ''
                       }
-                    }} />
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} />
                 </div>
               )
             })}

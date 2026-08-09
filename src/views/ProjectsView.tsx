@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { differenceInCalendarDays, format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Plus, Pencil, CheckCircle2, Circle, Trash2, Layers, CalendarClock, NotebookPen } from 'lucide-react'
+import { Plus, Pencil, CheckCircle2, Circle, Trash2, Layers, CalendarClock, NotebookPen, GripVertical } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import { Card, Badge, ProgressBar, DomainDot, Modal, EmptyState, Seg, NoteArea } from '../components/ui'
 import { TaskForm } from '../components/TaskForm'
@@ -20,6 +21,15 @@ export function ProjectsView() {
   const [creating, setCreating] = useState(false)
   const [openProject, setOpenProject] = useState<Project | null>(null)
   const [noteProject, setNoteProject] = useState<Project | null>(null)
+  const location = useLocation()
+
+  // Ouverture directe d'un projet depuis une autre page (ex. double-clic sur l'accueil).
+  useEffect(() => {
+    const id = (location.state as { openProjectId?: string } | null)?.openProjectId
+    if (!id) return
+    const p = s.projects.find((x) => x.id === id)
+    if (p) setOpenProject(p)
+  }, [location.state, s.projects])
 
   const wip = s.settings?.wip_limit ?? 5
   const actifs = s.projects.filter((p) => p.status === 'actif')
@@ -97,11 +107,7 @@ export function ProjectsView() {
                   <ProgressBar value={p.progress} color={domain?.color ?? 'var(--color-sun)'} />
                 </div>
 
-                <p className="mt-3 text-sm text-ink-2">
-                  {p.next_action
-                    ? <><span className="text-ink-3">Prochaine action : </span>{p.next_action}</>
-                    : <span className="text-[#eda145]">Aucune prochaine action définie</span>}
-                </p>
+                <ProjectNextTasks project={p} />
 
                 <div className="mt-3 flex flex-wrap items-center gap-1.5">
                   {p.blocked && <Badge tone="bad">bloqué{p.blocked_reason ? ` — ${p.blocked_reason}` : ''}</Badge>}
@@ -128,6 +134,57 @@ export function ProjectsView() {
 
       {noteProject && <NoteModal project={noteProject} onClose={() => setNoteProject(null)} />}
     </div>
+  )
+}
+
+/** Les 5 prochaines tâches d'un projet, réordonnables par glisser-déposer (met à jour sort_order). */
+function ProjectNextTasks({ project }: { project: Project }) {
+  const s = useHorizon()
+  const [dragIdx, setDragIdx] = useState<number | null>(null)
+  const fullOrdered = useMemo(
+    () => s.tasks
+      .filter((t) => t.project_id === project.id && !t.step_id && t.is_task !== false
+        && (t.status === 'a_faire' || t.status === 'en_cours'))
+      .sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at)),
+    [s.tasks, project.id])
+  const visible = fullOrdered.slice(0, 5)
+
+  // Réordonne visuellement puis réindexe sort_order de toutes les tâches ouvertes du projet.
+  const reorder = (from: number, to: number) => {
+    if (from === to) return
+    const v = [...visible]
+    const [moved] = v.splice(from, 1)
+    v.splice(to, 0, moved)
+    const newFull = [...v, ...fullOrdered.slice(5)]
+    newFull.forEach((t, i) => { if (t.sort_order !== i) void s.update('tasks', t.id, { sort_order: i }) })
+  }
+
+  if (visible.length === 0) {
+    return <p className="mt-3 text-xs text-ink-3">Aucune tâche ouverte. Ouvre le projet pour en ajouter.</p>
+  }
+
+  return (
+    <ul className="mt-3 space-y-0.5" onClick={(e) => e.stopPropagation()}>
+      {visible.map((t, i) => (
+        <li key={t.id} draggable
+          onDragStart={(e) => { e.stopPropagation(); setDragIdx(i); e.dataTransfer.effectAllowed = 'move' }}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => { e.preventDefault(); e.stopPropagation(); if (dragIdx !== null) reorder(dragIdx, i); setDragIdx(null) }}
+          onDragEnd={() => setDragIdx(null)}
+          className={`group flex items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-panel-2/60 ${dragIdx === i ? 'opacity-50' : ''}`}>
+          <GripVertical size={13} className="shrink-0 cursor-grab text-ink-3" />
+          <button onClick={() => void s.update('tasks', t.id, { status: 'fait', done_at: new Date().toISOString() })}
+            className="shrink-0" aria-label="Marquer fait" title="Marquer fait">
+            <Circle size={15} className="text-ink-3 transition-colors hover:text-sun" />
+          </button>
+          <span className="min-w-0 flex-1 truncate text-sm text-ink-2">{t.title}</span>
+          {t.scheduled_date && <span className="shrink-0 text-[10px] text-ink-3">{fmtDate(t.scheduled_date)}</span>}
+        </li>
+      ))}
+      {fullOrdered.length > 5 && (
+        <li className="px-1 pt-0.5 text-[10px] text-ink-3">+ {fullOrdered.length - 5} autre{fullOrdered.length - 5 > 1 ? 's' : ''}</li>
+      )}
+    </ul>
   )
 }
 
@@ -373,7 +430,6 @@ function ProjectForm({ open, project, onClose }: { open: boolean; project: Proje
     description: project?.description ?? '',
     status: project?.status ?? 'actif',
     progress: project?.progress ?? 0,
-    next_action: project?.next_action ?? '',
     blocked: project?.blocked ?? false,
     blocked_reason: project?.blocked_reason ?? '',
   }
@@ -386,7 +442,6 @@ function ProjectForm({ open, project, onClose }: { open: boolean; project: Proje
     const values = {
       ...current,
       objective_id: current.objective_id || null,
-      next_action: (current.next_action as string).trim() || null,
       blocked_reason: current.blocked ? ((current.blocked_reason as string).trim() || null) : null,
       description: (current.description as string).trim() || null,
       last_activity_at: new Date().toISOString(),
@@ -435,8 +490,6 @@ function ProjectForm({ open, project, onClose }: { open: boolean; project: Proje
               onChange={(e) => setF('progress', Number(e.target.value))} className="w-full accent-[#f59e0b]" />
           </label>
         </div>
-        <input value={current.next_action as string} onChange={(e) => setF('next_action', e.target.value)}
-          placeholder="Prochaine action concrète (fortement recommandé)" className="field" />
         <label className="flex items-center gap-2 text-sm text-ink-2">
           <input type="checkbox" checked={current.blocked as boolean}
             onChange={(e) => setF('blocked', e.target.checked)} className="accent-[#dc4a6b]" />

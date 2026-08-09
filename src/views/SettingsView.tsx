@@ -10,6 +10,7 @@ export function SettingsView() {
   const [homeCity, setHomeCity] = useState(s.settings?.home_city ?? '')
   const [wip, setWip] = useState(s.settings?.wip_limit ?? 5)
   const [quote, setQuote] = useState(s.settings?.daily_quote ?? true)
+  const [feasts, setFeasts] = useState(s.settings?.catholic_feasts ?? true)
   const [importMsg, setImportMsg] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -83,6 +84,15 @@ export function SettingsView() {
             className="accent-[#f59e0b]" />
           Afficher la citation du jour
         </label>
+        <label className="mt-3 flex items-center gap-2 text-sm text-ink-2">
+          <input type="checkbox" checked={feasts}
+            onChange={(e) => { setFeasts(e.target.checked); void s.saveSettings({ catholic_feasts: e.target.checked }) }}
+            className="accent-[#f59e0b]" />
+          Afficher les grandes fêtes catholiques
+        </label>
+        <p className="text-[11px] text-ink-3">
+          Marque les 15 grandes fêtes (✝) dans le calendrier « Temps ». Les jours de fête travaillés ou en séjour rejoignent aussi la recherche de messe.
+        </p>
       </Card>
 
       <Card title="Limitation du travail en cours">

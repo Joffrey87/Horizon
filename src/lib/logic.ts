@@ -4,7 +4,7 @@
 // ================================================================
 
 import {
-  addMonths, differenceInCalendarDays, eachDayOfInterval, format, getDate, getISODay,
+  addDays, addMonths, differenceInCalendarDays, eachDayOfInterval, format, getDate, getISODay,
   isSaturday, isSunday, parseISO, startOfWeek, subDays,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -195,19 +195,13 @@ export function computeAlerts(opts: {
     }
   }
 
-  // Projets bloqués ou sans prochaine action
+  // Projets bloqués
   for (const p of actifs) {
     if (p.blocked) {
       alerts.push({
         id: `blk-${p.id}`, kind: 'blocage', severity: 'warn',
         label: `« ${p.title} » est bloqué`,
         detail: p.blocked_reason ?? undefined, link: '/projets',
-      })
-    } else if (!p.next_action) {
-      alerts.push({
-        id: `na-${p.id}`, kind: 'sans_action', severity: 'info',
-        label: `« ${p.title} » n'a pas de prochaine action`,
-        link: '/projets',
       })
     }
   }
@@ -239,6 +233,79 @@ export function computeAlerts(opts: {
   }
 
   return alerts.slice(0, 6) // le cockpit n'est jamais exhaustif
+}
+
+// ---- Grandes fêtes catholiques -------------------------------------------
+
+export interface Feast {
+  date: string       // ISO 'yyyy-MM-dd'
+  name: string
+  obligation: boolean // fête d'obligation / férié religieux en France
+}
+
+/** Date de Pâques (dimanche) pour une année, calendrier grégorien
+ *  (algorithme de Meeus/Jones/Butcher). */
+function computus(year: number): Date {
+  const a = year % 19
+  const b = Math.floor(year / 100)
+  const c = year % 100
+  const d = Math.floor(b / 4)
+  const e = b % 4
+  const f = Math.floor((b + 8) / 25)
+  const g = Math.floor((b - f + 1) / 3)
+  const h = (19 * a + b - d - g + 15) % 30
+  const i = Math.floor(c / 4)
+  const k = c % 4
+  const l = (32 + 2 * e + 2 * i - h - k) % 7
+  const m = Math.floor((a + 11 * h + 22 * l) / 451)
+  const month = Math.floor((h + l - 7 * m + 114) / 31) // 3 = mars, 4 = avril
+  const day = ((h + l - 7 * m + 114) % 31) + 1
+  return new Date(year, month - 1, day)
+}
+
+const feastCache = new Map<number, Feast[]>()
+
+/** Les 15 plus grandes fêtes catholiques d'une année (fixes + mobiles), triées par date. */
+export function catholicFeasts(year: number): Feast[] {
+  const cached = feastCache.get(year)
+  if (cached) return cached
+  const easter = computus(year)
+  const mov = (offset: number) => iso(addDays(easter, offset))
+  const fixed = (mth: number, d: number) => iso(new Date(year, mth - 1, d))
+  const list: Feast[] = [
+    { date: fixed(1, 1), name: 'Sainte Marie, Mère de Dieu', obligation: true },
+    { date: fixed(1, 6), name: 'Épiphanie', obligation: false },
+    { date: mov(-46), name: 'Mercredi des Cendres', obligation: false },
+    { date: mov(-7), name: 'Dimanche des Rameaux', obligation: false },
+    { date: mov(-3), name: 'Jeudi Saint', obligation: false },
+    { date: mov(-2), name: 'Vendredi Saint', obligation: false },
+    { date: mov(0), name: 'Pâques', obligation: true },
+    { date: mov(39), name: 'Ascension', obligation: true },
+    { date: mov(49), name: 'Pentecôte', obligation: false },
+    { date: mov(56), name: 'Sainte Trinité', obligation: false },
+    { date: mov(60), name: 'Fête-Dieu (Saint-Sacrement)', obligation: false },
+    { date: fixed(8, 15), name: 'Assomption', obligation: true },
+    { date: fixed(11, 1), name: 'Toussaint', obligation: true },
+    { date: fixed(12, 8), name: 'Immaculée Conception', obligation: false },
+    { date: fixed(12, 25), name: 'Noël', obligation: true },
+  ].sort((a, b) => a.date.localeCompare(b.date))
+  feastCache.set(year, list)
+  return list
+}
+
+/** Nom de la grande fête catholique tombant ce jour-là, sinon null. */
+export function feastOnDay(day: Date): string | null {
+  const di = iso(day)
+  return catholicFeasts(day.getFullYear()).find((f) => f.date === di)?.name ?? null
+}
+
+/** Fêtes indexées par date ISO, pour toutes les années couvrant [startYear, endYear]. */
+export function feastMap(startYear: number, endYear: number): Record<string, Feast> {
+  const map: Record<string, Feast> = {}
+  for (let y = startYear; y <= endYear; y++) {
+    for (const f of catholicFeasts(y)) map[f.date] = f
+  }
+  return map
 }
 
 // ---- Vérifications configurables -----------------------------------------
@@ -299,8 +366,9 @@ export function tripLocationOn(tasks: Task[], dayIso: string): string | null {
 export interface CheckStatus {
   due: boolean
   /** messe_travail : TOUS les jours d'obligation retenus de la fenêtre (dans l'ordre,
-   *  réglés compris). `location` = où chercher la messe (domicile ou lieu de séjour). */
-  dates: { date: string; label: string; location: string }[]
+   *  réglés compris). `location` = où chercher la messe (domicile ou lieu de séjour).
+   *  `feast` = nom de la grande fête catholique si le jour en est une. */
+  dates: { date: string; label: string; location: string; feast?: string }[]
   /** Nb de points encore à traiter (messe : dates ni réglées ni choisies ; periodique : 0/1). */
   pending: number
   /** periodique : nb de jours écoulés au-delà de l'échéance (≥ 0) une fois due. */
@@ -310,19 +378,33 @@ export interface CheckStatus {
 }
 
 /** État d'une vérification à l'instant présent. */
-export function checkStatus(check: Check, tasks: Task[], opts: { now?: Date; homeCity?: string } = {}): CheckStatus {
+export function checkStatus(check: Check, tasks: Task[], opts: { now?: Date; homeCity?: string; feasts?: boolean } = {}): CheckStatus {
   const now = opts.now ?? new Date()
   const homeCity = opts.homeCity?.trim() || 'Reims'
   if (check.kind === 'messe_travail') {
     const resolved = new Set(check.resolved ?? [])
     const chosen = ((check.config?.chosen) ?? {}) as Record<string, string>
-    const days = eachDayOfInterval({ start: now, end: addMonths(now, check.window_months) })
-    const dates = days
-      .filter(isObligationDay)
-      .map((d) => ({ d, di: iso(d), trip: tripLocationOn(tasks, iso(d)) }))
-      // un jour d'obligation est retenu si je travaille CE jour OU si je suis en séjour
-      .filter(({ d, trip }) => worksOn(tasks, d) || trip !== null)
-      .map(({ d, di, trip }) => ({ date: di, label: obligationLabel(d), location: trip ?? homeCity }))
+    const start = now
+    const end = addMonths(now, check.window_months)
+    // Grandes fêtes catholiques de la fenêtre (si l'affichage est activé) : elles
+    // rejoignent les jours candidats, en plus des jours d'obligation habituels.
+    const feasts: Record<string, Feast> = opts.feasts ? feastMap(start.getFullYear(), end.getFullYear()) : {}
+    const days = eachDayOfInterval({ start, end })
+    const dates = days.flatMap((d): CheckStatus['dates'] => {
+      const di = iso(d)
+      const feast: Feast | undefined = feasts[di]
+      if (!isObligationDay(d) && !feast) return []
+      // un jour candidat est retenu si je travaille CE jour OU si je suis en séjour
+      const trip = tripLocationOn(tasks, di)
+      if (!worksOn(tasks, d) && trip === null) return []
+      const entry: CheckStatus['dates'][number] = {
+        date: di,
+        label: feast ? feast.name : obligationLabel(d),
+        location: trip ?? homeCity,
+      }
+      if (feast) entry.feast = feast.name
+      return [entry]
+    })
     const pending = dates.filter((d) => !resolved.has(d.date) && !chosen[d.date]).length
     return { due: pending > 0, dates, pending, overdueDays: null, nextDueInDays: null }
   }
@@ -385,7 +467,7 @@ export function massFitsShift(time: string, shift: { start: number; end: number 
 }
 
 /** Nb total de points « à vérifier maintenant » sur toutes les vérifications actives. */
-export function checksDueCount(checks: Check[], tasks: Task[], opts: { now?: Date; homeCity?: string } = {}): number {
+export function checksDueCount(checks: Check[], tasks: Task[], opts: { now?: Date; homeCity?: string; feasts?: boolean } = {}): number {
   return checks
     .filter((c) => c.active)
     .reduce((n, c) => n + checkStatus(c, tasks, opts).pending, 0)
@@ -511,6 +593,15 @@ export function extractHourMinute(title: string): { hour: number; minute: number
   const minute = m[2] ? parseInt(m[2], 10) : 0
   if (hour > 23 || minute > 59) return null
   return { hour, minute }
+}
+
+/** Extrait les emojis d'un titre (variantes, séquences ZWJ et drapeaux inclus).
+ *  Renvoie la chaîne concaténée des emojis trouvés, sinon ''. Sert à « signer »
+ *  visuellement un évènement multi-jours sur chaque case du calendrier. */
+// ️ = sélecteur de variante emoji ; ‍ = ZWJ (séquences composées, ex. 👨‍👩‍👧) ; RI = drapeaux
+const EMOJI_RE = /\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*|\p{Regional_Indicator}{2}/gu
+export function extractEmojis(title: string): string {
+  return (title.match(EMOJI_RE) ?? []).join('')
 }
 
 /** Comparateur : tâches avec heure en tête (chronologique), puis les autres dans l'ordre existant. */

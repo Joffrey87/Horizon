@@ -84,7 +84,7 @@ export function WorkspaceView() {
           N.push({
             id: `pro-${p.id}`, type: 'horizon', position: pos(`pro-${p.id}`, { x: i * 320 + 40, y: row++ * 90 }),
             data: {
-              label: p.title, sub: p.status === 'pause' ? 'projet en pause' : p.next_action ? `→ ${p.next_action}` : 'projet',
+              label: p.title, sub: p.status === 'pause' ? 'projet en pause' : 'projet',
               color: d.color, kind: 'projet', progress: p.progress,
             } satisfies NodeData,
           })

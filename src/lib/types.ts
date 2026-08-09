@@ -51,7 +51,6 @@ export interface Project {
   notes: string | null
   status: ProjectStatus
   progress: number
-  next_action: string | null
   blocked: boolean
   blocked_reason: string | null
   last_activity_at: string
@@ -98,6 +97,8 @@ export interface Task {
   is_recurring: boolean
   recurrence_rule: string | null // 'daily' | 'weekly:1,3,5' | 'monthly:15'
   notable: boolean // apparaît dans les vues trimestre / année
+  home_hidden: boolean // masquée de l'espace visuel de l'accueil (œil)
+  sort_order: number // ordre manuel des tâches d'un projet (drag & drop)
   done_at: string | null
   created_at: string
 }
@@ -233,6 +234,7 @@ export interface Settings {
   first_name: string | null
   home_city: string | null   // ville de référence pour la recherche de messes
   daily_quote: boolean
+  catholic_feasts: boolean    // afficher les grandes fêtes catholiques dans le calendrier
   updated_at: string
 }
 

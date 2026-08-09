@@ -94,7 +94,7 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
   const [refreshing, setRefreshing] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const domain = s.domains.find((d) => d.id === check.domain_id)
-  const status = useMemo(() => checkStatus(check, s.tasks, { homeCity: s.settings?.home_city ?? undefined }), [check, s.tasks, s.settings])
+  const status = useMemo(() => checkStatus(check, s.tasks, { homeCity: s.settings?.home_city ?? undefined, feasts: s.settings?.catholic_feasts !== false }), [check, s.tasks, s.settings])
 
   const cfg = (check.config ?? {}) as {
     masses?: Record<string, MassSlot[]>
@@ -236,7 +236,7 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
                   : `Toutes les messes sont choisies (${status.dates.length})`}
               </p>
               <ul className="space-y-1.5">
-                {(expanded ? status.dates : status.dates.slice(0, MASS_PREVIEW)).map(({ date, location }) => {
+                {(expanded ? status.dates : status.dates.slice(0, MASS_PREVIEW)).map(({ date, location, feast }) => {
                   const shift = workShiftOn(s.tasks, date)
                   const hasTimed = Object.keys(cityMasses(location)).length > 0 // liste horaire dispo pour ce lieu ?
                   const all = massesForDate(location, date)
@@ -251,6 +251,7 @@ function CheckCard({ check, onEdit }: { check: CheckRow; onEdit: () => void }) {
                       className={`rounded-lg px-2 py-1.5 ${noMass ? 'border border-[#ef4444]/60 bg-[#ef4444]/12' : 'bg-panel-2/60'}`}>
                       <div className="text-xs">
                         <span className="capitalize text-ink">{format(parseISO(date), 'EEEE d MMMM', { locale: fr })}</span>
+                        {feast && <span className="ml-1 rounded bg-sun/20 px-1.5 py-0.5 text-[10px] font-medium text-sun-soft" title={`Grande fête : ${feast}`}>✝ {feast}</span>}
                         {location !== homeCity && <span className="font-medium text-[#a78bfa]"> · à {location}</span>}
                         {shift && (
                           <span className="text-ink-3"> · <span className="font-medium text-ink-2" title={`${fmtMinutes(shift.start)}–${fmtMinutes(shift.end)}`}>{shift.code || `${fmtMinutes(shift.start)}–${fmtMinutes(shift.end)}`}</span></span>
@@ -564,7 +565,7 @@ function CheckForm({ open, check, onClose }: { open: boolean; check: CheckRow | 
             {kind === 'periodique'
               ? 'Revient à intervalle régulier jusqu\'à ce que tu la marques « vérifiée ».'
               : kind === 'messe_travail'
-                ? 'Remonte les jours d\'obligation travaillés (dimanche, 1er vendredi, 1er samedi) où il faut trouver une messe.'
+                ? 'Remonte les jours d\'obligation et les grandes fêtes catholiques (travaillés ou en séjour) où il faut trouver une messe.'
                 : 'Une liste de tâches à cocher, groupées par section. La catégorie regroupe les listes d\'une même famille (ex. Vacances).'}
           </p>
         </div>

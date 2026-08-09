@@ -1,6 +1,6 @@
 import { useRef, type MouseEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { X, List } from 'lucide-react'
+import { X, List, FolderKanban } from 'lucide-react'
 
 const BULLET = '• '
 
@@ -106,6 +106,22 @@ export function ProgressBar({ value, color = 'var(--color-sun)' }: { value: numb
 
 export function DomainDot({ color, size = 8 }: { color: string; size?: number }) {
   return <span className="inline-block shrink-0 rounded-full" style={{ width: size, height: size, background: color }} />
+}
+
+/** Puce « projet » : rend visible le rattachement d'une tâche à son projet
+ *  (couleur du domaine du projet). Utilisée dans Priorités et Temps. */
+export function ProjectTag({ name, color, size = 'sm' }: { name: string; color?: string; size?: 'xs' | 'sm' }) {
+  const c = color ?? 'var(--color-ink-3)'
+  const pad = size === 'xs' ? 'px-1 py-0 text-[9px]' : 'px-1.5 py-0.5 text-[10px]'
+  const icon = size === 'xs' ? 8 : 9
+  return (
+    <span className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-full font-medium ${pad}`}
+      style={{ background: `color-mix(in srgb, ${c} 20%, transparent)`, color: c }}
+      title={`Projet : ${name}`}>
+      <FolderKanban size={icon} className="shrink-0" />
+      <span className="truncate">{name}</span>
+    </span>
+  )
 }
 
 export function Modal({ open, onClose, title, children, wide = false }: {

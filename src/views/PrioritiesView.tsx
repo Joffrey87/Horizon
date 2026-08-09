@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import { quadrant, todayIso } from '../lib/logic'
-import { Badge, DomainDot, Modal, Seg, Scale3 } from '../components/ui'
+import { Badge, DomainDot, Modal, Seg, Scale3, ProjectTag } from '../components/ui'
 import { TaskForm } from '../components/TaskForm'
 import type { Idea, Task } from '../lib/types'
 
@@ -59,8 +59,10 @@ export function PrioritiesView() {
   // Rendu d'un item (réutilisé par les quadrants et la zone « À trier »).
   const renderItem = (it: Item) => {
     const x = val(it)
+    const project = it.kind === 'tache' && it.task.project_id
+      ? s.projects.find((p) => p.id === it.task.project_id) : undefined
     const domain = s.domains.find((d) => d.id ===
-      (it.kind === 'idee' ? it.idea.domain_id : it.task.domain_id ?? s.projects.find((p) => p.id === it.task.project_id)?.domain_id))
+      (it.kind === 'idee' ? it.idea.domain_id : it.task.domain_id ?? project?.domain_id))
     return (
       <li key={x.id}>
         <button onClick={(e) => { e.stopPropagation(); setSelected(it) }}
@@ -69,6 +71,7 @@ export function PrioritiesView() {
           className="flex w-full cursor-grab items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-panel-2 active:cursor-grabbing">
           {domain && <DomainDot color={domain.color} size={7} />}
           <span className="min-w-0 flex-1 truncate text-sm text-ink-2">{x.title}</span>
+          {project && <ProjectTag name={project.title} color={domain?.color} size="xs" />}
           <Badge tone={it.kind === 'idee' ? 'sun' : 'info'}>{it.kind}</Badge>
         </button>
       </li>

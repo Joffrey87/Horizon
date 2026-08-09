@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowRight, AlertTriangle, Info, CheckCircle2, Circle,
-  LayoutDashboard, X, Flag, FolderKanban, Repeat, Plus, ShieldCheck,
+  LayoutDashboard, X, Repeat, ShieldCheck, CalendarDays,
 } from 'lucide-react'
-import type { Project } from '../lib/types'
+import type { Task } from '../lib/types'
 import { useHorizon } from '../lib/store'
+import { DayCell } from './TimeView'
+import { TaskForm } from '../components/TaskForm'
+import { HomeBoard } from '../components/HomeBoard'
 import {
   checksDueCount, computeAlerts, dayPhraseOfDay, domainBalance, eveningPhraseOfWeek, fmtDay,
   focusOfDay, greetingKind, habitStats, habitsForDay, isRecentlyDone, quoteOfDay,
@@ -28,9 +31,19 @@ const MORNING_GREETED_KEY = 'horizon.lastMorningGreetedDate'
 export function Dashboard() {
   const s = useHorizon()
   const now = new Date()
+  const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1)
   const today = todayIso()
 
   const [cockpitOpen, setCockpitOpen] = useState(false)
+  const navigate = useNavigate()
+  // Case du jour (calendrier) embarquée sur l'accueil : édition/création de tâches.
+  const [editing, setEditing] = useState<Task | null>(null)
+  const [createDate, setCreateDate] = useState<string | null>(null)
+  const handleDayMove = (kind: 'task' | 'step' | 'objective', id: string, dayIso: string) => {
+    if (kind === 'task') void s.update('tasks', id, { scheduled_date: dayIso })
+    else if (kind === 'step') void s.update('steps', id, { scheduled_date: dayIso })
+    else void s.update('objectives', id, { target_date: dayIso })
+  }
 
   const lastFocusReview = s.reviews.find((r) => (r.kind === 'confirmation' || r.kind === 'hebdo') && r.completed)
   const weekFocusIds = useMemo(() => lastFocusReview?.week_focus ?? [], [lastFocusReview])
@@ -45,7 +58,7 @@ export function Dashboard() {
     projects: s.projects, habits: s.habits, logs: s.habitLogs, reviews: s.reviews, settings: s.settings,
   }), [s.projects, s.habits, s.habitLogs, s.reviews, s.settings])
   const balance = useMemo(() => domainBalance(s.domains, s.projects, s.tasks), [s.domains, s.projects, s.tasks])
-  const checksDue = useMemo(() => checksDueCount(s.checks, s.tasks, { homeCity: s.settings?.home_city ?? undefined }), [s.checks, s.tasks, s.settings])
+  const checksDue = useMemo(() => checksDueCount(s.checks, s.tasks, { homeCity: s.settings?.home_city ?? undefined, feasts: s.settings?.catholic_feasts !== false }), [s.checks, s.tasks, s.settings])
 
   const actifs = s.projects.filter((p) => p.status === 'actif')
   const quote = quoteOfDay()
@@ -223,6 +236,9 @@ export function Dashboard() {
             <div className="space-y-3">
               {actifs.slice(0, 6).map((p) => {
                 const domain = s.domains.find((d) => d.id === p.domain_id)
+                const nextTask = s.tasks
+                  .filter((t) => t.project_id === p.id && t.is_task !== false && (t.status === 'a_faire' || t.status === 'en_cours'))
+                  .sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at))[0]
                 return (
                   <div key={p.id} className="space-y-1">
                     <div className="flex items-center justify-between gap-2">
@@ -235,7 +251,7 @@ export function Dashboard() {
                     </div>
                     <ProgressBar value={p.progress} color={domain?.color ?? 'var(--color-sun)'} />
                     <p className="truncate text-xs text-ink-3">
-                      {p.next_action ? <>→ {p.next_action}</> : 'Pas de prochaine action définie'}
+                      {nextTask ? <>→ {nextTask.title}</> : 'Pas de tâche à faire'}
                     </p>
                   </div>
                 )
@@ -297,7 +313,7 @@ export function Dashboard() {
   return (
     <div className="rise space-y-4">
       {/* ---- Accueil immersif : paysage seul, plus de contenu au scroll ---- */}
-      <section className="relative mt-4 h-[calc(100vh-7rem)] min-h-[520px] overflow-hidden rounded-2xl border border-line">
+      <section className="relative -mx-4 -mb-4 -mt-4 h-[calc(100vh-3rem)] min-h-[600px] overflow-hidden rounded-2xl border border-line lg:-mx-8">
         <img src={wallpaperOfDay(now)} alt="" aria-hidden
           className="absolute inset-0 h-full w-full object-cover" />
         {/* voiles pour la lisibilité */}
@@ -315,50 +331,27 @@ export function Dashboard() {
             </span>
           </div>
 
+          {/* ---- Espace visuel : projets prioritaires déplaçables + tâches visibles ---- */}
+          <div className="my-3 min-h-0 flex-1">
+            <HomeBoard />
+          </div>
+
           {/* ---- Modules essentiels du cockpit, translucides sur le paysage ---- */}
-          <div className="mt-6 grid gap-3 sm:grid-cols-3">
-            {/* Priorités du jour */}
-            <GlassTile icon={<Flag size={15} />} accent="#f59e0b" title="Priorités du jour">
-              {focus.length === 0 && doneToday.length === 0 ? (
-                <p className="text-sm text-white/60">Cap libre aujourd'hui.</p>
-              ) : (
-                <ul className="space-y-1.5">
-                  {focus.map((t) => (
-                    <li key={t.id}>
-                      <button onClick={() => void s.update('tasks', t.id, { status: 'fait', done_at: new Date().toISOString() })}
-                        className="group flex w-full items-center gap-2 text-left">
-                        <Circle size={15} className="shrink-0 text-white/50 transition-colors group-hover:text-sun" />
-                        <span className="truncate text-sm text-white/90">{t.title}</span>
-                        {weekFocusIds.includes(t.id) && <Badge tone="sun">focus</Badge>}
-                      </button>
-                    </li>
-                  ))}
-                  {doneToday.map((t) => (
-                    <li key={t.id}>
-                      <button onClick={() => void s.update('tasks', t.id, { status: 'a_faire', done_at: null })}
-                        className="group flex w-full items-center gap-2 text-left" title="Décocher">
-                        <CheckCircle2 size={15} className="shrink-0 text-[#4cc79a]" />
-                        <span className="truncate text-sm text-white/50 line-through">{t.title}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+            {/* Case du jour + lendemain (calendrier) — remplace les priorités du jour */}
+            <GlassTile icon={<CalendarDays size={15} />} accent="#f59e0b" title="Aujourd'hui & demain"
+              className="sm:min-w-0 sm:flex-1">
+              <div className="flex flex-wrap items-start gap-2">
+                <DayCell day={now} emphasize fit onEdit={setEditing} onCreate={setCreateDate}
+                  onStep={() => navigate('/temps')} onMove={handleDayMove} />
+                <DayCell day={tomorrow} emphasize fit onEdit={setEditing} onCreate={setCreateDate}
+                  onStep={() => navigate('/temps')} onMove={handleDayMove} />
+              </div>
             </GlassTile>
 
-            {/* Projets prioritaires */}
-            <GlassTile icon={<FolderKanban size={15} />} accent="#3987e5" title="Projets prioritaires">
-              {actifs.length === 0 ? (
-                <p className="text-sm text-white/60">Aucun projet actif.</p>
-              ) : (
-                <ul className="space-y-2.5">
-                  {actifs.slice(0, 3).map((p) => <ProjectRow key={p.id} project={p} />)}
-                </ul>
-              )}
-            </GlassTile>
-
-            {/* Habitudes du jour */}
-            <GlassTile icon={<Repeat size={15} />} accent="#0d9488" title="Habitudes du jour">
+            {/* Habitudes du jour — largeur du plus long libellé, alignée à droite */}
+            <GlassTile icon={<Repeat size={15} />} accent="#0d9488" title="Habitudes du jour"
+              className="sm:ml-auto sm:w-max">
               {todaysHabits.length === 0 ? (
                 <p className="text-sm text-white/60">Rien de prévu.</p>
               ) : (
@@ -386,7 +379,7 @@ export function Dashboard() {
 
           {/* Citation discrète en bas, uniquement si activée */}
           {s.settings?.daily_quote !== false && (
-            <div className="mt-auto text-center">
+            <div className="mt-3 text-center">
               <p className="text-xs italic text-white/70 drop-shadow">
                 « {quote.text} »{quote.source && <span className="not-italic text-white/50"> — {quote.source}</span>}
               </p>
@@ -432,70 +425,19 @@ export function Dashboard() {
           {cockpitContent}
         </div>
       </aside>
+
+      {/* Formulaire tâche, ouvert depuis la case du jour de l'accueil */}
+      <TaskForm open={editing !== null || createDate !== null} task={editing}
+        defaultDate={createDate ?? undefined}
+        onClose={() => { setEditing(null); setCreateDate(null) }} />
     </div>
   )
 }
 
-/** Ligne d'un projet sur l'accueil : prochaine tâche + « + » pour dérouler les autres. */
-function ProjectRow({ project }: { project: Project }) {
-  const s = useHorizon()
-  const [open, setOpen] = useState(false)
-  const domain = s.domains.find((d) => d.id === project.domain_id)
-  const openTasks = s.tasks.filter((t) => t.project_id === project.id && !t.is_recurring
-    && (t.status === 'a_faire' || t.status === 'en_cours'))
-  const next = openTasks[0]
-  const rest = openTasks.slice(1)
-
-  const toggle = (id: string) => void s.update('tasks', id, { status: 'fait', done_at: new Date().toISOString() })
-
-  return (
-    <li>
-      <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-sm font-medium text-white/90">{project.title}</span>
-        <span className="shrink-0 text-xs tabular-nums text-white/60">{project.progress}%</span>
-      </div>
-      <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-white/15">
-        <div className="h-full rounded-full" style={{ width: `${project.progress}%`, background: domain?.color ?? '#f59e0b' }} />
-      </div>
-      <div className="mt-1.5 flex items-center gap-1.5">
-        {next ? (
-          <button onClick={() => toggle(next.id)} className="group flex min-w-0 flex-1 items-center gap-1.5 text-left">
-            <Circle size={13} className="shrink-0 text-white/50 group-hover:text-sun" />
-            <span className="truncate text-xs text-white/80">{next.title}</span>
-          </button>
-        ) : (
-          <span className="min-w-0 flex-1 truncate text-xs text-white/50">
-            {project.next_action ?? 'Pas de tâche à faire'}
-          </span>
-        )}
-        {rest.length > 0 && (
-          <button onClick={() => setOpen((v) => !v)}
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-white/25 text-white/70 transition-colors hover:bg-white/10"
-            title={open ? 'Masquer' : `Voir ${rest.length} autre${rest.length > 1 ? 's' : ''}`}
-            aria-label="Voir les autres tâches">
-            {open ? <X size={12} /> : <Plus size={12} />}
-          </button>
-        )}
-      </div>
-      {open && rest.length > 0 && (
-        <ul className="mt-1 space-y-1 pl-4">
-          {rest.map((t) => (
-            <li key={t.id}>
-              <button onClick={() => toggle(t.id)} className="group flex w-full items-center gap-1.5 text-left">
-                <Circle size={12} className="shrink-0 text-white/40 group-hover:text-sun" />
-                <span className="truncate text-xs text-white/70">{t.title}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </li>
-  )
-}
 
 /** Tuile translucide de l'accueil : icône colorée, léger dégradé, halo teinté. */
-function GlassTile({ icon, accent, title, to, children }: {
-  icon: React.ReactNode; accent: string; title: string; to?: string; children: React.ReactNode
+function GlassTile({ icon, accent, title, to, className = '', children }: {
+  icon: React.ReactNode; accent: string; title: string; to?: string; className?: string; children: React.ReactNode
 }) {
   const inner = (
     <>
@@ -509,7 +451,7 @@ function GlassTile({ icon, accent, title, to, children }: {
       {children}
     </>
   )
-  const cls = 'group relative overflow-hidden rounded-2xl border border-white/15 bg-gradient-to-br from-white/8 to-black/20 p-4 text-white shadow-lg shadow-black/20 backdrop-blur-[3px] transition-all'
+  const cls = `group relative overflow-hidden rounded-2xl border border-white/15 bg-gradient-to-br from-white/8 to-black/20 p-4 text-white shadow-lg shadow-black/20 backdrop-blur-[3px] transition-all ${className}`
   return to
     ? <Link to={to} className={`${cls} hover:-translate-y-0.5 hover:border-white/25`}>{inner}</Link>
     : <div className={cls}>{inner}</div>

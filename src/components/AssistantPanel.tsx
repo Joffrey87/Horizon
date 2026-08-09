@@ -33,7 +33,7 @@ export function AssistantPanel({ open, onClose }: { open: boolean; onClose: () =
     projets: state.projects.map((p) => ({
       titre: p.title, statut: p.status, avancement: p.progress,
       domaine: state.domains.find((d) => d.id === p.domain_id)?.name,
-      prochaine_action: p.next_action, bloque: p.blocked, motif_blocage: p.blocked_reason,
+      bloque: p.blocked, motif_blocage: p.blocked_reason,
       derniere_activite: p.last_activity_at.slice(0, 10),
     })),
     taches_ouvertes: state.tasks.filter((t) => t.status === 'a_faire' || t.status === 'en_cours')

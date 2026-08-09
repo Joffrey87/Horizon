@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { createContext, useContext, useMemo, useState } from 'react'
 import {
   addMonths, addWeeks, eachDayOfInterval, endOfWeek, format, getDate, getDaysInMonth,
   getISODay, isSameMonth, isToday, parseISO, startOfMonth, startOfWeek,
@@ -6,8 +6,8 @@ import {
 import { fr } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, RotateCw, Layers, Star, Target, Church, AlertTriangle } from 'lucide-react'
 import { useHorizon } from '../lib/store'
-import { compareTasksByTitleTime, extractHourMinute, iso, tasksForDay, recurrenceLabel, timeQuoteOfDay, spanPart, birthdaysForDay, isMarketParkingDay } from '../lib/logic'
-import { Card, Seg, Modal } from '../components/ui'
+import { compareTasksByTitleTime, extractHourMinute, iso, tasksForDay, recurrenceLabel, timeQuoteOfDay, spanPart, birthdaysForDay, isMarketParkingDay, feastOnDay, extractEmojis } from '../lib/logic'
+import { Card, Seg, Modal, ProjectTag } from '../components/ui'
 import { TaskForm } from '../components/TaskForm'
 import type { Objective, Step, Task } from '../lib/types'
 
@@ -17,6 +17,35 @@ type Kind = 'task' | 'step' | 'objective'
 // Couleur de repli pour un évènement multi-jours sans domaine (ex. vacances) : un teal « détente ».
 const EVENT_DEFAULT_COLOR = '#46b3a9'
 
+// ---- Couches du calendrier (affichables/masquables), mémorisées par appareil ----
+type CalLayers = { taches: boolean; fetes: boolean; anniversaires: boolean; aril: boolean }
+const DEFAULT_LAYERS: CalLayers = { taches: true, fetes: true, anniversaires: true, aril: true }
+const LAYER_DEFS: { key: keyof CalLayers; label: string }[] = [
+  { key: 'taches', label: 'Tâches' },
+  { key: 'fetes', label: 'Fêtes' },
+  { key: 'anniversaires', label: 'Anniversaires' },
+  { key: 'aril', label: 'ARIL' },
+]
+const LAYERS_KEY = 'horizon.temps.layers'
+function loadLayers(): CalLayers {
+  try { return { ...DEFAULT_LAYERS, ...(JSON.parse(localStorage.getItem(LAYERS_KEY) ?? '{}') as Partial<CalLayers>) } }
+  catch { return DEFAULT_LAYERS }
+}
+const LayersCtx = createContext<{ layers: CalLayers; arilId: string | null }>({ layers: DEFAULT_LAYERS, arilId: null })
+
+/** Couches actives + prédicats de visibilité (un élément « ARIL » = rattaché au domaine « ARIL »). */
+function useLayerFilter() {
+  const s = useHorizon()
+  const { layers, arilId } = useContext(LayersCtx)
+  const domainVisible = (domainId: string | null) =>
+    arilId != null && domainId === arilId ? layers.aril : layers.taches
+  const taskVisible = (t: Task) =>
+    domainVisible(t.domain_id ?? s.projects.find((p) => p.id === t.project_id)?.domain_id ?? null)
+  const stepVisible = (st: Step) =>
+    domainVisible(s.projects.find((p) => p.id === st.project_id)?.domain_id ?? null)
+  return { layers, taskVisible, stepVisible, domainVisible }
+}
+
 export function TimeView() {
   const s = useHorizon()
   const [view, setView] = useState<View>('4sem')
@@ -25,6 +54,13 @@ export function TimeView() {
   const [createDate, setCreateDate] = useState<string | null>(null)
   const [overrideScheduled, setOverrideScheduled] = useState<string | undefined>(undefined)
   const [openStep, setOpenStep] = useState<Step | null>(null)
+  const [layers, setLayers] = useState<CalLayers>(loadLayers)
+  const arilId = useMemo(() => s.domains.find((d) => /aril/i.test(d.name))?.id ?? null, [s.domains])
+  const toggleLayer = (k: keyof CalLayers) => setLayers((prev) => {
+    const next = { ...prev, [k]: !prev[k] }
+    try { localStorage.setItem(LAYERS_KEY, JSON.stringify(next)) } catch { /* stockage indispo */ }
+    return next
+  })
 
   const shift = (dir: 1 | -1) => {
     if (view === '4sem') setAnchor(addWeeks(anchor, dir * 4))
@@ -79,12 +115,28 @@ export function TimeView() {
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-0.5">
-        {view === '4sem' && <FourWeeks anchor={anchor} {...common} />}
-        {view === 'semaine' && <WeekHours anchor={anchor} {...common} />}
-        {view === 'trimestre' && <MultiMonth anchor={anchor} months={3} {...common} />}
-        {view === 'annee' && <MultiMonth anchor={anchor} months={12} yearMode {...common} />}
+      {/* ---- Calendriers (couches) affichables/masquables ---- */}
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+        <span className="mr-0.5 text-[11px] uppercase tracking-wide text-ink-3">Calendriers</span>
+        {LAYER_DEFS.map(({ key, label }) => (
+          <button key={key} onClick={() => toggleLayer(key)}
+            title={key === 'aril' && !arilId ? 'Crée un domaine nommé « ARIL » pour alimenter ce calendrier' : undefined}
+            className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+              layers[key] ? 'border-sun/50 bg-sun/10 text-sun-soft' : 'border-line-2 text-ink-3 hover:text-ink-2'
+            }`}>
+            {label}
+          </button>
+        ))}
       </div>
+
+      <LayersCtx.Provider value={{ layers, arilId }}>
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-0.5">
+          {view === '4sem' && <FourWeeks anchor={anchor} {...common} />}
+          {view === 'semaine' && <WeekHours anchor={anchor} {...common} />}
+          {view === 'trimestre' && <MultiMonth anchor={anchor} months={3} {...common} />}
+          {view === 'annee' && <MultiMonth anchor={anchor} months={12} yearMode {...common} />}
+        </div>
+      </LayersCtx.Provider>
 
       <TaskForm open={editing !== null || createDate !== null} task={editing}
         defaultDate={createDate ?? undefined} overrideScheduled={overrideScheduled}
@@ -117,20 +169,22 @@ function readDrag(e: React.DragEvent): { kind: Kind; id: string } | null {
 
 // ---- Cellule d'un jour (partagée par 4 semaines) --------------------------
 
-function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
-  day: Date; tint?: string
+export function DayCell({ day, tint, emphasize, fit, onEdit, onCreate, onStep, onMove }: {
+  day: Date; tint?: string; emphasize?: boolean; fit?: boolean
   onEdit: (t: Task) => void; onCreate: (d: string) => void; onStep: (st: Step) => void; onMove: MoveFn
 }) {
   const s = useHorizon()
+  const { layers, taskVisible, stepVisible } = useLayerFilter()
   const [over, setOver] = useState(false)
   const today = isToday(day)
   const dayIso = iso(day)
-  const all = [...tasksForDay(s.tasks, day)].sort(compareTasksByTitleTime)
+  const all = [...tasksForDay(s.tasks, day)].filter(taskVisible).sort(compareTasksByTitleTime)
   // Évènements multi-jours (vacances…) : bandes continues épinglées en haut ; le reste dans le flux.
   const spans = all.filter((t) => spanPart(t, dayIso) !== 'single')
   const list = all.filter((t) => spanPart(t, dayIso) === 'single')
-  const steps = stepsForDay(s.steps, day)
-  const birthdays = birthdaysForDay(s.birthdays, day)
+  const steps = stepsForDay(s.steps, day).filter(stepVisible)
+  const birthdays = layers.anniversaires ? birthdaysForDay(s.birthdays, day) : []
+  const feast = layers.fetes && s.settings?.catholic_feasts !== false ? feastOnDay(day) : null
 
   const handleVoid = (e: React.MouseEvent<HTMLElement>) => {
     if (e.target === e.currentTarget) onCreate(iso(day))
@@ -147,14 +201,18 @@ function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
       onDrop={onDrop}
       onClick={handleVoid}
       style={{ backgroundColor: !today && !over ? tint : undefined }}
-      className={`flex min-h-28 cursor-pointer flex-col rounded-lg border p-1.5 transition-colors ${
+      className={`flex min-h-28 cursor-pointer flex-col rounded-lg border p-1.5 transition-colors ${fit ? 'w-max max-w-full' : ''} ${
         today ? 'border-sun/50 bg-sun/5' : over ? 'border-sun/70 bg-sun/10' : 'border-line-2/60 hover:bg-panel-2/40'
       }`}>
       <header className="mb-1 flex items-center justify-between gap-1" onClick={(e) => e.stopPropagation()}>
-        <p className={`text-xs font-medium ${today ? 'text-sun-soft' : 'text-ink-3'}`}>
+        <p className={`text-xs font-medium capitalize ${today ? 'text-sun-soft' : emphasize ? 'text-white/85' : 'text-ink-3'}`}>
           {format(day, 'EEE d', { locale: fr })}
         </p>
         <div className="flex items-center gap-1">
+          {feast && (
+            <span title={`Grande fête catholique : ${feast}`}
+              className="cursor-default text-xs font-semibold leading-none text-sun-soft">✝</span>
+          )}
           {birthdays.length > 0 && (
             <span title={`Anniversaire${birthdays.length > 1 ? 's' : ''} : ${birthdays.map((b) => b.name).join(', ')}`}
               className="cursor-default text-xs leading-none">🎂</span>
@@ -177,6 +235,7 @@ function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
             const openRight = !weekEnd && (part === 'start' || part === 'middle')
             const cap = part === 'start' || part === 'end' // 1er / dernier jour → capuchon plein ; sinon simple connecteur fin
             const vacation = / - Vf?$/.test(t.title)
+            const emojis = extractEmojis(t.title) // « signature » répliquée sur chaque jour du span
             const rad = { // arrondi seulement du côté fermé (le côté ouvert file dans la gouttière)
               borderTopLeftRadius: openLeft ? 0 : 5, borderBottomLeftRadius: openLeft ? 0 : 5,
               borderTopRightRadius: openRight ? 0 : 5, borderBottomRightRadius: openRight ? 0 : 5,
@@ -193,8 +252,8 @@ function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
             const drag = { draggable: !t.is_recurring, onDragStart: dragData('task', t.id) }
             const edit = (e: React.MouseEvent) => { e.stopPropagation(); onEdit(t) }
             // Fond du capuchon : dégradé d'opacité qui fond vers le connecteur du côté biseauté (sinon plein).
-            const capBg = taperR ? `linear-gradient(to right, ${fill}c2 0%, ${fill}c2 55%, ${fill}5c 100%)`
-              : taperL ? `linear-gradient(to left, ${fill}c2 0%, ${fill}c2 55%, ${fill}5c 100%)`
+            const capBg = taperR ? `linear-gradient(to right, ${fill}c2 0%, ${fill}c2 55%, ${fill}a6 100%)`
+              : taperL ? `linear-gradient(to left, ${fill}c2 0%, ${fill}c2 55%, ${fill}a6 100%)`
                 : `${fill}c2`
             return (
               <div key={t.id} className="relative h-5">
@@ -202,13 +261,19 @@ function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
                   // Jour intermédiaire : le fin connecteur traverse la cellule et déborde à DROITE dans la gouttière.
                   <button {...drag} onClick={edit} title={t.title}
                     className="absolute top-1/2 block -translate-y-1/2"
-                    style={{ left: 0, right: openRight ? -21 : 0, height: 7, background: `${fill}5c`, ...rad }} />
+                    style={{ left: 0, right: openRight ? -21 : 0, height: 7, background: `${fill}a6`, ...rad }} />
                 ) : part === 'start' && openRight ? (
                   // Jour de départ : uniquement le petit pont à DROITE du capuchon (jamais derrière lui).
                   <button {...drag} onClick={edit} title={t.title}
                     className="absolute top-1/2 block -translate-y-1/2"
-                    style={{ left: '100%', width: 21, height: 7, background: `${fill}5c` }} />
+                    style={{ left: '100%', width: 21, height: 7, background: `${fill}a6` }} />
                 ) : null}
+                {/* Emoji de l'évènement répliqué et centré sur les jours intermédiaires, par-dessus la barre fine. */}
+                {!cap && emojis && (
+                  <span className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center text-[11px] leading-none">
+                    {emojis}
+                  </span>
+                )}
                 {/* Capuchon plein pleine hauteur aux extrémités, biseauté + dégradé vers le connecteur, avec le titre.
                     (Le jour de fin n'a pas de connecteur : c'est la veille qui comble la gouttière de gauche.) */}
                 {cap && (
@@ -243,7 +308,8 @@ function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
           </button>
         ))}
         {list.map((t) => {
-          const domain = s.domains.find((d) => d.id === (t.domain_id ?? s.projects.find((p) => p.id === t.project_id)?.domain_id))
+          const project = t.project_id ? s.projects.find((p) => p.id === t.project_id) : undefined
+          const domain = s.domains.find((d) => d.id === (t.domain_id ?? project?.domain_id))
           const c = domain?.color
           const isEvent = t.is_task === false
           const done = !t.is_recurring && !isEvent && t.status === 'fait'
@@ -272,11 +338,12 @@ function DayCell({ day, tint, onEdit, onCreate, onStep, onMove }: {
                       : <Circle size={12} className="text-ink-3 group-hover:text-sun" />}
                 </button>
               )}
-              <button onClick={() => onEdit(t)} className="min-w-0 flex-1 text-left" title={t.is_recurring ? recurrenceLabel(t.recurrence_rule) : t.title}>
-                <span className={`block truncate text-[11px] leading-tight ${struck ? 'text-ink-3 line-through' : 'text-ink'}`}>
+              <button onClick={() => onEdit(t)} className={`text-left ${fit ? '' : 'min-w-0 flex-1'}`} title={t.is_recurring ? recurrenceLabel(t.recurrence_rule) : t.title}>
+                <span className={`text-[11px] leading-tight ${fit ? 'whitespace-nowrap' : 'block truncate'} ${struck ? 'text-ink-3 line-through' : 'text-ink'}`}>
                   {checkMass && <Church size={9} className="mr-0.5 inline text-[#a78bfa]" />}
                   {t.notable && <Star size={9} className="mr-0.5 inline text-sun" />}{t.title}
                 </span>
+                {project && <span className="mt-0.5 flex"><ProjectTag name={project.title} color={c} size="xs" /></span>}
               </button>
             </div>
           )
@@ -389,17 +456,57 @@ function AllDayBand({ day, onEdit, onStep, onMove, onCreate }: {
   day: Date; onEdit: (t: Task) => void; onStep: (st: Step) => void; onMove: MoveFn; onCreate: (d: string) => void
 }) {
   const s = useHorizon()
+  const { layers, taskVisible, stepVisible } = useLayerFilter()
   const [over, setOver] = useState(false)
-  const steps = stepsForDay(s.steps, day)
-  const untimed = [...tasksForDay(s.tasks, day)].filter((t) => !extractHourMinute(t.title))
+  const steps = stepsForDay(s.steps, day).filter(stepVisible)
+  const feast = layers.fetes && s.settings?.catholic_feasts !== false ? feastOnDay(day) : null
+  const untimed = [...tasksForDay(s.tasks, day)].filter((t) => !extractHourMinute(t.title)).filter(taskVisible)
+  // Évènements multi-jours d'abord : leurs barres fines s'alignent d'un jour à l'autre (continuité).
+  const spanEvents = untimed.filter((t) => spanPart(t, iso(day)) !== 'single')
+  const singleEvents = untimed.filter((t) => spanPart(t, iso(day)) === 'single')
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault(); setOver(false)
     const d = readDrag(e); if (d) onMove(d.kind, d.id, iso(day))
   }
+
+  const renderUntimed = (t: Task) => {
+    const part = spanPart(t, iso(day))
+    const c = s.domains.find((d) => d.id === (t.domain_id ?? s.projects.find((p) => p.id === t.project_id)?.domain_id))?.color
+    // Jours intermédiaires / fin d'un évènement multi-jours : barre fine continue, sans titre — emoji centré par-dessus.
+    if (part === 'middle' || part === 'end') {
+      const emojis = extractEmojis(t.title)
+      return (
+        <div key={t.id} className={`relative flex w-full items-center ${emojis ? 'h-4' : ''}`}>
+          <button draggable={!t.is_recurring} onDragStart={dragData('task', t.id)}
+            onClick={() => onEdit(t)} title={t.title}
+            style={{ background: c ? `${c}a6` : 'var(--color-line-2)' }}
+            className="block h-1.5 w-full rounded-full" />
+          {emojis && (
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-[11px] leading-none">{emojis}</span>
+          )}
+        </div>
+      )
+    }
+    return (
+      <button key={t.id} draggable={!t.is_recurring} onDragStart={dragData('task', t.id)} onClick={() => onEdit(t)}
+        style={{ background: c ? `${c}2b` : undefined, borderLeft: c ? `3px solid ${c}` : undefined }}
+        className="block w-full truncate rounded bg-panel-3 px-1 py-0.5 text-left text-[10px] text-ink-2">
+        {t.title}
+      </button>
+    )
+  }
+
   return (
     <div onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={onDrop}
       onClick={(e) => { if (e.target === e.currentTarget) onCreate(iso(day)) }}
       className={`min-h-8 space-y-0.5 border-b border-line-2/60 p-0.5 ${over ? 'bg-sun/10' : ''} ${isToday(day) ? 'bg-sun/5' : ''}`}>
+      {spanEvents.map(renderUntimed)}
+      {feast && (
+        <div title={`Grande fête catholique : ${feast}`}
+          className="flex items-center gap-1 truncate rounded bg-sun/15 px-1 py-0.5 text-[10px] font-medium text-sun-soft">
+          <span className="shrink-0">✝</span><span className="truncate">{feast}</span>
+        </div>
+      )}
       {isMarketParkingDay(s.tasks, day) && (
         <div title="Dimanche travaillé (début ≤ 15h) — marché dominical & stationnement compliqués"
           className="flex items-center justify-center gap-1 rounded bg-[#ef4444]/20 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#ff6b6b] ring-1 ring-[#ef4444]/40">
@@ -412,26 +519,7 @@ function AllDayBand({ day, onEdit, onStep, onMove, onCreate }: {
           <Layers size={10} className="shrink-0" /><span className="truncate font-medium">{st.title}</span>
         </button>
       ))}
-      {untimed.map((t) => {
-        const part = spanPart(t, iso(day))
-        const c = s.domains.find((d) => d.id === (t.domain_id ?? s.projects.find((p) => p.id === t.project_id)?.domain_id))?.color
-        // Jours intermédiaires / fin d'un évènement multi-jours : barre fine continue, sans titre.
-        if (part === 'middle' || part === 'end') {
-          return (
-            <button key={t.id} draggable={!t.is_recurring} onDragStart={dragData('task', t.id)}
-              onClick={() => onEdit(t)} title={t.title}
-              style={{ background: c ? `${c}59` : 'var(--color-line-2)' }}
-              className="block h-1.5 w-full rounded-full" />
-          )
-        }
-        return (
-          <button key={t.id} draggable={!t.is_recurring} onDragStart={dragData('task', t.id)} onClick={() => onEdit(t)}
-            style={{ background: c ? `${c}2b` : undefined, borderLeft: c ? `3px solid ${c}` : undefined }}
-            className="block w-full truncate rounded bg-panel-3 px-1 py-0.5 text-left text-[10px] text-ink-2">
-            {t.title}
-          </button>
-        )
-      })}
+      {singleEvents.map(renderUntimed)}
     </div>
   )
 }
@@ -441,8 +529,9 @@ function HourColumn({ day, hours, onEdit, onCreate, onMove }: {
   onEdit: (t: Task) => void; onCreate: (d: string) => void; onMove: MoveFn
 }) {
   const s = useHorizon()
+  const { taskVisible } = useLayerFilter()
   const [over, setOver] = useState(false)
-  const timed = [...tasksForDay(s.tasks, day)]
+  const timed = [...tasksForDay(s.tasks, day)].filter(taskVisible)
     .map((t) => ({ t, hm: extractHourMinute(t.title) }))
     .filter((x): x is { t: Task; hm: { hour: number; minute: number } } => x.hm !== null)
 
@@ -462,7 +551,8 @@ function HourColumn({ day, hours, onEdit, onCreate, onMove }: {
         const height = Math.max(20, (t.duration_min ?? 30) / 60 * ROW_H)
         const done = !t.is_recurring && t.status === 'fait'
         const checkMass = t.notes?.startsWith('source:check') ?? false
-        const domain = s.domains.find((d) => d.id === (t.domain_id ?? s.projects.find((p) => p.id === t.project_id)?.domain_id))
+        const project = t.project_id ? s.projects.find((p) => p.id === t.project_id) : undefined
+        const domain = s.domains.find((d) => d.id === (t.domain_id ?? project?.domain_id))
         return (
           <button key={t.id} draggable={!t.is_recurring} onDragStart={dragData('task', t.id)}
             onClick={(e) => { e.stopPropagation(); onEdit(t) }}
@@ -474,6 +564,7 @@ function HourColumn({ day, hours, onEdit, onCreate, onMove }: {
             <span className={`block truncate text-[10px] leading-tight ${done ? 'text-ink-3 line-through' : 'text-ink'}`}>
               {checkMass && <Church size={9} className="mr-0.5 inline text-[#a78bfa]" />}{t.title}
             </span>
+            {project && height >= 34 && <span className="mt-0.5 flex"><ProjectTag name={project.title} color={domain?.color} size="xs" /></span>}
           </button>
         )
       })}
@@ -488,12 +579,13 @@ function MultiMonth({ anchor, months, yearMode, onEdit, onStep, onMove }: {
   onEdit: (t: Task) => void; onCreate: (d: string) => void; onStep: (st: Step) => void; onMove: MoveFn
 }) {
   const s = useHorizon()
+  const { taskVisible, stepVisible, domainVisible } = useLayerFilter()
   const first = yearMode ? startOfMonth(new Date(anchor.getFullYear(), 0, 1)) : startOfMonth(anchor)
   const monthList = Array.from({ length: months }, (_, i) => addMonths(first, i))
 
-  const notableTasks = s.tasks.filter((t) => t.notable && (t.scheduled_date || t.due_date))
-  const notableSteps = s.steps.filter((st) => st.notable && (st.scheduled_date || st.due_date))
-  const objectives = s.objectives.filter((o) => o.target_date && o.status !== 'abandonne')
+  const notableTasks = s.tasks.filter((t) => t.notable && (t.scheduled_date || t.due_date)).filter(taskVisible)
+  const notableSteps = s.steps.filter((st) => st.notable && (st.scheduled_date || st.due_date)).filter(stepVisible)
+  const objectives = s.objectives.filter((o) => o.target_date && o.status !== 'abandonne').filter((o) => domainVisible(o.domain_id))
 
   const itemsInMonth = (m: Date) => {
     const inM = (d: string | null) => d != null && isSameMonth(parseISO(d), m)
