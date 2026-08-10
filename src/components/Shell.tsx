@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import {
-  Home, FolderKanban, ListTodo, Compass, CalendarDays, CalendarRange, Lightbulb,
-  Repeat, ClipboardCheck, Network, Settings, Sparkles, Plus, LogOut, Menu, ArrowLeft, ShieldCheck,
+  Home, FolderKanban, ListTodo, Compass, CalendarDays, CalendarRange,
+  Repeat, ClipboardCheck, Network, Settings, Sparkles, Plus, LogOut, Menu, ArrowLeft, ShieldCheck, Timer,
 } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import { wallpaperOfDay } from '../lib/logic'
@@ -16,10 +16,10 @@ const NAV = [
   { to: '/domaines', label: 'Domaines & objectifs', icon: Compass },
   { to: '/temps', label: 'Temps', icon: CalendarDays },
   { to: '/planification', label: 'Planification', icon: CalendarRange },
-  { to: '/idees', label: 'Idées', icon: Lightbulb },
   { to: '/habitudes', label: 'Habitudes', icon: Repeat },
   { to: '/revues', label: 'Revues', icon: ClipboardCheck },
   { to: '/verifications', label: 'Vérifications', icon: ShieldCheck },
+  { to: '/heures-controle', label: 'Heures de contrôle', icon: Timer },
   { to: '/espace', label: 'Espace visuel', icon: Network },
 ]
 

@@ -10,10 +10,10 @@ import { DomainsView } from './views/DomainsView'
 import { PrioritiesView } from './views/PrioritiesView'
 import { TimeView } from './views/TimeView'
 import { PlanningView } from './views/PlanningView'
-import { IdeasView } from './views/IdeasView'
 import { HabitsView } from './views/HabitsView'
 import { ReviewsView } from './views/ReviewsView'
 import { VerificationsView } from './views/VerificationsView'
+import { HeuresControleView } from './views/HeuresControleView'
 import { WorkspaceView } from './views/WorkspaceView'
 import { SettingsView } from './views/SettingsView'
 
@@ -42,10 +42,10 @@ export default function App() {
         <Route path="/priorites" element={<PrioritiesView />} />
         <Route path="/temps" element={<TimeView />} />
         <Route path="/planification" element={<PlanningView />} />
-        <Route path="/idees" element={<IdeasView />} />
         <Route path="/habitudes" element={<HabitsView />} />
         <Route path="/revues" element={<ReviewsView />} />
         <Route path="/verifications" element={<VerificationsView />} />
+        <Route path="/heures-controle" element={<HeuresControleView />} />
         <Route path="/espace" element={<WorkspaceView />} />
         <Route path="/parametres" element={<SettingsView />} />
         <Route path="*" element={<Navigate to="/" replace />} />

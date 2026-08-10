@@ -31,9 +31,12 @@ export function PrioritiesView() {
   const [selected, setSelected] = useState<Item | null>(null)
   const [createIn, setCreateIn] = useState<1 | 2 | 3 | 4 | 'triage' | null>(null)
 
+  const today = todayIso()
   const items: Item[] = useMemo(() => {
+    // Une idée = un item « à trier ». Les idées reportées « pour dans 6 mois »
+    // reviennent d'elles-mêmes ici une fois leur date de réveil passée.
     const ideas: Item[] = s.ideas
-      .filter((i) => i.status === 'active')
+      .filter((i) => i.status === 'active' || (i.status === 'reportee' && (i.defer_until ?? '') <= today))
       .map((idea) => ({ kind: 'idee', idea }))
     const tasks: Item[] = s.tasks
       .filter((t) => (t.status === 'a_faire' || t.status === 'en_cours') && !t.is_recurring && t.is_task !== false)
@@ -41,7 +44,7 @@ export function PrioritiesView() {
     if (source === 'idees') return ideas
     if (source === 'taches') return tasks
     return [...ideas, ...tasks]
-  }, [s.ideas, s.tasks, source])
+  }, [s.ideas, s.tasks, source, today])
 
   const val = (it: Item) => (it.kind === 'idee' ? it.idea : it.task)
   // « À trier » = ni importance ni urgence renseignées (sinon quadrant() les classerait par défaut).

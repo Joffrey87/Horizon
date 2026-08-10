@@ -7,12 +7,12 @@ import { create } from 'zustand'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import type {
-  Birthday, Check, Domain, Habit, HabitLog, Idea, Layout, Objective, Project, Review, Settings, Step, Task,
+  Birthday, Check, Domain, Habit, HabitLog, Idea, Layout, Objective, OlafatcoJob, Project, Review, Settings, Step, Task,
 } from './types'
 
 type Table =
   | 'domains' | 'objectives' | 'projects' | 'steps' | 'tasks' | 'ideas'
-  | 'habits' | 'habit_logs' | 'reviews' | 'layouts' | 'birthdays' | 'checks'
+  | 'habits' | 'habit_logs' | 'reviews' | 'layouts' | 'birthdays' | 'checks' | 'olafatco_jobs'
 
 interface HorizonState {
   session: Session | null
@@ -31,6 +31,7 @@ interface HorizonState {
   layouts: Layout[]
   birthdays: Birthday[]
   checks: Check[]
+  olafatcoJobs: OlafatcoJob[]
   settings: Settings | null
 
   init: () => Promise<void>
@@ -47,7 +48,7 @@ interface HorizonState {
 const COLLECTION: Record<Table, keyof HorizonState> = {
   domains: 'domains', objectives: 'objectives', projects: 'projects', steps: 'steps', tasks: 'tasks',
   ideas: 'ideas', habits: 'habits', habit_logs: 'habitLogs', reviews: 'reviews', layouts: 'layouts',
-  birthdays: 'birthdays', checks: 'checks',
+  birthdays: 'birthdays', checks: 'checks', olafatco_jobs: 'olafatcoJobs',
 }
 
 export const useHorizon = create<HorizonState>((set, get) => ({
@@ -56,7 +57,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   ready: false,
   loading: false,
   domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
-  habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], settings: null,
+  habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [], settings: null,
 
   init: async () => {
     const { data } = await supabase.auth.getSession()
@@ -69,7 +70,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       if (!session) {
         set({
           domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
-          habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], settings: null,
+          habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [], settings: null,
         })
       }
     })
@@ -78,7 +79,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
 
   loadAll: async () => {
     set({ loading: true })
-    const [dom, obj, pro, stp, tas, ide, hab, log, rev, lay, setg, bd, chk] = await Promise.all([
+    const [dom, obj, pro, stp, tas, ide, hab, log, rev, lay, setg, bd, chk, oja] = await Promise.all([
       supabase.from('domains').select('*').order('sort_order'),
       supabase.from('objectives').select('*').order('sort_order'),
       supabase.from('projects').select('*').order('created_at'),
@@ -92,12 +93,13 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       supabase.from('settings').select('*').maybeSingle(),
       supabase.from('birthdays').select('*'),
       supabase.from('checks').select('*').order('sort_order'),
+      supabase.from('olafatco_jobs').select('*').order('created_at', { ascending: false }),
     ])
     set({
       domains: dom.data ?? [], objectives: obj.data ?? [], projects: pro.data ?? [],
       steps: stp.data ?? [], tasks: tas.data ?? [], ideas: ide.data ?? [], habits: hab.data ?? [],
       habitLogs: log.data ?? [], reviews: rev.data ?? [], layouts: lay.data ?? [],
-      birthdays: bd.data ?? [], checks: chk.data ?? [],
+      birthdays: bd.data ?? [], checks: chk.data ?? [], olafatcoJobs: oja.data ?? [],
       settings: setg.data ?? null, loading: false,
     })
   },

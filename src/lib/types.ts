@@ -238,6 +238,62 @@ export interface Settings {
   updated_at: string
 }
 
+// ---- Heures de contrôle (OLAFATCO) ---------------------------------------
+
+/** Une ligne de saisie proposée pour un jour travaillé (heures de contrôle). */
+export interface OlafatcoLine {
+  date: string           // ISO 'yyyy-MM-dd'
+  shift_code: string     // code de vacation CAPS (M1, J, S1, N…)
+  standard: number       // heures « standard »
+  instructeur: number    // heures « instructeur »
+  urmn: number           // occurrences URMN
+  urme: number           // occurrences URME + FIR
+  entered?: boolean      // saisi sur OLAFATCO (rempli par l'agent — étape 2)
+  error?: string | null  // motif d'échec de saisie (agent — étape 2)
+}
+
+/** Rapport de vérification après saisie (rempli par l'agent — étape 2). */
+export interface OlafatcoReport {
+  ok: boolean
+  entered: number        // nb de jours effectivement saisis
+  total: number          // nb de jours du job
+  message?: string
+  anomalies?: string[]
+}
+
+export type OlafatcoJobStatus = 'a_valider' | 'valide' | 'en_cours' | 'termine' | 'erreur'
+
+/** Un « job » de saisie des heures de contrôle : proposition → validation →
+ *  (envoi par l'agent) → rapport. L'état vit en base pour survivre à la
+ *  fermeture de la fenêtre Horizon. */
+export interface OlafatcoJob {
+  id: UUID
+  user_id: UUID
+  period_start: string   // ISO
+  period_end: string     // ISO
+  status: OlafatcoJobStatus
+  lines: OlafatcoLine[]
+  validated_at: string | null
+  report: OlafatcoReport | null
+  report_at: string | null
+  created_at: string
+}
+
+/** Règles de proposition des heures de contrôle (été aéronautique).
+ *  Total standard + instructeur borné, ≥ `minPerSide` de chaque côté, pas de
+ *  `step`. Jours « hauts » (vendredi→lundi) visent des totaux plus élevés. */
+export interface HoursRules {
+  totalMin: number       // borne basse du total (4)
+  totalMax: number       // borne haute du total (5)
+  minPerSide: number     // minimum par côté (1,5)
+  step: number           // pas de saisie (0,25)
+  highDaysISO: number[]  // jours ISO « hauts » (5,6,7,1 = ven→lun)
+  highTotals: number[]   // totaux visés les jours hauts
+  lowTotals: number[]    // totaux visés les jours bas
+  urmn: number           // occurrences URMN par défaut
+  urme: number           // occurrences URME + FIR par défaut
+}
+
 /** Alerte calculée pour le cockpit — jamais culpabilisante */
 export interface Alert {
   id: string

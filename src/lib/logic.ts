@@ -8,7 +8,10 @@ import {
   isSaturday, isSunday, parseISO, startOfWeek, subDays,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import type { Alert, Birthday, Check, Domain, Habit, HabitLog, Project, Review, Settings, Task } from './types'
+import type {
+  Alert, Birthday, Check, Domain, Habit, HabitLog, HoursRules, OlafatcoJob, OlafatcoLine,
+  Project, Review, Settings, Task,
+} from './types'
 
 /** Anniversaires tombant un jour donné (récurrence annuelle : jour + mois). */
 export function birthdaysForDay(list: Birthday[], day: Date): Birthday[] {
@@ -471,6 +474,118 @@ export function checksDueCount(checks: Check[], tasks: Task[], opts: { now?: Dat
   return checks
     .filter((c) => c.active)
     .reduce((n, c) => n + checkStatus(c, tasks, opts).pending, 0)
+}
+
+// ---- Heures de contrôle (OLAFATCO) : proposition selon les règles ----------
+
+/** Règles par défaut (été aéronautique) — celles calées avec l'utilisateur.
+ *  Total standard + instructeur borné, ≥ 1,5 de chaque côté, pas de 0,25.
+ *  Jours « hauts » (ven→lun) visent 4,5–4,75 ; jours bas (mar→jeu) 4,0–4,25. */
+export const DEFAULT_HOURS_RULES: HoursRules = {
+  totalMin: 4, totalMax: 5, minPerSide: 1.5, step: 0.25,
+  highDaysISO: [5, 6, 7, 1], highTotals: [4.5, 4.75], lowTotals: [4, 4.25],
+  urmn: 2, urme: 2,
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100
+
+/** Choix stable dans un tableau (repli si vide / index hors bornes). */
+function pick<T>(arr: T[], i: number, fallback: T): T {
+  if (arr.length === 0) return fallback
+  return arr[((i % arr.length) + arr.length) % arr.length] ?? fallback
+}
+
+/** Hash déterministe (FNV-1a) d'une chaîne → entier ≥ 0. Sert à tirer des heures
+ *  « variées mais reproductibles » par jour, sans PRNG (même jour ⇒ mêmes heures). */
+function strHash(s: string): number {
+  let h = 2166136261
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) }
+  return h >>> 0
+}
+
+/** Somme standard + instructeur d'une ligne. */
+export function lineTotal(line: { standard: number; instructeur: number }): number {
+  return round2(line.standard + line.instructeur)
+}
+
+/** Une ligne respecte-t-elle les règles (total borné, ≥ min de chaque côté, pas) ? */
+export function isLineValid(line: OlafatcoLine, rules: HoursRules = DEFAULT_HOURS_RULES): boolean {
+  const total = lineTotal(line)
+  const onStep = (v: number) => Math.abs(v / rules.step - Math.round(v / rules.step)) < 1e-6
+  return total >= rules.totalMin - 1e-9 && total <= rules.totalMax + 1e-9
+    && line.standard >= rules.minPerSide - 1e-9 && line.instructeur >= rules.minPerSide - 1e-9
+    && onStep(line.standard) && onStep(line.instructeur)
+}
+
+/** Jours travaillés (vacations CAPS, hors congés) sur [from, to], triés, avec code. */
+export function controlHoursWorkDays(tasks: Task[], from: Date, to: Date): { date: string; code: string }[] {
+  if (from > to) return []
+  return eachDayOfInterval({ start: from, end: to })
+    .filter((d) => worksOn(tasks, d))
+    .map((d) => ({ date: iso(d), code: workShiftOn(tasks, iso(d))?.code ?? '' }))
+}
+
+/** Propose les heures d'un jour selon les règles — déterministe par date. */
+export function proposeControlHours(dateIso: string, shiftCode: string, rules: HoursRules = DEFAULT_HOURS_RULES): OlafatcoLine {
+  const wd = getISODay(parseISO(dateIso))
+  const totals = rules.highDaysISO.includes(wd) ? rules.highTotals : rules.lowTotals
+  const total = pick(totals, strHash(dateIso), rules.totalMin)
+  // valeurs possibles de « standard » : de minPerSide à total - minPerSide, par pas
+  const opts: number[] = []
+  for (let sVal = rules.minPerSide; sVal <= total - rules.minPerSide + 1e-9; sVal += rules.step) {
+    opts.push(round2(sVal))
+  }
+  const standard = pick(opts, strHash(dateIso + '·s'), round2(total / 2))
+  return {
+    date: dateIso, shift_code: shiftCode,
+    standard, instructeur: round2(total - standard),
+    urmn: rules.urmn, urme: rules.urme,
+  }
+}
+
+/** Construit les lignes proposées d'un job pour une période. */
+export function buildControlHoursLines(tasks: Task[], from: Date, to: Date, rules: HoursRules = DEFAULT_HOURS_RULES): OlafatcoLine[] {
+  return controlHoursWorkDays(tasks, from, to).map((d) => proposeControlHours(d.date, d.code, rules))
+}
+
+/** Fin de la dernière période saisie (period_end du dernier job validé), ou null. */
+export function lastControlHoursPeriodEnd(jobs: OlafatcoJob[]): string | null {
+  const ends = jobs.filter((j) => j.validated_at).map((j) => j.period_end).sort()
+  return ends.length ? (ends[ends.length - 1] ?? null) : null
+}
+
+/** Jours écoulés depuis la dernière saisie validée, ou null si jamais. */
+export function daysSinceLastControlHours(jobs: OlafatcoJob[], now = new Date()): number | null {
+  const dates = jobs.filter((j) => j.validated_at).map((j) => j.validated_at as string).sort()
+  const last = dates.length ? dates[dates.length - 1] : null
+  return last ? differenceInCalendarDays(now, parseISO(last)) : null
+}
+
+/** Dates déjà engagées pour saisie (jobs validés / en cours / terminés).
+ *  Elles ne doivent plus jamais être reproposées, quelle que soit la période choisie. */
+export function enteredControlDates(jobs: OlafatcoJob[]): Set<string> {
+  const done = new Set<string>()
+  for (const j of jobs) {
+    if (j.status === 'valide' || j.status === 'en_cours' || j.status === 'termine') {
+      for (const l of j.lines) done.add(l.date)
+    }
+  }
+  return done
+}
+
+/** Sécurité « jours oubliés » : jours travaillés (CAPS, hors congés) situés AVANT
+ *  la fin de la dernière saisie validée — donc dans une période déjà clôturée —
+ *  mais jamais engagés sur un job. Comparaison : vacations `tasks` (source:caps)
+ *  vs dates déjà engagées (`enteredControlDates`). Scan borné à `lookbackDays`
+ *  jours en arrière. Vide tant qu'aucune saisie n'a jamais été validée. */
+export function forgottenControlDays(
+  tasks: Task[], jobs: OlafatcoJob[], now = new Date(), lookbackDays = 120,
+): OlafatcoLine[] {
+  const lastEnd = lastControlHoursPeriodEnd(jobs)
+  if (!lastEnd) return []
+  const done = enteredControlDates(jobs)
+  return buildControlHoursLines(tasks, subDays(now, lookbackDays), parseISO(lastEnd))
+    .filter((l) => !done.has(l.date))
 }
 
 /** Équilibre des domaines : part de l'activité récente (tâches faites 14 j) par domaine. */

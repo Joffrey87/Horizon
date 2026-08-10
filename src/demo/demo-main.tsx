@@ -16,10 +16,10 @@ import { DomainsView } from '../views/DomainsView'
 import { PrioritiesView } from '../views/PrioritiesView'
 import { TimeView } from '../views/TimeView'
 import { PlanningView } from '../views/PlanningView'
-import { IdeasView } from '../views/IdeasView'
 import { HabitsView } from '../views/HabitsView'
 import { ReviewsView } from '../views/ReviewsView'
 import { VerificationsView } from '../views/VerificationsView'
+import { HeuresControleView } from '../views/HeuresControleView'
 import { WorkspaceView } from '../views/WorkspaceView'
 import { SettingsView } from '../views/SettingsView'
 import '../index.css'
@@ -32,7 +32,7 @@ useHorizon.setState({
   ready: true, loading: false,
   session: { user: { id: uid, email: 'demo@horizon.local' } } as unknown as Session,
   domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
-  habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], settings: null,
+  habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [], settings: null,
 })
 
 // Mode démo pleinement interactif : les mutations restent locales (aucun réseau,
@@ -41,6 +41,7 @@ const KEY: Record<string, keyof ReturnType<typeof useHorizon.getState>> = {
   domains: 'domains', objectives: 'objectives', projects: 'projects', steps: 'steps',
   tasks: 'tasks', ideas: 'ideas', habits: 'habits', habit_logs: 'habitLogs',
   reviews: 'reviews', layouts: 'layouts', birthdays: 'birthdays', checks: 'checks',
+  olafatco_jobs: 'olafatcoJobs',
 }
 let seq = 1000
 const genId = () => `demo-${seq++}`
@@ -120,10 +121,10 @@ root.render(
             <Route path="/priorites" element={<PrioritiesView />} />
             <Route path="/temps" element={<TimeView />} />
             <Route path="/planification" element={<PlanningView />} />
-            <Route path="/idees" element={<IdeasView />} />
             <Route path="/habitudes" element={<HabitsView />} />
             <Route path="/revues" element={<ReviewsView />} />
             <Route path="/verifications" element={<VerificationsView />} />
+            <Route path="/heures-controle" element={<HeuresControleView />} />
             <Route path="/espace" element={<WorkspaceView />} />
             <Route path="/parametres" element={<SettingsView />} />
             <Route path="*" element={<Navigate to="/" replace />} />

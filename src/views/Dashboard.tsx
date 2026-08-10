@@ -340,7 +340,7 @@ export function Dashboard() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
             {/* Case du jour + lendemain (calendrier) — remplace les priorités du jour */}
             <GlassTile icon={<CalendarDays size={15} />} accent="#f59e0b" title="Aujourd'hui & demain"
-              className="sm:min-w-0 sm:flex-1">
+              className="sm:w-max sm:max-w-full">
               <div className="flex flex-wrap items-start gap-2">
                 <DayCell day={now} emphasize fit onEdit={setEditing} onCreate={setCreateDate}
                   onStep={() => navigate('/temps')} onMove={handleDayMove} />
