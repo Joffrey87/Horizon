@@ -7,12 +7,14 @@ import { create } from 'zustand'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import type {
-  Birthday, Check, Domain, Habit, HabitLog, Idea, Layout, Objective, OlafatcoJob, Project, Review, Settings, Step, Task,
+  Birthday, Check, Domain, GospelQuiz, Habit, HabitLog, Idea, Layout, NewsDigest, NewsTopic,
+  Objective, OlafatcoJob, Project, Review, Settings, Step, Task,
 } from './types'
 
 type Table =
   | 'domains' | 'objectives' | 'projects' | 'steps' | 'tasks' | 'ideas'
   | 'habits' | 'habit_logs' | 'reviews' | 'layouts' | 'birthdays' | 'checks' | 'olafatco_jobs'
+  | 'news_topics' | 'news_digests'
 
 interface HorizonState {
   session: Session | null
@@ -32,6 +34,8 @@ interface HorizonState {
   birthdays: Birthday[]
   checks: Check[]
   olafatcoJobs: OlafatcoJob[]
+  newsTopics: NewsTopic[]
+  newsDigests: NewsDigest[]
   settings: Settings | null
 
   init: () => Promise<void>
@@ -41,6 +45,9 @@ interface HorizonState {
   remove: (table: Table, id: string) => Promise<void>
   saveSettings: (values: Partial<Settings>) => Promise<void>
   toggleHabitToday: (habitId: string, date: string) => Promise<void>
+  cycleHabitDay: (habitId: string, date: string) => Promise<void>
+  refreshNews: () => Promise<{ ok: boolean; updated?: number; error?: string }>
+  gospelQuiz: (reference: string, passage: string, level: number) => Promise<{ ok: boolean; quiz?: GospelQuiz; error?: string }>
   clearRecovery: () => void
   signOut: () => Promise<void>
 }
@@ -49,6 +56,7 @@ const COLLECTION: Record<Table, keyof HorizonState> = {
   domains: 'domains', objectives: 'objectives', projects: 'projects', steps: 'steps', tasks: 'tasks',
   ideas: 'ideas', habits: 'habits', habit_logs: 'habitLogs', reviews: 'reviews', layouts: 'layouts',
   birthdays: 'birthdays', checks: 'checks', olafatco_jobs: 'olafatcoJobs',
+  news_topics: 'newsTopics', news_digests: 'newsDigests',
 }
 
 export const useHorizon = create<HorizonState>((set, get) => ({
@@ -57,7 +65,8 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   ready: false,
   loading: false,
   domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
-  habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [], settings: null,
+  habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
+  newsTopics: [], newsDigests: [], settings: null,
 
   init: async () => {
     const { data } = await supabase.auth.getSession()
@@ -70,7 +79,8 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       if (!session) {
         set({
           domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
-          habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [], settings: null,
+          habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
+          newsTopics: [], newsDigests: [], settings: null,
         })
       }
     })
@@ -79,7 +89,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
 
   loadAll: async () => {
     set({ loading: true })
-    const [dom, obj, pro, stp, tas, ide, hab, log, rev, lay, setg, bd, chk, oja] = await Promise.all([
+    const [dom, obj, pro, stp, tas, ide, hab, log, rev, lay, setg, bd, chk, oja, nto, ndi] = await Promise.all([
       supabase.from('domains').select('*').order('sort_order'),
       supabase.from('objectives').select('*').order('sort_order'),
       supabase.from('projects').select('*').order('created_at'),
@@ -94,12 +104,15 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       supabase.from('birthdays').select('*'),
       supabase.from('checks').select('*').order('sort_order'),
       supabase.from('olafatco_jobs').select('*').order('created_at', { ascending: false }),
+      supabase.from('news_topics').select('*').order('sort_order'),
+      supabase.from('news_digests').select('*'),
     ])
     set({
       domains: dom.data ?? [], objectives: obj.data ?? [], projects: pro.data ?? [],
       steps: stp.data ?? [], tasks: tas.data ?? [], ideas: ide.data ?? [], habits: hab.data ?? [],
       habitLogs: log.data ?? [], reviews: rev.data ?? [], layouts: lay.data ?? [],
       birthdays: bd.data ?? [], checks: chk.data ?? [], olafatcoJobs: oja.data ?? [],
+      newsTopics: nto.data ?? [], newsDigests: ndi.data ?? [],
       settings: setg.data ?? null, loading: false,
     })
   },
@@ -166,6 +179,54 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       const { data, error } = await supabase.from('habit_logs')
         .insert({ user_id, habit_id: habitId, log_date: date, done: true }).select().single()
       if (!error && data) set({ habitLogs: [...get().habitLogs, data] })
+    }
+  },
+
+  // Cycle à 3 états pour une case d'habitude : rien → validé (done=true) → non validé (done=false) → rien.
+  cycleHabitDay: async (habitId, date) => {
+    const existing = get().habitLogs.find((l) => l.habit_id === habitId && l.log_date === date)
+    if (!existing) {
+      const user_id = get().session?.user.id
+      if (!user_id) return
+      const { data, error } = await supabase.from('habit_logs')
+        .insert({ user_id, habit_id: habitId, log_date: date, done: true }).select().single()
+      if (!error && data) set({ habitLogs: [...get().habitLogs, data] })
+    } else if (existing.done) {
+      const { error } = await supabase.from('habit_logs').update({ done: false }).eq('id', existing.id)
+      if (!error) set({ habitLogs: get().habitLogs.map((l) => (l.id === existing.id ? { ...l, done: false } : l)) })
+    } else {
+      await supabase.from('habit_logs').delete().eq('id', existing.id)
+      set({ habitLogs: get().habitLogs.filter((l) => l.id !== existing.id) })
+    }
+  },
+
+  // Déclenche la régénération des synthèses d'actualités (edge function), puis
+  // recharge le cache local. Le cron fait la même chose chaque matin.
+  refreshNews: async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('horizon-news', { body: { source: 'app' } })
+      if (error) throw error
+      const { data: digs } = await supabase.from('news_digests').select('*')
+      set({ newsDigests: digs ?? [] })
+      return { ok: true, updated: data?.updated as number | undefined }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return { ok: false, error: msg }
+    }
+  },
+
+  // Page Écritures : quiz de mémorisation généré à la demande par l'edge function.
+  // (Le passage lui-même vient de getbible.net, sans clé — voir lib/bible.ts.)
+  gospelQuiz: async (reference, passage, level) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('horizon-gospel', {
+        body: { mode: 'quiz', reference, passage, level },
+      })
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
+      return { ok: true, quiz: data?.quiz as GospelQuiz }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
     }
   },
 

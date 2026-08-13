@@ -11,6 +11,9 @@ import { PrioritiesView } from './views/PrioritiesView'
 import { TimeView } from './views/TimeView'
 import { PlanningView } from './views/PlanningView'
 import { HabitsView } from './views/HabitsView'
+import { ActivitesLayout } from './views/ActivitesLayout'
+import { ActualitesView } from './views/ActualitesView'
+import { EvangileView } from './views/EvangileView'
 import { ReviewsView } from './views/ReviewsView'
 import { VerificationsView } from './views/VerificationsView'
 import { HeuresControleView } from './views/HeuresControleView'
@@ -43,6 +46,11 @@ export default function App() {
         <Route path="/temps" element={<TimeView />} />
         <Route path="/planification" element={<PlanningView />} />
         <Route path="/habitudes" element={<HabitsView />} />
+        <Route path="/activites" element={<ActivitesLayout />}>
+          <Route index element={<Navigate to="actualites" replace />} />
+          <Route path="actualites" element={<ActualitesView />} />
+          <Route path="ecritures" element={<EvangileView />} />
+        </Route>
         <Route path="/revues" element={<ReviewsView />} />
         <Route path="/verifications" element={<VerificationsView />} />
         <Route path="/heures-controle" element={<HeuresControleView />} />

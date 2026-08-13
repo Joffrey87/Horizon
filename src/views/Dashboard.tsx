@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   ArrowRight, AlertTriangle, Info, CheckCircle2, Circle,
-  LayoutDashboard, X, Repeat, ShieldCheck, CalendarDays,
+  LayoutDashboard, X, Repeat, ShieldCheck, CalendarDays, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import type { Task } from '../lib/types'
 import { useHorizon } from '../lib/store'
@@ -10,8 +10,8 @@ import { DayCell } from './TimeView'
 import { TaskForm } from '../components/TaskForm'
 import { HomeBoard } from '../components/HomeBoard'
 import {
-  checksDueCount, computeAlerts, dayPhraseOfDay, domainBalance, eveningPhraseOfWeek, fmtDay,
-  focusOfDay, greetingKind, habitStats, habitsForDay, isRecentlyDone, quoteOfDay,
+  checksDueCount, computeAlerts, dayPhraseOfDay, domainBalance, eveningPhraseOfWeek, fmtDay, fmtShort,
+  focusOfDay, greetingKind, habitStats, habitsForDay, iso, isRecentlyDone, quoteOfDay,
   suggestedReview, tasksForDay, todayIso, wallpaperOfDay,
 } from '../lib/logic'
 import { Card, Badge, ProgressBar, DomainDot, EmptyState } from '../components/ui'
@@ -54,6 +54,13 @@ export function Dashboard() {
     () => tasksForDay(s.tasks, now).filter((t) => t.status === 'fait' && t.is_task !== false && isRecentlyDone(t, now)),
     [s.tasks]) // eslint-disable-line react-hooks/exhaustive-deps
   const todaysHabits = useMemo(() => habitsForDay(s.habits, now), [s.habits]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Tuile Habitudes : navigation par jour (0 = aujourd'hui, négatif = passé). On ne va pas dans le futur.
+  const [habitOffset, setHabitOffset] = useState(0)
+  const habitDate = useMemo(() => {
+    const d = new Date(now); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + habitOffset); return d
+  }, [habitOffset]) // eslint-disable-line react-hooks/exhaustive-deps
+  const habitIso = iso(habitDate)
+  const habitsOfDay = useMemo(() => habitsForDay(s.habits, habitDate), [s.habits, habitDate])
   const alerts = useMemo(() => computeAlerts({
     projects: s.projects, habits: s.habits, logs: s.habitLogs, reviews: s.reviews, settings: s.settings,
   }), [s.projects, s.habits, s.habitLogs, s.reviews, s.settings])
@@ -349,25 +356,52 @@ export function Dashboard() {
               </div>
             </GlassTile>
 
-            {/* Habitudes du jour — largeur du plus long libellé, alignée à droite */}
+            {/* Habitudes du jour — navigation par jour + pastilles à 3 états (rien / validé / non validé) */}
             <GlassTile icon={<Repeat size={15} />} accent="#0d9488" title="Habitudes du jour"
-              className="sm:ml-auto sm:w-max">
-              {todaysHabits.length === 0 ? (
+              className="sm:ml-auto sm:w-max"
+              headerRight={(
+                <>
+                  <button onClick={() => setHabitOffset((o) => o - 1)}
+                    aria-label="Jour précédent"
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white">
+                    <ChevronLeft size={15} />
+                  </button>
+                  <span className="min-w-[4.5rem] text-center text-[11px] font-medium tabular-nums text-white/70">
+                    {habitOffset === 0 ? "Aujourd'hui" : fmtShort(habitDate)}
+                  </span>
+                  <button onClick={() => setHabitOffset((o) => Math.min(0, o + 1))}
+                    disabled={habitOffset >= 0}
+                    aria-label="Jour suivant"
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-25">
+                    <ChevronRight size={15} />
+                  </button>
+                </>
+              )}>
+              {habitsOfDay.length === 0 ? (
                 <p className="text-sm text-white/60">Rien de prévu.</p>
               ) : (
                 <ul className="space-y-1.5">
-                  {todaysHabits.map((h) => {
-                    const done = s.habitLogs.some((l) => l.habit_id === h.id && l.log_date === today && l.done)
+                  {habitsOfDay.map((h) => {
+                    const log = s.habitLogs.find((l) => l.habit_id === h.id && l.log_date === habitIso)
+                    const state = !log ? 'none' : log.done ? 'ok' : 'ko'
                     return (
                       <li key={h.id}>
-                        <button onClick={() => void s.toggleHabitToday(h.id, today)}
+                        <button onClick={() => void s.cycleHabitDay(h.id, habitIso)}
+                          title="Cliquer : validé → non validé → rien"
                           className="group flex w-full items-center gap-2 text-left">
                           <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-md border transition-colors ${
-                            done ? 'border-good/70 bg-good/70 text-white' : 'border-white/40 group-hover:border-white/70'
+                            state === 'ok' ? 'border-good/70 bg-good/70 text-white'
+                              : state === 'ko' ? 'border-bad/70 bg-bad/70 text-white'
+                                : 'border-white/40 group-hover:border-white/70'
                           }`}>
-                            {done && <CheckCircle2 size={12} />}
+                            {state === 'ok' && <CheckCircle2 size={12} />}
+                            {state === 'ko' && <X size={12} />}
                           </span>
-                          <span className={`truncate text-sm ${done ? 'text-white/50 line-through' : 'text-white/90'}`}>{h.title}</span>
+                          <span className={`truncate text-sm ${
+                            state === 'ok' ? 'text-white/50 line-through'
+                              : state === 'ko' ? 'text-white/50'
+                                : 'text-white/90'
+                          }`}>{h.title}</span>
                         </button>
                       </li>
                     )
@@ -436,8 +470,9 @@ export function Dashboard() {
 
 
 /** Tuile translucide de l'accueil : icône colorée, léger dégradé, halo teinté. */
-function GlassTile({ icon, accent, title, to, className = '', children }: {
-  icon: React.ReactNode; accent: string; title: string; to?: string; className?: string; children: React.ReactNode
+function GlassTile({ icon, accent, title, to, className = '', headerRight, children }: {
+  icon: React.ReactNode; accent: string; title: string; to?: string; className?: string
+  headerRight?: React.ReactNode; children: React.ReactNode
 }) {
   const inner = (
     <>
@@ -447,6 +482,7 @@ function GlassTile({ icon, accent, title, to, className = '', children }: {
           {icon}
         </span>
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/75">{title}</p>
+        {headerRight && <div className="ml-auto flex items-center gap-1">{headerRight}</div>}
       </div>
       {children}
     </>

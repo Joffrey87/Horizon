@@ -294,6 +294,49 @@ export interface HoursRules {
   urme: number           // occurrences URME + FIR par défaut
 }
 
+// ---- Actualités (onglet « Activités ») -----------------------------------
+
+/** Un sujet de veille suivi par l'utilisateur (IA, Elon Musk, Atelier Missor…). */
+export interface NewsTopic {
+  id: UUID
+  user_id: UUID
+  label: string
+  prompt: string | null   // précisions optionnelles pour orienter la synthèse
+  sort_order: number
+  active: boolean
+  created_at: string
+}
+
+/** Une source citée dans une synthèse. */
+export interface NewsSource { title: string; url: string }
+
+/** La synthèse générée pour un sujet (remplacée à chaque génération). */
+export interface NewsDigest {
+  id: UUID
+  user_id: UUID
+  topic_id: UUID
+  content: string
+  sources: NewsSource[]
+  generated_at: string
+}
+
+// ---- Évangile / quiz (onglet « Activités ») ------------------------------
+
+export interface GospelQuestion {
+  id: string
+  type: 'qcm' | 'texte'
+  question: string
+  choices?: string[]
+  answer: string
+  hint?: string
+}
+
+export interface GospelQuiz {
+  level: number
+  intro?: string
+  questions: GospelQuestion[]
+}
+
 /** Alerte calculée pour le cockpit — jamais culpabilisante */
 export interface Alert {
   id: string

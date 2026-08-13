@@ -2,12 +2,11 @@ import { useState, type ReactNode } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import {
   Home, FolderKanban, ListTodo, Compass, CalendarDays, CalendarRange,
-  Repeat, ClipboardCheck, Network, Settings, Sparkles, Plus, LogOut, Menu, ArrowLeft, ShieldCheck, Timer,
+  Repeat, ClipboardCheck, Network, Settings, Plus, LogOut, Menu, ArrowLeft, ShieldCheck, Timer, Newspaper,
 } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import { wallpaperOfDay } from '../lib/logic'
 import { QuickCapture } from './QuickCapture'
-import { AssistantPanel } from './AssistantPanel'
 
 const NAV = [
   { to: '/', label: 'Accueil', icon: Home },
@@ -17,6 +16,7 @@ const NAV = [
   { to: '/temps', label: 'Temps', icon: CalendarDays },
   { to: '/planification', label: 'Planification', icon: CalendarRange },
   { to: '/habitudes', label: 'Habitudes', icon: Repeat },
+  { to: '/activites', label: 'Activités', icon: Newspaper },
   { to: '/revues', label: 'Revues', icon: ClipboardCheck },
   { to: '/verifications', label: 'Vérifications', icon: ShieldCheck },
   { to: '/heures-controle', label: 'Heures de contrôle', icon: Timer },
@@ -25,17 +25,15 @@ const NAV = [
 
 export function Shell({ children }: { children: ReactNode }) {
   const [capture, setCapture] = useState(false)
-  const [assistant, setAssistant] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const signOut = useHorizon((s) => s.signOut)
   const navigate = useNavigate()
 
   return (
     <div className="flex min-h-screen overflow-x-hidden">
-      {/* ---- Fond paysage du jour, très assombri (pages hors accueil) ---- */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
-        <img src={wallpaperOfDay()} alt="" className="h-full w-full object-cover blur-sm" />
-        <div className="absolute inset-0 bg-bg/92" />
+      {/* ---- Fond paysage du jour de l'accueil, répliqué en version très estompée (pages hors accueil) ---- */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 bg-bg">
+        <img src={wallpaperOfDay()} alt="" className="h-full w-full object-cover opacity-30" />
       </div>
 
       {/* ---- Barre latérale (style options 1/3) ---- */}
@@ -74,11 +72,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="space-y-0.5 border-t border-line px-3 py-3">
-          <button onClick={() => { setAssistant(true); setMenuOpen(false) }}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-ink-2 transition-colors hover:bg-panel-2 hover:text-ink">
-            <Sparkles size={16} strokeWidth={1.8} className="text-sun" />
-            Assistant
-          </button>
+          {/* Assistant mis de côté (masqué) — voir AssistantPanel.tsx, réactivable plus tard. */}
           <NavLink to="/parametres" onClick={() => setMenuOpen(false)}
             className={({ isActive }) =>
               `flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors ${
@@ -129,7 +123,6 @@ export function Shell({ children }: { children: ReactNode }) {
       </button>
 
       <QuickCapture open={capture} onClose={() => setCapture(false)} />
-      <AssistantPanel open={assistant} onClose={() => setAssistant(false)} />
     </div>
   )
 }

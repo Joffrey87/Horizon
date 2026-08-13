@@ -609,28 +609,70 @@ export function suggestedReview(now = new Date()): { kind: 'hebdo' | 'confirmati
   return { kind: null, label: '' }
 }
 
-/** Verset du jour — une phrase de la Bible, en rotation quotidienne. */
-const QUOTES: [string, string][] = [
-  ['Là où se trouve ton trésor, là aussi sera ton cœur.', 'Mt 6,21'],
-  ['Qui est fidèle en peu de choses le sera aussi en beaucoup.', 'Lc 16,10'],
-  ['Cherchez d’abord le Royaume de Dieu et sa justice.', 'Mt 6,33'],
-  ['Le Seigneur est mon berger : je ne manque de rien.', 'Ps 23,1'],
-  ['Tout ce que vous faites, faites-le de bon cœur, comme pour le Seigneur.', 'Col 3,23'],
-  ['Remets ton sort au Seigneur, compte sur lui : il agira.', 'Ps 37,5'],
-  ['Je puis tout en celui qui me rend fort.', 'Ph 4,13'],
-  ['Ta parole est une lampe pour mes pas, une lumière sur ma route.', 'Ps 119,105'],
-  ['À chaque jour suffit sa peine.', 'Mt 6,34'],
-  ['Confie au Seigneur tes œuvres, et tes projets se réaliseront.', 'Pr 16,3'],
-  ['Sois fort et courageux : le Seigneur ton Dieu est avec toi.', 'Jos 1,9'],
-  ['Il y a un temps pour tout, un temps pour toute chose sous le ciel.', 'Qo 3,1'],
-  ['Que tout se fasse chez vous dans la charité.', '1 Co 16,14'],
-  ['Veillez et priez, pour ne pas entrer en tentation.', 'Mt 26,41'],
+// ---- Écriture du jour -----------------------------------------------------
+// Une seule source par jour, partagée entre la citation de l'accueil (verset
+// court) et la page Écritures (passage complet). Alterne un jour sur deux
+// entre Ancien et Nouveau Testament. Chaque entrée : passage, titre, verset
+// clé (affiché tel quel, sans IA) et sa référence.
+export type Testament = 'AT' | 'NT'
+export interface DailyScripture {
+  testament: Testament
+  reference: string   // passage complet, ex. « Matthieu 6, 19-24 »
+  title: string
+  verse: string       // verset clé (Segond 1910), affiché sur l'accueil et en tête d'Écritures
+  verseRef: string    // référence du verset clé, ex. « Mt 6,21 »
+  book: number        // n° de livre getbible (1-66)
+  chapter: number
+  start: number       // 1er verset du passage
+  end: number         // dernier verset du passage
+}
+
+// [reference, title, verse (Segond), verseRef, book, chapter, start, end]
+type Entry = [string, string, string, string, number, number, number, number]
+
+const OT_SCRIPTURES: Entry[] = [
+  ['Psaume 23', 'L’Éternel est mon berger', 'L’Éternel est mon berger : je ne manquerai de rien.', 'Ps 23,1', 19, 23, 1, 6],
+  ['Psaume 37, 3-7', 'Recommande ton sort à l’Éternel', 'Recommande ton sort à l’Éternel, mets en lui ta confiance, et il agira.', 'Ps 37,5', 19, 37, 3, 7],
+  ['Psaume 119, 105-112', 'Ta parole, une lampe', 'Ta parole est une lampe à mes pieds, et une lumière sur mon sentier.', 'Ps 119,105', 19, 119, 105, 112],
+  ['Proverbes 16, 1-9', 'Recommande tes œuvres à l’Éternel', 'Recommande à l’Éternel tes œuvres, et tes projets réussiront.', 'Pr 16,3', 20, 16, 1, 9],
+  ['Proverbes 3, 5-8', 'Confie-toi en l’Éternel', 'Confie-toi en l’Éternel de tout ton cœur, et ne t’appuie pas sur ta sagesse.', 'Pr 3,5', 20, 3, 5, 8],
+  ['Josué 1, 6-9', 'Fortifie-toi et prends courage', 'Ne t’effraie point et ne t’épouvante point, car l’Éternel, ton Dieu, est avec toi.', 'Jos 1,9', 6, 1, 6, 9],
+  ['Ecclésiaste 3, 1-8', 'Un temps pour tout', 'Il y a un temps pour tout, un temps pour toute chose sous les cieux.', 'Qo 3,1', 21, 3, 1, 8],
+  ['Ésaïe 40, 28-31', 'Ils renouvellent leur force', 'Ceux qui se confient en l’Éternel renouvellent leur force.', 'Is 40,31', 23, 40, 28, 31],
+  ['Ésaïe 55, 6-9', 'Cherchez l’Éternel', 'Cherchez l’Éternel pendant qu’il se trouve.', 'Is 55,6', 23, 55, 6, 9],
+  ['Jérémie 29, 11-13', 'Des projets de paix', 'Je connais les projets que j’ai formés sur vous, projets de paix et non de malheur.', 'Jr 29,11', 24, 29, 11, 13],
+  ['Michée 6, 6-8', 'Ce que l’Éternel demande', 'Pratiquer la justice, aimer la miséricorde, et marcher humblement avec ton Dieu.', 'Mi 6,8', 33, 6, 6, 8],
+  ['Deutéronome 6, 4-9', 'Écoute, Israël', 'Tu aimeras l’Éternel, ton Dieu, de tout ton cœur, de toute ton âme et de toute ta force.', 'Dt 6,5', 5, 6, 4, 9],
 ]
 
+const NT_SCRIPTURES: Entry[] = [
+  ['Matthieu 6, 19-24', 'Le trésor dans le ciel', 'Là où est ton trésor, là aussi sera ton cœur.', 'Mt 6,21', 40, 6, 19, 24],
+  ['Matthieu 6, 31-34', 'Cherchez premièrement le royaume', 'Cherchez premièrement le royaume et la justice de Dieu.', 'Mt 6,33', 40, 6, 31, 34],
+  ['Luc 16, 10-13', 'Fidèle dans les moindres choses', 'Celui qui est fidèle dans les moindres choses l’est aussi dans les grandes.', 'Lc 16,10', 42, 16, 10, 13],
+  ['Philippiens 4, 10-13', 'Je puis tout', 'Je puis tout par celui qui me fortifie.', 'Ph 4,13', 50, 4, 10, 13],
+  ['Colossiens 3, 17-24', 'Comme pour le Seigneur', 'Tout ce que vous faites, faites-le de bon cœur, comme pour le Seigneur.', 'Col 3,23', 51, 3, 17, 24],
+  ['1 Corinthiens 16, 13-14', 'Tout avec charité', 'Que tout ce que vous faites se fasse avec charité.', '1 Co 16,14', 46, 16, 13, 14],
+  ['Matthieu 26, 36-41', 'Veillez et priez', 'Veillez et priez, afin que vous ne tombiez pas dans la tentation.', 'Mt 26,41', 40, 26, 36, 41],
+  ['Jean 3, 16-17', 'Dieu a tant aimé le monde', 'Dieu a tant aimé le monde qu’il a donné son Fils unique.', 'Jn 3,16', 43, 3, 16, 17],
+  ['1 Corinthiens 13, 1-7', 'L’hymne à la charité', 'La charité est patiente, elle est pleine de bonté.', '1 Co 13,4', 46, 13, 1, 7],
+  ['Galates 5, 22-25', 'Le fruit de l’Esprit', 'Le fruit de l’Esprit, c’est l’amour, la joie, la paix, la patience…', 'Ga 5,22', 48, 5, 22, 25],
+  ['Matthieu 5, 3-10', 'Les Béatitudes', 'Heureux les pauvres en esprit, car le royaume des cieux est à eux !', 'Mt 5,3', 40, 5, 3, 10],
+  ['Jean 15, 4-8', 'Demeurez en moi', 'Demeurez en moi, et je demeurerai en vous.', 'Jn 15,4', 43, 15, 4, 8],
+]
+
+export function scriptureOfDay(now = new Date()): DailyScripture {
+  const dayIndex = Math.floor(now.getTime() / 86_400_000)
+  const testament: Testament = dayIndex % 2 === 0 ? 'AT' : 'NT'
+  const list = testament === 'AT' ? OT_SCRIPTURES : NT_SCRIPTURES
+  const entry = list[Math.floor(dayIndex / 2) % list.length] ?? list[0]!
+  const [reference, title, verse, verseRef, book, chapter, start, end] = entry
+  return { testament, reference, title, verse, verseRef, book, chapter, start, end }
+}
+
+/** Citation de l'accueil = verset clé de l'Écriture du jour (même source que la page Écritures). */
 export function quoteOfDay(now = new Date()): { text: string; source: string } {
-  const dayIndex = Math.floor(now.getTime() / 86_400_000) % QUOTES.length
-  const [text, source] = QUOTES[dayIndex]
-  return { text, source }
+  const s = scriptureOfDay(now)
+  return { text: s.verse, source: s.verseRef }
 }
 
 /** Fond d'écran du jour : rotation quotidienne parmi les images de /public/fonds. */

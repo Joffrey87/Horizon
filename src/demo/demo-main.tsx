@@ -17,6 +17,9 @@ import { PrioritiesView } from '../views/PrioritiesView'
 import { TimeView } from '../views/TimeView'
 import { PlanningView } from '../views/PlanningView'
 import { HabitsView } from '../views/HabitsView'
+import { ActivitesLayout } from '../views/ActivitesLayout'
+import { ActualitesView } from '../views/ActualitesView'
+import { EvangileView } from '../views/EvangileView'
 import { ReviewsView } from '../views/ReviewsView'
 import { VerificationsView } from '../views/VerificationsView'
 import { HeuresControleView } from '../views/HeuresControleView'
@@ -32,7 +35,8 @@ useHorizon.setState({
   ready: true, loading: false,
   session: { user: { id: uid, email: 'demo@horizon.local' } } as unknown as Session,
   domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
-  habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [], settings: null,
+  habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
+  newsTopics: [], newsDigests: [], settings: null,
 })
 
 // Mode démo pleinement interactif : les mutations restent locales (aucun réseau,
@@ -41,7 +45,7 @@ const KEY: Record<string, keyof ReturnType<typeof useHorizon.getState>> = {
   domains: 'domains', objectives: 'objectives', projects: 'projects', steps: 'steps',
   tasks: 'tasks', ideas: 'ideas', habits: 'habits', habit_logs: 'habitLogs',
   reviews: 'reviews', layouts: 'layouts', birthdays: 'birthdays', checks: 'checks',
-  olafatco_jobs: 'olafatcoJobs',
+  olafatco_jobs: 'olafatcoJobs', news_topics: 'newsTopics', news_digests: 'newsDigests',
 }
 let seq = 1000
 const genId = () => `demo-${seq++}`
@@ -52,7 +56,14 @@ useHorizon.setState({
 
   insert: async (table, values) => {
     const key = KEY[table]
-    const row = { id: genId(), user_id: uid, created_at: new Date().toISOString(), ...values }
+    // Supabase applique des valeurs par défaut côté serveur : on réplique celles
+    // indispensables au rendu (ex. habits.start_date, sinon parseISO plante).
+    const defaults: Record<string, unknown> = table === 'habits'
+      ? { start_date: new Date().toISOString().slice(0, 10) }
+      : table === 'news_topics'
+        ? { active: true, sort_order: 0 }
+        : {}
+    const row = { id: genId(), user_id: uid, created_at: new Date().toISOString(), ...defaults, ...values }
     const list = useHorizon.getState()[key] as unknown[]
     useHorizon.setState({ [key]: [...list, row] } as never)
     return row as never
@@ -102,6 +113,54 @@ useHorizon.setState({
       })
     }
   },
+
+  cycleHabitDay: async (habitId, date) => {
+    const logs = useHorizon.getState().habitLogs
+    const existing = logs.find((l) => l.habit_id === habitId && l.log_date === date)
+    if (!existing) {
+      useHorizon.setState({
+        habitLogs: [...logs, { id: genId(), user_id: uid, habit_id: habitId, log_date: date, done: true }],
+      })
+    } else if (existing.done) {
+      useHorizon.setState({ habitLogs: logs.map((l) => (l.id === existing.id ? { ...l, done: false } : l)) })
+    } else {
+      useHorizon.setState({ habitLogs: logs.filter((l) => l.id !== existing.id) })
+    }
+  },
+
+  // Démo : pas de réseau ni d'IA — on fabrique une synthèse factice par sujet
+  // pour montrer le rendu (contenu + sources + horodatage).
+  refreshNews: async () => {
+    const st = useHorizon.getState()
+    const now = new Date().toISOString()
+    const digests = st.newsTopics.filter((t) => t.active).map((t) => ({
+      id: genId(), user_id: uid, topic_id: t.id, generated_at: now,
+      content: `— (démo) Exemple de synthèse pour « ${t.label} » : ceci illustre le rendu.\n`
+        + '— En vrai, Claude cherche sur le web les nouvelles des ~15 derniers jours et les résume ici.\n'
+        + '— Chaque puce correspond à une actualité datée et sourcée.',
+      sources: [
+        { title: 'Source exemple 1', url: 'https://example.com/actu-1' },
+        { title: 'Source exemple 2', url: 'https://example.org/actu-2' },
+      ],
+    }))
+    const others = st.newsDigests.filter((d) => !st.newsTopics.some((t) => t.active && t.id === d.topic_id))
+    useHorizon.setState({ newsDigests: [...others, ...digests] })
+    return { ok: true, updated: digests.length }
+  },
+
+  // Démo : quiz factice (le passage, lui, vient vraiment de getbible.net).
+  gospelQuiz: async (_reference, _passage, level) => ({
+    ok: true,
+    quiz: {
+      level,
+      intro: `Quiz de démonstration — niveau ${level} (sur le sens).`,
+      questions: [
+        { id: 'q1', type: 'qcm', question: 'Quel est le message central du passage ?', choices: ['Mettre sa confiance en Dieu', 'Décrire la nature', 'Raconter une bataille'], answer: 'Mettre sa confiance en Dieu' },
+        { id: 'q2', type: 'qcm', question: 'À quoi ce passage nous invite-t-il concrètement ?', choices: ['Persévérer sans nous épuiser', 'Fuir toute épreuve', 'Chercher la richesse'], answer: 'Persévérer sans nous épuiser' },
+        { id: 'q3', type: 'texte', question: 'Quel mot clé exprime ce qu’on retrouve en Dieu ?', answer: 'force', hint: 'ce qui est renouvelé' },
+      ],
+    },
+  }),
 })
 
 // Réutilise la racine React entre les rechargements à chaud (HMR) pour éviter
@@ -122,6 +181,11 @@ root.render(
             <Route path="/temps" element={<TimeView />} />
             <Route path="/planification" element={<PlanningView />} />
             <Route path="/habitudes" element={<HabitsView />} />
+            <Route path="/activites" element={<ActivitesLayout />}>
+              <Route index element={<Navigate to="actualites" replace />} />
+              <Route path="actualites" element={<ActualitesView />} />
+              <Route path="ecritures" element={<EvangileView />} />
+            </Route>
             <Route path="/revues" element={<ReviewsView />} />
             <Route path="/verifications" element={<VerificationsView />} />
             <Route path="/heures-controle" element={<HeuresControleView />} />
