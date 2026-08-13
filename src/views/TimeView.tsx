@@ -1,12 +1,12 @@
 import { createContext, useContext, useMemo, useState } from 'react'
 import {
-  addMonths, addWeeks, eachDayOfInterval, endOfWeek, format, getDate, getDaysInMonth,
+  addMonths, addWeeks, eachDayOfInterval, endOfMonth, endOfWeek, format, getDate, getDaysInMonth,
   getISODay, isSameMonth, isToday, parseISO, startOfMonth, startOfWeek,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, RotateCw, Layers, Star, Target, Church, AlertTriangle } from 'lucide-react'
 import { useHorizon } from '../lib/store'
-import { compareTasksByTitleTime, extractHourMinute, iso, tasksForDay, recurrenceLabel, timeQuoteOfDay, spanPart, birthdaysForDay, isMarketParkingDay, feastOnDay, extractEmojis } from '../lib/logic'
+import { compareTasksByTitleTime, extractHourMinute, iso, tasksForDay, recurrenceLabel, timeQuoteOfDay, spanPart, birthdaysForDay, isMarketParkingDay, feastOnDay, extractEmojis, firstFridayOrSaturday, chosenMassForDay, todayIso } from '../lib/logic'
 import { Card, Seg, Modal, ProjectTag } from '../components/ui'
 import { TaskForm } from '../components/TaskForm'
 import type { Objective, Step, Task } from '../lib/types'
@@ -18,11 +18,12 @@ type Kind = 'task' | 'step' | 'objective'
 const EVENT_DEFAULT_COLOR = '#46b3a9'
 
 // ---- Couches du calendrier (affichables/masquables), mémorisées par appareil ----
-type CalLayers = { taches: boolean; fetes: boolean; anniversaires: boolean; aril: boolean }
-const DEFAULT_LAYERS: CalLayers = { taches: true, fetes: true, anniversaires: true, aril: true }
+type CalLayers = { taches: boolean; fetes: boolean; messes: boolean; anniversaires: boolean; aril: boolean }
+const DEFAULT_LAYERS: CalLayers = { taches: true, fetes: true, messes: true, anniversaires: true, aril: true }
 const LAYER_DEFS: { key: keyof CalLayers; label: string }[] = [
   { key: 'taches', label: 'Tâches' },
   { key: 'fetes', label: 'Fêtes' },
+  { key: 'messes', label: 'Messes' },
   { key: 'anniversaires', label: 'Anniversaires' },
   { key: 'aril', label: 'ARIL' },
 ]
@@ -63,7 +64,7 @@ export function TimeView() {
   })
 
   const shift = (dir: 1 | -1) => {
-    if (view === '4sem') setAnchor(addWeeks(anchor, dir * 4))
+    if (view === '4sem') setAnchor(addMonths(anchor, dir))
     else if (view === 'semaine') setAnchor(addWeeks(anchor, dir))
     else if (view === 'trimestre') setAnchor(addMonths(anchor, dir * 3))
     else setAnchor(addMonths(anchor, dir * 12))
@@ -185,6 +186,10 @@ export function DayCell({ day, tint, emphasize, fit, onEdit, onCreate, onStep, o
   const steps = stepsForDay(s.steps, day).filter(stepVisible)
   const birthdays = layers.anniversaires ? birthdaysForDay(s.birthdays, day) : []
   const feast = layers.fetes && s.settings?.catholic_feasts !== false ? feastOnDay(day) : null
+  // Messe de dévotion (1er vendredi/samedi) sur les 6 prochains mois — choisie ou non.
+  const rawMass = layers.messes ? firstFridayOrSaturday(day) : null
+  const massLabel = rawMass && dayIso >= todayIso() && day <= addMonths(new Date(), 6) ? rawMass : null
+  const chosenMass = massLabel ? chosenMassForDay(s.checks, dayIso) : null
 
   const handleVoid = (e: React.MouseEvent<HTMLElement>) => {
     if (e.target === e.currentTarget) onCreate(iso(day))
@@ -213,6 +218,12 @@ export function DayCell({ day, tint, emphasize, fit, onEdit, onCreate, onStep, o
             <span title={`Grande fête catholique : ${feast}`}
               className="cursor-default text-xs font-semibold leading-none text-sun-soft">✝</span>
           )}
+          {massLabel && (
+            <span title={`Messe — ${massLabel}${chosenMass ? ` : ${chosenMass}` : ' (à prévoir)'}`}
+              className={`cursor-default leading-none ${chosenMass ? 'text-[#4cc79a]' : 'text-[#a78bfa]'}`}>
+              <Church size={11} />
+            </span>
+          )}
           {birthdays.length > 0 && (
             <span title={`Anniversaire${birthdays.length > 1 ? 's' : ''} : ${birthdays.map((b) => b.name).join(', ')}`}
               className="cursor-default text-xs leading-none">🎂</span>
@@ -222,6 +233,12 @@ export function DayCell({ day, tint, emphasize, fit, onEdit, onCreate, onStep, o
           </button>
         </div>
       </header>
+      {massLabel && !chosenMass && (
+        <div onClick={(e) => e.stopPropagation()} title={`Messe — ${massLabel} (à prévoir)`}
+          className="mb-1 flex items-center gap-1 rounded bg-[#a78bfa]/12 px-1 py-0.5 text-[10px] font-medium text-[#a78bfa]">
+          <Church size={9} className="shrink-0" /><span className="truncate">Messe · {massLabel}</span>
+        </div>
+      )}
       {spans.length > 0 && (
         <div className="mb-1 space-y-0.5" onClick={(e) => e.stopPropagation()}>
           {spans.map((t) => {
@@ -359,43 +376,31 @@ export function DayCell({ day, tint, emphasize, fit, onEdit, onCreate, onStep, o
 function FourWeeks({ anchor, onEdit, onCreate, onStep, onMove }: {
   anchor: Date; onEdit: (t: Task) => void; onCreate: (d: string) => void; onStep: (st: Step) => void; onMove: MoveFn
 }) {
+  // Vraie grille du mois : la 1re semaine est celle qui contient le 1er ; on ajoute
+  // autant de semaines (4 à 6) qu'il en faut pour couvrir tout le mois.
+  const monthStart = startOfMonth(anchor)
   const weeks = useMemo(() => {
-    const first = startOfWeek(anchor, { weekStartsOn: 1 })
-    return [0, 1, 2, 3].map((w) => {
-      const start = addWeeks(first, w)
-      return eachDayOfInterval({ start, end: endOfWeek(start, { weekStartsOn: 1 }) })
-    })
-  }, [anchor])
+    const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 })
+    const gridEnd = endOfWeek(endOfMonth(anchor), { weekStartsOn: 1 })
+    const out: Date[][] = []
+    for (let start = gridStart; start <= gridEnd; start = addWeeks(start, 1)) {
+      out.push(eachDayOfInterval({ start, end: endOfWeek(start, { weekStartsOn: 1 }) }))
+    }
+    return out
+  }, [monthStart]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Mois dominant : celui qui a le plus de jours dans la fenêtre de 4 semaines.
-  const dominantMonth = useMemo(() => {
-    const counts = new Map<string, { date: Date; n: number }>()
-    weeks.flat().forEach((d) => {
-      const key = format(d, 'yyyy-MM')
-      const cur = counts.get(key)
-      if (cur) cur.n++
-      else counts.set(key, { date: d, n: 1 })
-    })
-    return [...counts.values()].sort((a, b) => b.n - a.n)[0]?.date ?? anchor
-  }, [weeks, anchor])
-
-  // Teinte de fond par mois : distingue visuellement les mois qui se chevauchent.
-  const monthTints = useMemo(() => {
-    const keys = [...new Set(weeks.flat().map((d) => format(d, 'yyyy-MM')))]
-    const TINTS = ['rgba(120,140,190,0.00)', 'rgba(140,120,190,0.10)', 'rgba(120,170,150,0.10)']
-    const map = new Map<string, string>()
-    keys.forEach((k, i) => map.set(k, TINTS[i % TINTS.length]))
-    return map
-  }, [weeks])
+  // Jours hors du mois affiché : légèrement atténués pour rester lisibles sans distraire.
+  const outsideTint = 'rgba(120,120,140,0.10)'
 
   return (
     <>
-      <p className="text-center text-sm font-medium capitalize">{format(dominantMonth, 'MMMM yyyy', { locale: fr })}</p>
+      <p className="text-center text-sm font-medium capitalize">{format(monthStart, 'MMMM yyyy', { locale: fr })}</p>
       <div className="space-y-2">
         {weeks.map((days, i) => (
           <div key={i} className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 md:grid-cols-7">
             {days.map((day) => (
-              <DayCell key={day.toISOString()} day={day} tint={monthTints.get(format(day, 'yyyy-MM'))}
+              <DayCell key={day.toISOString()} day={day}
+                tint={isSameMonth(day, monthStart) ? undefined : outsideTint}
                 onEdit={onEdit} onCreate={onCreate} onStep={onStep} onMove={onMove} />
             ))}
           </div>
@@ -460,6 +465,9 @@ function AllDayBand({ day, onEdit, onStep, onMove, onCreate }: {
   const [over, setOver] = useState(false)
   const steps = stepsForDay(s.steps, day).filter(stepVisible)
   const feast = layers.fetes && s.settings?.catholic_feasts !== false ? feastOnDay(day) : null
+  const rawMass = layers.messes ? firstFridayOrSaturday(day) : null
+  const massLabel = rawMass && iso(day) >= todayIso() && day <= addMonths(new Date(), 6) ? rawMass : null
+  const chosenMass = massLabel ? chosenMassForDay(s.checks, iso(day)) : null
   const untimed = [...tasksForDay(s.tasks, day)].filter((t) => !extractHourMinute(t.title)).filter(taskVisible)
   // Évènements multi-jours d'abord : leurs barres fines s'alignent d'un jour à l'autre (continuité).
   const spanEvents = untimed.filter((t) => spanPart(t, iso(day)) !== 'single')
@@ -505,6 +513,14 @@ function AllDayBand({ day, onEdit, onStep, onMove, onCreate }: {
         <div title={`Grande fête catholique : ${feast}`}
           className="flex items-center gap-1 truncate rounded bg-sun/15 px-1 py-0.5 text-[10px] font-medium text-sun-soft">
           <span className="shrink-0">✝</span><span className="truncate">{feast}</span>
+        </div>
+      )}
+      {massLabel && (
+        <div title={`Messe — ${massLabel}${chosenMass ? ` : ${chosenMass}` : ' (à prévoir)'}`}
+          className={`flex items-center gap-1 truncate rounded px-1 py-0.5 text-[10px] font-medium ${
+            chosenMass ? 'bg-good/15 text-[#4cc79a]' : 'bg-[#a78bfa]/15 text-[#a78bfa]'
+          }`}>
+          <Church size={10} className="shrink-0" /><span className="truncate">{chosenMass ?? `Messe · ${massLabel}`}</span>
         </div>
       )}
       {isMarketParkingDay(s.tasks, day) && (

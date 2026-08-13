@@ -8,6 +8,7 @@ const SECTIONS: { key: ShoppingSection; label: string }[] = [
   { key: 'alimentaire', label: 'Alimentaire' },
   { key: 'bio', label: 'Bio' },
   { key: 'non_alimentaire', label: 'Non-alimentaire' },
+  { key: 'boucherie', label: 'Boucherie' },
 ]
 
 /** Regroupe des items par sous-catégorie, en respectant l'ordre d'apparition. */

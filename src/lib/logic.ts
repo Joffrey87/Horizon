@@ -332,6 +332,25 @@ export function obligationLabel(day: Date): string {
   return ''
 }
 
+/** 1er vendredi / 1er samedi du mois (dévotions) — null sinon. */
+export function firstFridayOrSaturday(day: Date): '1er vendredi' | '1er samedi' | null {
+  const wd = getISODay(day)
+  const first = getDate(day) <= 7
+  if (wd === 5 && first) return '1er vendredi'
+  if (wd === 6 && first) return '1er samedi'
+  return null
+}
+
+/** Messe déjà choisie pour ce jour (dans une vérification messe_travail) — sinon null. */
+export function chosenMassForDay(checks: Check[], dayIso: string): string | null {
+  for (const c of checks) {
+    if (c.kind !== 'messe_travail') continue
+    const chosen = (c.config?.chosen ?? {}) as Record<string, string>
+    if (chosen[dayIso]) return chosen[dayIso]
+  }
+  return null
+}
+
 /** Est-ce que je travaille ce jour-là ? = un évènement importé du planning CAPS
  *  (notes « source:caps ») ce jour, qui n'est pas un congé posé (V / Vf). */
 export function worksOn(tasks: Task[], day: Date): boolean {

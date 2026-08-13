@@ -322,7 +322,7 @@ export interface NewsDigest {
 
 // ---- Listes de courses (page « Listes » sous Vérifications) ---------------
 
-export type ShoppingSection = 'alimentaire' | 'bio' | 'non_alimentaire'
+export type ShoppingSection = 'alimentaire' | 'bio' | 'non_alimentaire' | 'boucherie'
 
 export interface ShoppingList {
   id: UUID
