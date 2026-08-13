@@ -9,6 +9,8 @@ import { Card, Badge } from '../components/ui'
 const PASSAGE_KEY = (ref: string) => `horizon.gospel.passage.${ref}`
 const QUIZ_KEY = (ref: string, lvl: number) => `horizon.gospel.quiz.${ref}.${lvl}`
 const MAXLEVEL_KEY = (ref: string) => `horizon.gospel.maxlevel.${ref}`
+const GENTS_KEY = (ref: string) => `horizon.gospel.gents.${ref}` // horodatage de la session de quiz
+const RESET_MS = 3_600_000 // 1 h : au-delà, on repart au niveau 1 (quiz régénéré)
 
 /** Découpe un passage « [n] texte… » en versets, pour afficher les n° en petit gris. */
 function parseVerses(passage: string): { n: string; text: string }[] {
@@ -38,6 +40,8 @@ export function EvangileView() {
   const [quizError, setQuizError] = useState<string | null>(null)
   const inflight = useRef<Set<number>>(new Set())
   const autoStarted = useRef(false)
+  const maxLevelRef = useRef(maxLevel)
+  useEffect(() => { maxLevelRef.current = maxLevel }, [maxLevel])
 
   // Passage complet depuis getbible.net (Segond 1910, sans clé), cache par référence.
   useEffect(() => {
@@ -62,17 +66,31 @@ export function EvangileView() {
     } catch { return null }
   }
 
+  // Questions déjà posées aux niveaux inférieurs (pour ne pas les répéter).
+  const gatherAvoid = (level: number): string[] => {
+    const out: string[] = []
+    for (let l = 1; l < level; l++) {
+      const q = getCached(l)
+      if (q) out.push(...q.questions.map((x) => x.question))
+    }
+    return out
+  }
+
   // Génère (ou renvoie depuis le cache) un niveau. Un seul appel par niveau.
   const generateLevel = async (level: number, silent = false): Promise<GospelQuiz | null> => {
     const cached = getCached(level)
     if (cached) return cached
     if (inflight.current.has(level)) return null
     inflight.current.add(level); setQuizBusy(true)
-    const r = await s.gospelQuiz(daily.reference, passage ?? '', level)
+    const r = await s.gospelQuiz(daily.reference, passage ?? '', level,
+      { keyVerse: daily.verse, verseRef: daily.verseRef, avoid: gatherAvoid(level) })
     inflight.current.delete(level); setQuizBusy(false)
     if (r.ok && r.quiz) {
       localStorage.setItem(QUIZ_KEY(daily.reference, level), JSON.stringify(r.quiz))
-      if (level > maxLevel) { setMaxLevel(level); localStorage.setItem(MAXLEVEL_KEY(daily.reference), String(level)) }
+      if (level > maxLevelRef.current) {
+        maxLevelRef.current = level; setMaxLevel(level)
+        localStorage.setItem(MAXLEVEL_KEY(daily.reference), String(level))
+      }
       return r.quiz
     }
     if (!silent) setQuizError(r.error?.includes('ANTHROPIC') ? 'Quiz indisponible : clé API Anthropic à configurer.' : (r.error ?? 'Quiz indisponible.'))
@@ -89,11 +107,18 @@ export function EvangileView() {
   // Prépare un niveau en arrière-plan sans l'ouvrir (pré-génération silencieuse).
   const prefetchLevel = (level: number) => { void generateLevel(level, true) }
 
-  // Niveau 1 lancé automatiquement à chaque jour (nouvelle référence = nouvelle
-  // génération ; même jour = repris du cache, gratuit).
+  // À l'ouverture : on repart TOUJOURS au niveau 1. Si la dernière session date
+  // de ≥ 1 h (ou passage différent), on purge le cache pour régénérer un quiz frais.
   useEffect(() => {
     if (loadingPassage || autoStarted.current) return
     autoStarted.current = true
+    const ts = Number(localStorage.getItem(GENTS_KEY(daily.reference)) || 0)
+    if (!ts || Date.now() - ts >= RESET_MS) {
+      for (let l = 1; l <= maxLevelRef.current; l++) localStorage.removeItem(QUIZ_KEY(daily.reference, l))
+      localStorage.removeItem(MAXLEVEL_KEY(daily.reference))
+      maxLevelRef.current = 0; setMaxLevel(0)
+      localStorage.setItem(GENTS_KEY(daily.reference), String(Date.now()))
+    }
     void startLevel(1)
   }, [loadingPassage]) // eslint-disable-line react-hooks/exhaustive-deps
 

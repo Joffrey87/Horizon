@@ -47,7 +47,7 @@ interface HorizonState {
   toggleHabitToday: (habitId: string, date: string) => Promise<void>
   cycleHabitDay: (habitId: string, date: string) => Promise<void>
   refreshNews: () => Promise<{ ok: boolean; updated?: number; error?: string }>
-  gospelQuiz: (reference: string, passage: string, level: number) => Promise<{ ok: boolean; quiz?: GospelQuiz; error?: string }>
+  gospelQuiz: (reference: string, passage: string, level: number, opts?: { keyVerse?: string; verseRef?: string; avoid?: string[] }) => Promise<{ ok: boolean; quiz?: GospelQuiz; error?: string }>
   clearRecovery: () => void
   signOut: () => Promise<void>
 }
@@ -217,10 +217,10 @@ export const useHorizon = create<HorizonState>((set, get) => ({
 
   // Page Écritures : quiz de mémorisation généré à la demande par l'edge function.
   // (Le passage lui-même vient de getbible.net, sans clé — voir lib/bible.ts.)
-  gospelQuiz: async (reference, passage, level) => {
+  gospelQuiz: async (reference, passage, level, opts) => {
     try {
       const { data, error } = await supabase.functions.invoke('horizon-gospel', {
-        body: { mode: 'quiz', reference, passage, level },
+        body: { reference, passage, level, keyVerse: opts?.keyVerse, verseRef: opts?.verseRef, avoid: opts?.avoid },
       })
       if (error) throw error
       if (data?.error) throw new Error(data.error)

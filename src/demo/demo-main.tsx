@@ -149,15 +149,22 @@ useHorizon.setState({
   },
 
   // Démo : quiz factice (le passage, lui, vient vraiment de getbible.net).
+  // 4 questions ; QCM aux niveaux 1-2, textes à trous aux niveaux 3-4.
   gospelQuiz: async (_reference, _passage, level) => ({
     ok: true,
     quiz: {
       level,
-      intro: `Quiz de démonstration — niveau ${level} (sur le sens).`,
-      questions: [
+      intro: `Quiz de démonstration — niveau ${level}.`,
+      questions: level <= 2 ? [
         { id: 'q1', type: 'qcm', question: 'Quel est le message central du passage ?', choices: ['Mettre sa confiance en Dieu', 'Décrire la nature', 'Raconter une bataille'], answer: 'Mettre sa confiance en Dieu' },
         { id: 'q2', type: 'qcm', question: 'À quoi ce passage nous invite-t-il concrètement ?', choices: ['Persévérer sans nous épuiser', 'Fuir toute épreuve', 'Chercher la richesse'], answer: 'Persévérer sans nous épuiser' },
-        { id: 'q3', type: 'texte', question: 'Quel mot clé exprime ce qu’on retrouve en Dieu ?', answer: 'force', hint: 'ce qui est renouvelé' },
+        { id: 'q3', type: 'qcm', question: 'Formulation exacte du verset clé ?', choices: ['renouvellent leur force', 'retrouvent leur courage', 'gardent leur calme'], answer: 'renouvellent leur force' },
+        { id: 'q4', type: 'qcm', question: 'Ils prennent leur vol comme les… ?', choices: ['aigles', 'oiseaux', 'anges'], answer: 'aigles' },
+      ] : [
+        { id: 'q1', type: 'qcm', question: '« Ne se fatigue point » souligne surtout…', choices: ['Que Dieu ne s’épuise jamais', 'Que l’homme ne se fatigue plus', 'Que la fatigue est un péché'], answer: 'Que Dieu ne s’épuise jamais' },
+        { id: 'q2', type: 'qcm', question: 'Quelle leçon de fond pour ta vie de foi ?', choices: ['L’endurance vient de la confiance en Dieu', 'Les forts réussissent toujours', 'Il faut éviter tout effort'], answer: 'L’endurance vient de la confiance en Dieu' },
+        { id: 'q3', type: 'texte', question: 'Complète : « Ils prennent leur vol comme les ___ ».', answer: 'aigles', hint: 'un rapace' },
+        { id: 'q4', type: 'texte', question: 'Complète : « ils courent, et ne se ___ point ; ils marchent, et ne se ___ point ».', answer: 'lassent fatiguent' },
       ],
     },
   }),
