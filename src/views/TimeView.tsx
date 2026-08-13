@@ -4,12 +4,12 @@ import {
   getISODay, isSameMonth, isToday, parseISO, startOfMonth, startOfWeek,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, RotateCw, Layers, Star, Target, Church, AlertTriangle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, RotateCw, Layers, Star, Target, Church, AlertTriangle, ExternalLink, Check, X } from 'lucide-react'
 import { useHorizon } from '../lib/store'
-import { compareTasksByTitleTime, extractHourMinute, iso, tasksForDay, recurrenceLabel, timeQuoteOfDay, spanPart, birthdaysForDay, isMarketParkingDay, feastOnDay, extractEmojis, firstFridayOrSaturday, chosenMassForDay, todayIso } from '../lib/logic'
+import { compareTasksByTitleTime, extractHourMinute, iso, tasksForDay, recurrenceLabel, timeQuoteOfDay, spanPart, birthdaysForDay, isMarketParkingDay, feastOnDay, extractEmojis, firstFridayOrSaturday, chosenMassForDay, todayIso, massesInfoUrl } from '../lib/logic'
 import { Card, Seg, Modal, ProjectTag } from '../components/ui'
 import { TaskForm } from '../components/TaskForm'
-import type { Objective, Step, Task } from '../lib/types'
+import type { MassConfig, MassSlot, Objective, Step, Task } from '../lib/types'
 
 type View = '4sem' | 'semaine' | 'trimestre' | 'annee'
 type Kind = 'task' | 'step' | 'objective'
@@ -33,6 +33,8 @@ function loadLayers(): CalLayers {
   catch { return DEFAULT_LAYERS }
 }
 const LayersCtx = createContext<{ layers: CalLayers; arilId: string | null }>({ layers: DEFAULT_LAYERS, arilId: null })
+// Ouvre le sélecteur de messe pour un jour de dévotion (1er vendredi/samedi).
+const MassPickCtx = createContext<(dayIso: string, label: string) => void>(() => {})
 
 /** Couches actives + prédicats de visibilité (un élément « ARIL » = rattaché au domaine « ARIL »). */
 function useLayerFilter() {
@@ -55,6 +57,7 @@ export function TimeView() {
   const [createDate, setCreateDate] = useState<string | null>(null)
   const [overrideScheduled, setOverrideScheduled] = useState<string | undefined>(undefined)
   const [openStep, setOpenStep] = useState<Step | null>(null)
+  const [massPick, setMassPick] = useState<{ date: string; label: string } | null>(null)
   const [layers, setLayers] = useState<CalLayers>(loadLayers)
   const arilId = useMemo(() => s.domains.find((d) => /aril/i.test(d.name))?.id ?? null, [s.domains])
   const toggleLayer = (k: keyof CalLayers) => setLayers((prev) => {
@@ -131,13 +134,17 @@ export function TimeView() {
       </div>
 
       <LayersCtx.Provider value={{ layers, arilId }}>
-        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-0.5">
-          {view === '4sem' && <FourWeeks anchor={anchor} {...common} />}
-          {view === 'semaine' && <WeekHours anchor={anchor} {...common} />}
-          {view === 'trimestre' && <MultiMonth anchor={anchor} months={3} {...common} />}
-          {view === 'annee' && <MultiMonth anchor={anchor} months={12} yearMode {...common} />}
-        </div>
+        <MassPickCtx.Provider value={(date, label) => setMassPick({ date, label })}>
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-0.5">
+            {view === '4sem' && <FourWeeks anchor={anchor} {...common} />}
+            {view === 'semaine' && <WeekHours anchor={anchor} {...common} />}
+            {view === 'trimestre' && <MultiMonth anchor={anchor} months={3} {...common} />}
+            {view === 'annee' && <MultiMonth anchor={anchor} months={12} yearMode {...common} />}
+          </div>
+        </MassPickCtx.Provider>
       </LayersCtx.Provider>
+
+      {massPick && <MassPicker pick={massPick} onClose={() => setMassPick(null)} />}
 
       <TaskForm open={editing !== null || createDate !== null} task={editing}
         defaultDate={createDate ?? undefined} overrideScheduled={overrideScheduled}
@@ -168,6 +175,93 @@ function readDrag(e: React.DragEvent): { kind: Kind; id: string } | null {
   try { return JSON.parse(raw) } catch { return null }
 }
 
+// ---- Sélecteur de messe (jours de dévotion : 1er vendredi / samedi) --------
+
+function MassPicker({ pick, onClose }: { pick: { date: string; label: string }; onClose: () => void }) {
+  const s = useHorizon()
+  const check = s.checks.find((c) => c.kind === 'messe_travail')
+  const cfg = (check?.config ?? {}) as MassConfig
+  const chosen = cfg.chosen ?? {}
+  const homeCity = s.settings?.home_city ?? 'Reims'
+  const wd = String(getISODay(parseISO(pick.date)))
+  const masses: MassSlot[] = cfg.masses?.[wd] ?? []
+  const current = chosen[pick.date]
+  const tag = check ? `source:check:${check.id}` : ''
+
+  // Pose l'évènement calendaire pour ce jour (en remplaçant l'ancien s'il existe).
+  const setEvent = async (title: string) => {
+    const prev = s.tasks.find((t) => t.notes === tag && t.scheduled_date === pick.date)
+    if (prev) await s.remove('tasks', prev.id)
+    if (title) await s.insert('tasks', {
+      title, is_task: false, scheduled_date: pick.date,
+      domain_id: check?.domain_id ?? null, duration_min: 60, notes: tag, status: 'a_faire',
+    })
+  }
+  const choose = async (m: MassSlot) => {
+    if (!check) return
+    await setEvent(`Messe ${m.t.replace(':', 'h')} — ${m.c}`)
+    await s.update('checks', check.id, { config: { ...cfg, chosen: { ...chosen, [pick.date]: `${m.t} ${m.c}` } } })
+    onClose()
+  }
+  const clear = async () => {
+    if (!check) return
+    await setEvent('')
+    const next = { ...chosen }; delete next[pick.date]
+    await s.update('checks', check.id, { config: { ...cfg, chosen: next } })
+    onClose()
+  }
+
+  const dayLabel = format(parseISO(pick.date), 'EEEE d MMMM', { locale: fr })
+
+  return (
+    <Modal open onClose={onClose} title={`Messe — ${pick.label}`}>
+      <p className="mb-1 text-sm capitalize text-ink-2">{dayLabel}</p>
+      {!check ? (
+        <p className="text-sm text-ink-3">
+          Configure d’abord une vérification « messe » (onglet Vérifications) pour mémoriser tes choix de messe.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {current && (
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-good/40 bg-good/10 px-3 py-2">
+              <span className="text-sm text-ink">Choisie : {current}</span>
+              <button onClick={() => void clear()} className="btn-ghost flex items-center gap-1 px-2 py-1 text-xs" title="Retirer le choix">
+                <X size={13} /> Retirer
+              </button>
+            </div>
+          )}
+          {masses.length > 0 ? (
+            <ul className="space-y-1">
+              {masses.map((m) => {
+                const val = `${m.t} ${m.c}`
+                const active = current === val
+                return (
+                  <li key={val}>
+                    <button onClick={() => void choose(m)}
+                      className={`flex w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-left text-sm transition-colors ${
+                        active ? 'border-good/60 bg-good/10' : 'border-line hover:bg-panel-2'
+                      }`}>
+                      <span className="w-14 shrink-0 tabular-nums text-ink-2">{m.t}</span>
+                      <span className="min-w-0 flex-1 truncate text-ink">{m.c}</span>
+                      {active && <Check size={14} className="text-good" />}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <p className="text-sm text-ink-3">Aucun horaire connu pour ce jour dans ta liste. Utilise le lien ci-dessous.</p>
+          )}
+          <a href={massesInfoUrl(homeCity)} target="_blank" rel="noreferrer"
+            className="btn-ghost inline-flex items-center gap-1.5 px-3 py-1.5 text-xs">
+            <ExternalLink size={13} /> Voir les messes sur messes.info ({homeCity})
+          </a>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
 // ---- Cellule d'un jour (partagée par 4 semaines) --------------------------
 
 export function DayCell({ day, tint, emphasize, fit, onEdit, onCreate, onStep, onMove }: {
@@ -176,6 +270,7 @@ export function DayCell({ day, tint, emphasize, fit, onEdit, onCreate, onStep, o
 }) {
   const s = useHorizon()
   const { layers, taskVisible, stepVisible } = useLayerFilter()
+  const openMassPicker = useContext(MassPickCtx)
   const [over, setOver] = useState(false)
   const today = isToday(day)
   const dayIso = iso(day)
@@ -219,10 +314,11 @@ export function DayCell({ day, tint, emphasize, fit, onEdit, onCreate, onStep, o
               className="cursor-default text-xs font-semibold leading-none text-sun-soft">✝</span>
           )}
           {massLabel && (
-            <span title={`Messe — ${massLabel}${chosenMass ? ` : ${chosenMass}` : ' (à prévoir)'}`}
-              className={`cursor-default leading-none ${chosenMass ? 'text-[#4cc79a]' : 'text-[#a78bfa]'}`}>
+            <button onClick={(e) => { e.stopPropagation(); openMassPicker(dayIso, massLabel) }}
+              title={`Messe — ${massLabel}${chosenMass ? ` : ${chosenMass}` : ' (cliquer pour choisir)'}`}
+              className={`leading-none transition-opacity hover:opacity-70 ${chosenMass ? 'text-[#4cc79a]' : 'text-[#a78bfa]'}`}>
               <Church size={11} />
-            </span>
+            </button>
           )}
           {birthdays.length > 0 && (
             <span title={`Anniversaire${birthdays.length > 1 ? 's' : ''} : ${birthdays.map((b) => b.name).join(', ')}`}
@@ -234,10 +330,10 @@ export function DayCell({ day, tint, emphasize, fit, onEdit, onCreate, onStep, o
         </div>
       </header>
       {massLabel && !chosenMass && (
-        <div onClick={(e) => e.stopPropagation()} title={`Messe — ${massLabel} (à prévoir)`}
-          className="mb-1 flex items-center gap-1 rounded bg-[#a78bfa]/12 px-1 py-0.5 text-[10px] font-medium text-[#a78bfa]">
+        <button onClick={(e) => { e.stopPropagation(); openMassPicker(dayIso, massLabel) }} title="Choisir la messe"
+          className="mb-1 flex w-full items-center gap-1 rounded bg-[#a78bfa]/12 px-1 py-0.5 text-[10px] font-medium text-[#a78bfa] hover:bg-[#a78bfa]/20">
           <Church size={9} className="shrink-0" /><span className="truncate">Messe · {massLabel}</span>
-        </div>
+        </button>
       )}
       {spans.length > 0 && (
         <div className="mb-1 space-y-0.5" onClick={(e) => e.stopPropagation()}>
@@ -462,6 +558,7 @@ function AllDayBand({ day, onEdit, onStep, onMove, onCreate }: {
 }) {
   const s = useHorizon()
   const { layers, taskVisible, stepVisible } = useLayerFilter()
+  const openMassPicker = useContext(MassPickCtx)
   const [over, setOver] = useState(false)
   const steps = stepsForDay(s.steps, day).filter(stepVisible)
   const feast = layers.fetes && s.settings?.catholic_feasts !== false ? feastOnDay(day) : null
@@ -516,12 +613,13 @@ function AllDayBand({ day, onEdit, onStep, onMove, onCreate }: {
         </div>
       )}
       {massLabel && (
-        <div title={`Messe — ${massLabel}${chosenMass ? ` : ${chosenMass}` : ' (à prévoir)'}`}
-          className={`flex items-center gap-1 truncate rounded px-1 py-0.5 text-[10px] font-medium ${
-            chosenMass ? 'bg-good/15 text-[#4cc79a]' : 'bg-[#a78bfa]/15 text-[#a78bfa]'
+        <button onClick={(e) => { e.stopPropagation(); openMassPicker(iso(day), massLabel) }}
+          title={`Messe — ${massLabel}${chosenMass ? ` : ${chosenMass}` : ' (cliquer pour choisir)'}`}
+          className={`flex w-full items-center gap-1 truncate rounded px-1 py-0.5 text-left text-[10px] font-medium ${
+            chosenMass ? 'bg-good/15 text-[#4cc79a] hover:bg-good/25' : 'bg-[#a78bfa]/15 text-[#a78bfa] hover:bg-[#a78bfa]/25'
           }`}>
           <Church size={10} className="shrink-0" /><span className="truncate">{chosenMass ?? `Messe · ${massLabel}`}</span>
-        </div>
+        </button>
       )}
       {isMarketParkingDay(s.tasks, day) && (
         <div title="Dimanche travaillé (début ≤ 15h) — marché dominical & stationnement compliqués"
