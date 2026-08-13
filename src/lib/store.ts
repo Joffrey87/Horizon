@@ -8,13 +8,13 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import type {
   Birthday, Check, Domain, GospelQuiz, Habit, HabitLog, Idea, Layout, NewsDigest, NewsTopic,
-  Objective, OlafatcoJob, Project, Review, Settings, Step, Task,
+  Objective, OlafatcoJob, Project, Review, Settings, ShoppingItem, ShoppingList, Step, Task,
 } from './types'
 
 type Table =
   | 'domains' | 'objectives' | 'projects' | 'steps' | 'tasks' | 'ideas'
   | 'habits' | 'habit_logs' | 'reviews' | 'layouts' | 'birthdays' | 'checks' | 'olafatco_jobs'
-  | 'news_topics' | 'news_digests'
+  | 'news_topics' | 'news_digests' | 'shopping_lists' | 'shopping_items'
 
 interface HorizonState {
   session: Session | null
@@ -36,6 +36,8 @@ interface HorizonState {
   olafatcoJobs: OlafatcoJob[]
   newsTopics: NewsTopic[]
   newsDigests: NewsDigest[]
+  shoppingLists: ShoppingList[]
+  shoppingItems: ShoppingItem[]
   settings: Settings | null
 
   init: () => Promise<void>
@@ -47,6 +49,7 @@ interface HorizonState {
   toggleHabitToday: (habitId: string, date: string) => Promise<void>
   cycleHabitDay: (habitId: string, date: string) => Promise<void>
   refreshNews: () => Promise<{ ok: boolean; updated?: number; error?: string }>
+  resetShopping: (listId: string) => Promise<void>
   gospelQuiz: (reference: string, passage: string, level: number, opts?: { keyVerse?: string; verseRef?: string; avoid?: string[] }) => Promise<{ ok: boolean; quiz?: GospelQuiz; error?: string }>
   clearRecovery: () => void
   signOut: () => Promise<void>
@@ -57,6 +60,7 @@ const COLLECTION: Record<Table, keyof HorizonState> = {
   ideas: 'ideas', habits: 'habits', habit_logs: 'habitLogs', reviews: 'reviews', layouts: 'layouts',
   birthdays: 'birthdays', checks: 'checks', olafatco_jobs: 'olafatcoJobs',
   news_topics: 'newsTopics', news_digests: 'newsDigests',
+  shopping_lists: 'shoppingLists', shopping_items: 'shoppingItems',
 }
 
 export const useHorizon = create<HorizonState>((set, get) => ({
@@ -66,7 +70,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   loading: false,
   domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
   habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
-  newsTopics: [], newsDigests: [], settings: null,
+  newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], settings: null,
 
   init: async () => {
     const { data } = await supabase.auth.getSession()
@@ -80,7 +84,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
         set({
           domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
           habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
-          newsTopics: [], newsDigests: [], settings: null,
+          newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], settings: null,
         })
       }
     })
@@ -89,7 +93,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
 
   loadAll: async () => {
     set({ loading: true })
-    const [dom, obj, pro, stp, tas, ide, hab, log, rev, lay, setg, bd, chk, oja, nto, ndi] = await Promise.all([
+    const [dom, obj, pro, stp, tas, ide, hab, log, rev, lay, setg, bd, chk, oja, nto, ndi, shl, shi] = await Promise.all([
       supabase.from('domains').select('*').order('sort_order'),
       supabase.from('objectives').select('*').order('sort_order'),
       supabase.from('projects').select('*').order('created_at'),
@@ -106,6 +110,8 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       supabase.from('olafatco_jobs').select('*').order('created_at', { ascending: false }),
       supabase.from('news_topics').select('*').order('sort_order'),
       supabase.from('news_digests').select('*'),
+      supabase.from('shopping_lists').select('*').order('sort_order'),
+      supabase.from('shopping_items').select('*').order('sort_order'),
     ])
     set({
       domains: dom.data ?? [], objectives: obj.data ?? [], projects: pro.data ?? [],
@@ -113,6 +119,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       habitLogs: log.data ?? [], reviews: rev.data ?? [], layouts: lay.data ?? [],
       birthdays: bd.data ?? [], checks: chk.data ?? [], olafatcoJobs: oja.data ?? [],
       newsTopics: nto.data ?? [], newsDigests: ndi.data ?? [],
+      shoppingLists: shl.data ?? [], shoppingItems: shi.data ?? [],
       settings: setg.data ?? null, loading: false,
     })
   },
@@ -156,6 +163,9 @@ export const useHorizon = create<HorizonState>((set, get) => ({
     if (table === 'domains') void get().loadAll()
     if (table === 'habits') {
       set({ habitLogs: get().habitLogs.filter((l) => l.habit_id !== id) })
+    }
+    if (table === 'shopping_lists') {
+      set({ shoppingItems: get().shoppingItems.filter((it) => it.list_id !== id) })
     }
   },
 
@@ -228,6 +238,13 @@ export const useHorizon = create<HorizonState>((set, get) => ({
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e) }
     }
+  },
+
+  // Remet à zéro une liste de courses (décoche tout) pour la prochaine tournée.
+  resetShopping: async (listId) => {
+    const { error } = await supabase.from('shopping_items').update({ checked: false }).eq('list_id', listId)
+    if (error) { console.error(error); return }
+    set({ shoppingItems: get().shoppingItems.map((it) => (it.list_id === listId ? { ...it, checked: false } : it)) })
   },
 
   clearRecovery: () => set({ recovery: false }),

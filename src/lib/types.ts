@@ -320,6 +320,31 @@ export interface NewsDigest {
   generated_at: string
 }
 
+// ---- Listes de courses (page « Listes » sous Vérifications) ---------------
+
+export type ShoppingSection = 'alimentaire' | 'bio' | 'non_alimentaire'
+
+export interface ShoppingList {
+  id: UUID
+  user_id: UUID
+  name: string
+  recurrent: boolean   // liste récurrente à 3 rayons (alimentaire/bio/non-alimentaire)
+  sort_order: number
+  created_at: string
+}
+
+export interface ShoppingItem {
+  id: UUID
+  user_id: UUID
+  list_id: UUID
+  label: string
+  section: ShoppingSection | null  // rayon (liste récurrente) ; null sinon
+  category: string | null          // sous-groupe (ex. « Viande », « Fruits ») ; null si autonome
+  checked: boolean                 // acheté (coché, sans rayer)
+  sort_order: number
+  created_at: string
+}
+
 // ---- Évangile / quiz (onglet « Activités ») ------------------------------
 
 export interface GospelQuestion {

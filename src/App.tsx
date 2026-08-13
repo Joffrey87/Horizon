@@ -15,7 +15,9 @@ import { ActivitesLayout } from './views/ActivitesLayout'
 import { ActualitesView } from './views/ActualitesView'
 import { EvangileView } from './views/EvangileView'
 import { ReviewsView } from './views/ReviewsView'
+import { VerificationsLayout } from './views/VerificationsLayout'
 import { VerificationsView } from './views/VerificationsView'
+import { ListesView } from './views/ListesView'
 import { HeuresControleView } from './views/HeuresControleView'
 import { WorkspaceView } from './views/WorkspaceView'
 import { SettingsView } from './views/SettingsView'
@@ -52,7 +54,10 @@ export default function App() {
           <Route path="ecritures" element={<EvangileView />} />
         </Route>
         <Route path="/revues" element={<ReviewsView />} />
-        <Route path="/verifications" element={<VerificationsView />} />
+        <Route path="/verifications" element={<VerificationsLayout />}>
+          <Route index element={<VerificationsView />} />
+          <Route path="listes" element={<ListesView />} />
+        </Route>
         <Route path="/heures-controle" element={<HeuresControleView />} />
         <Route path="/espace" element={<WorkspaceView />} />
         <Route path="/parametres" element={<SettingsView />} />

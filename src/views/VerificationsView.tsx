@@ -36,7 +36,7 @@ export function VerificationsView() {
   const alerts = checks.filter((c) => c.kind !== 'checklist')
 
   return (
-    <div className="rise space-y-6 pt-4">
+    <div className="rise space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold"><ShieldCheck size={20} className="text-sun" /> Vérifications</h1>

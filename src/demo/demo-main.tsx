@@ -21,7 +21,9 @@ import { ActivitesLayout } from '../views/ActivitesLayout'
 import { ActualitesView } from '../views/ActualitesView'
 import { EvangileView } from '../views/EvangileView'
 import { ReviewsView } from '../views/ReviewsView'
+import { VerificationsLayout } from '../views/VerificationsLayout'
 import { VerificationsView } from '../views/VerificationsView'
+import { ListesView } from '../views/ListesView'
 import { HeuresControleView } from '../views/HeuresControleView'
 import { WorkspaceView } from '../views/WorkspaceView'
 import { SettingsView } from '../views/SettingsView'
@@ -36,7 +38,7 @@ useHorizon.setState({
   session: { user: { id: uid, email: 'demo@horizon.local' } } as unknown as Session,
   domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
   habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
-  newsTopics: [], newsDigests: [], settings: null,
+  newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], settings: null,
 })
 
 // Mode démo pleinement interactif : les mutations restent locales (aucun réseau,
@@ -46,6 +48,7 @@ const KEY: Record<string, keyof ReturnType<typeof useHorizon.getState>> = {
   tasks: 'tasks', ideas: 'ideas', habits: 'habits', habit_logs: 'habitLogs',
   reviews: 'reviews', layouts: 'layouts', birthdays: 'birthdays', checks: 'checks',
   olafatco_jobs: 'olafatcoJobs', news_topics: 'newsTopics', news_digests: 'newsDigests',
+  shopping_lists: 'shoppingLists', shopping_items: 'shoppingItems',
 }
 let seq = 1000
 const genId = () => `demo-${seq++}`
@@ -62,7 +65,11 @@ useHorizon.setState({
       ? { start_date: new Date().toISOString().slice(0, 10) }
       : table === 'news_topics'
         ? { active: true, sort_order: 0 }
-        : {}
+        : table === 'shopping_lists'
+          ? { recurrent: false, sort_order: 0 }
+          : table === 'shopping_items'
+            ? { checked: false, sort_order: 0 }
+            : {}
     const row = { id: genId(), user_id: uid, created_at: new Date().toISOString(), ...defaults, ...values }
     const list = useHorizon.getState()[key] as unknown[]
     useHorizon.setState({ [key]: [...list, row] } as never)
@@ -148,6 +155,11 @@ useHorizon.setState({
     return { ok: true, updated: digests.length }
   },
 
+  resetShopping: async (listId) => {
+    const items = useHorizon.getState().shoppingItems
+    useHorizon.setState({ shoppingItems: items.map((it) => (it.list_id === listId ? { ...it, checked: false } : it)) })
+  },
+
   // Démo : quiz factice (le passage, lui, vient vraiment de getbible.net).
   // 4 questions ; QCM aux niveaux 1-2, textes à trous aux niveaux 3-4.
   gospelQuiz: async (_reference, _passage, level) => ({
@@ -194,7 +206,10 @@ root.render(
               <Route path="ecritures" element={<EvangileView />} />
             </Route>
             <Route path="/revues" element={<ReviewsView />} />
-            <Route path="/verifications" element={<VerificationsView />} />
+            <Route path="/verifications" element={<VerificationsLayout />}>
+              <Route index element={<VerificationsView />} />
+              <Route path="listes" element={<ListesView />} />
+            </Route>
             <Route path="/heures-controle" element={<HeuresControleView />} />
             <Route path="/espace" element={<WorkspaceView />} />
             <Route path="/parametres" element={<SettingsView />} />
