@@ -1,8 +1,9 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Newspaper, BookOpen } from 'lucide-react'
+import { Newspaper, BookOpen, Star } from 'lucide-react'
 
 const TABS = [
   { to: '/activites/actualites', label: 'Actualités', icon: Newspaper },
+  { to: '/activites/importantes', label: 'Actualités importantes', icon: Star },
   { to: '/activites/ecritures', label: 'Écritures', icon: BookOpen },
 ]
 

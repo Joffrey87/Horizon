@@ -7,7 +7,7 @@ import { create } from 'zustand'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import type {
-  Birthday, Check, Domain, GospelQuiz, Habit, HabitLog, Idea, Layout, NewsDigest, NewsTopic,
+  Birthday, Check, Domain, GospelQuiz, Habit, HabitLog, Idea, Layout, NewsDigest, NewsKind, NewsTopic,
   Objective, OlafatcoJob, Project, Review, Settings, ShoppingItem, ShoppingList, Step, Task,
 } from './types'
 
@@ -21,6 +21,10 @@ interface HorizonState {
   recovery: boolean
   ready: boolean
   loading: boolean
+  /** Dernier échec réseau/Supabase, en clair. Affiché par le bandeau du Shell.
+   *  Sans lui, une panne se présentait comme un compte vide et une écriture
+   *  perdue comme un succès. */
+  error: string | null
   domains: Domain[]
   objectives: Objective[]
   projects: Project[]
@@ -48,10 +52,11 @@ interface HorizonState {
   saveSettings: (values: Partial<Settings>) => Promise<void>
   toggleHabitToday: (habitId: string, date: string) => Promise<void>
   cycleHabitDay: (habitId: string, date: string) => Promise<void>
-  refreshNews: () => Promise<{ ok: boolean; updated?: number; error?: string }>
+  refreshNews: (mode?: NewsKind) => Promise<{ ok: boolean; updated?: number; error?: string }>
   resetShopping: (listId: string) => Promise<void>
   gospelQuiz: (reference: string, passage: string, level: number, opts?: { keyVerse?: string; verseRef?: string; avoid?: string[] }) => Promise<{ ok: boolean; quiz?: GospelQuiz; error?: string }>
   clearRecovery: () => void
+  clearError: () => void
   signOut: () => Promise<void>
 }
 
@@ -68,6 +73,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   recovery: false,
   ready: false,
   loading: false,
+  error: null,
   domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
   habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
   newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], settings: null,
@@ -92,8 +98,8 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   },
 
   loadAll: async () => {
-    set({ loading: true })
-    const [dom, obj, pro, stp, tas, ide, hab, log, rev, lay, setg, bd, chk, oja, nto, ndi, shl, shi] = await Promise.all([
+    set({ loading: true, error: null })
+    const responses = await Promise.all([
       supabase.from('domains').select('*').order('sort_order'),
       supabase.from('objectives').select('*').order('sort_order'),
       supabase.from('projects').select('*').order('created_at'),
@@ -113,14 +119,25 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       supabase.from('shopping_lists').select('*').order('sort_order'),
       supabase.from('shopping_items').select('*').order('sort_order'),
     ])
+    const [dom, obj, pro, stp, tas, ide, hab, log, rev, lay, setg, bd, chk, oja, nto, ndi, shl, shi] = responses
+    // Une table en échec conserve ce qui était déjà chargé : mieux vaut un écran
+    // incomplet et signalé qu'un compte qui paraît vide.
+    const prev = get()
+    const keep = <T,>(res: { data: T[] | null; error: unknown }, fallback: T[]): T[] =>
+      res.error ? fallback : (res.data ?? [])
+    const failed = responses.filter((r) => r.error)
     set({
-      domains: dom.data ?? [], objectives: obj.data ?? [], projects: pro.data ?? [],
-      steps: stp.data ?? [], tasks: tas.data ?? [], ideas: ide.data ?? [], habits: hab.data ?? [],
-      habitLogs: log.data ?? [], reviews: rev.data ?? [], layouts: lay.data ?? [],
-      birthdays: bd.data ?? [], checks: chk.data ?? [], olafatcoJobs: oja.data ?? [],
-      newsTopics: nto.data ?? [], newsDigests: ndi.data ?? [],
-      shoppingLists: shl.data ?? [], shoppingItems: shi.data ?? [],
-      settings: setg.data ?? null, loading: false,
+      domains: keep(dom, prev.domains), objectives: keep(obj, prev.objectives), projects: keep(pro, prev.projects),
+      steps: keep(stp, prev.steps), tasks: keep(tas, prev.tasks), ideas: keep(ide, prev.ideas),
+      habits: keep(hab, prev.habits), habitLogs: keep(log, prev.habitLogs), reviews: keep(rev, prev.reviews),
+      layouts: keep(lay, prev.layouts), birthdays: keep(bd, prev.birthdays), checks: keep(chk, prev.checks),
+      olafatcoJobs: keep(oja, prev.olafatcoJobs), newsTopics: keep(nto, prev.newsTopics),
+      newsDigests: keep(ndi, prev.newsDigests), shoppingLists: keep(shl, prev.shoppingLists),
+      shoppingItems: keep(shi, prev.shoppingItems),
+      settings: setg.error ? prev.settings : (setg.data ?? null),
+      loading: false,
+      error: failed.length === 0 ? null
+        : `Chargement incomplet : ${failed.length} donnée${failed.length > 1 ? 's' : ''} n'a pas pu être lue (${failed[0]?.error?.message ?? 'réseau'}).`,
     })
   },
 
@@ -128,7 +145,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
     const user_id = get().session?.user.id
     if (!user_id) return null
     const { data, error } = await supabase.from(table).insert({ ...values, user_id }).select().single()
-    if (error || !data) { console.error(error); return null }
+    if (error || !data) { set({ error: `Création impossible : ${error?.message ?? 'réponse vide'}` }); return null }
     const key = COLLECTION[table]
     set({ [key]: [...(get()[key] as unknown[]), data] } as Partial<HorizonState>)
     return data
@@ -136,7 +153,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
 
   update: async (table, id, values) => {
     const { data, error } = await supabase.from(table).update(values).eq('id', id).select().single()
-    if (error || !data) { console.error(error); return null }
+    if (error || !data) { set({ error: `Enregistrement impossible : ${error?.message ?? 'réponse vide'}` }); return null }
     const key = COLLECTION[table]
     set({
       [key]: (get()[key] as { id: string }[]).map((row) => (row.id === id ? data : row)),
@@ -146,7 +163,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
 
   remove: async (table, id) => {
     const { error } = await supabase.from(table).delete().eq('id', id)
-    if (error) { console.error(error); return }
+    if (error) { set({ error: `Suppression impossible : ${error.message}` }); return }
     const key = COLLECTION[table]
     set({ [key]: (get()[key] as { id: string }[]).filter((row) => row.id !== id) } as Partial<HorizonState>)
     // cohérence locale minimale des cascades
@@ -175,20 +192,23 @@ export const useHorizon = create<HorizonState>((set, get) => ({
     const { data, error } = await supabase.from('settings')
       .upsert({ user_id, ...values, updated_at: new Date().toISOString() })
       .select().single()
-    if (!error && data) set({ settings: data })
+    if (error || !data) { set({ error: `Réglages non enregistrés : ${error?.message ?? 'réponse vide'}` }); return }
+    set({ settings: data })
   },
 
   toggleHabitToday: async (habitId, date) => {
     const existing = get().habitLogs.find((l) => l.habit_id === habitId && l.log_date === date)
     if (existing) {
-      await supabase.from('habit_logs').delete().eq('id', existing.id)
+      const { error } = await supabase.from('habit_logs').delete().eq('id', existing.id)
+      if (error) { set({ error: `Habitude non mise à jour : ${error.message}` }); return }
       set({ habitLogs: get().habitLogs.filter((l) => l.id !== existing.id) })
     } else {
       const user_id = get().session?.user.id
       if (!user_id) return
       const { data, error } = await supabase.from('habit_logs')
         .insert({ user_id, habit_id: habitId, log_date: date, done: true }).select().single()
-      if (!error && data) set({ habitLogs: [...get().habitLogs, data] })
+      if (error || !data) { set({ error: `Habitude non mise à jour : ${error?.message ?? 'réponse vide'}` }); return }
+      set({ habitLogs: [...get().habitLogs, data] })
     }
   },
 
@@ -200,21 +220,24 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       if (!user_id) return
       const { data, error } = await supabase.from('habit_logs')
         .insert({ user_id, habit_id: habitId, log_date: date, done: true }).select().single()
-      if (!error && data) set({ habitLogs: [...get().habitLogs, data] })
+      if (error || !data) { set({ error: `Habitude non mise à jour : ${error?.message ?? 'réponse vide'}` }); return }
+      set({ habitLogs: [...get().habitLogs, data] })
     } else if (existing.done) {
       const { error } = await supabase.from('habit_logs').update({ done: false }).eq('id', existing.id)
-      if (!error) set({ habitLogs: get().habitLogs.map((l) => (l.id === existing.id ? { ...l, done: false } : l)) })
+      if (error) { set({ error: `Habitude non mise à jour : ${error.message}` }); return }
+      set({ habitLogs: get().habitLogs.map((l) => (l.id === existing.id ? { ...l, done: false } : l)) })
     } else {
-      await supabase.from('habit_logs').delete().eq('id', existing.id)
+      const { error } = await supabase.from('habit_logs').delete().eq('id', existing.id)
+      if (error) { set({ error: `Habitude non mise à jour : ${error.message}` }); return }
       set({ habitLogs: get().habitLogs.filter((l) => l.id !== existing.id) })
     }
   },
 
   // Déclenche la régénération des synthèses d'actualités (edge function), puis
   // recharge le cache local. Le cron fait la même chose chaque matin.
-  refreshNews: async () => {
+  refreshNews: async (mode = 'jour') => {
     try {
-      const { data, error } = await supabase.functions.invoke('horizon-news', { body: { source: 'app' } })
+      const { data, error } = await supabase.functions.invoke('horizon-news', { body: { source: 'app', mode } })
       if (error) throw error
       const { data: digs } = await supabase.from('news_digests').select('*')
       set({ newsDigests: digs ?? [] })
@@ -243,11 +266,12 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   // Remet à zéro une liste de courses (décoche tout) pour la prochaine tournée.
   resetShopping: async (listId) => {
     const { error } = await supabase.from('shopping_items').update({ checked: false }).eq('list_id', listId)
-    if (error) { console.error(error); return }
+    if (error) { set({ error: `Liste non réinitialisée : ${error.message}` }); return }
     set({ shoppingItems: get().shoppingItems.map((it) => (it.list_id === listId ? { ...it, checked: false } : it)) })
   },
 
   clearRecovery: () => set({ recovery: false }),
+  clearError: () => set({ error: null }),
 
   signOut: async () => { await supabase.auth.signOut() },
 }))

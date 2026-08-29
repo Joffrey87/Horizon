@@ -1,32 +1,18 @@
 // ================================================================
 // Mode démo : l'app complète SANS aucune donnée fictive. Elle démarre
 // vierge (comme un compte neuf) et reste pleinement interactive — les
-// créations restent locales (aucun réseau) et ne persistent pas après
-// rechargement. Ouvrir /demo.html après `npm run dev`.
+// créations restent locales (aucune écriture réseau, aucun appel Supabase)
+// et ne persistent pas après rechargement. Seule exception en lecture :
+// l'API publique AELF, appelée pour les lectures du jour.
+// Ouvrir /demo.html après `npm run dev`.
 // ================================================================
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
 import { useHorizon } from '../lib/store'
 import { Shell } from '../components/Shell'
-import { Dashboard } from '../views/Dashboard'
-import { ProjectsView } from '../views/ProjectsView'
-import { DomainsView } from '../views/DomainsView'
-import { PrioritiesView } from '../views/PrioritiesView'
-import { TimeView } from '../views/TimeView'
-import { PlanningView } from '../views/PlanningView'
-import { HabitsView } from '../views/HabitsView'
-import { ActivitesLayout } from '../views/ActivitesLayout'
-import { ActualitesView } from '../views/ActualitesView'
-import { EvangileView } from '../views/EvangileView'
-import { ReviewsView } from '../views/ReviewsView'
-import { VerificationsLayout } from '../views/VerificationsLayout'
-import { VerificationsView } from '../views/VerificationsView'
-import { ListesView } from '../views/ListesView'
-import { HeuresControleView } from '../views/HeuresControleView'
-import { WorkspaceView } from '../views/WorkspaceView'
-import { SettingsView } from '../views/SettingsView'
+import { AppRoutes } from '../routes'
 import '../index.css'
 
 const uid = 'demo-user'
@@ -50,6 +36,13 @@ const KEY: Record<string, keyof ReturnType<typeof useHorizon.getState>> = {
   olafatco_jobs: 'olafatcoJobs', news_topics: 'newsTopics', news_digests: 'newsDigests',
   shopping_lists: 'shoppingLists', shopping_items: 'shoppingItems',
 }
+/** Clé du store pour une table Supabase — lève si la table n'est pas gérée en démo. */
+const keyFor = (table: string): keyof ReturnType<typeof useHorizon.getState> => {
+  const k = KEY[table]
+  if (!k) throw new Error(`Table inconnue en mode démo : ${table}`)
+  return k
+}
+
 let seq = 1000
 const genId = () => `demo-${seq++}`
 
@@ -58,7 +51,7 @@ useHorizon.setState({
   loadAll: async () => {},
 
   insert: async (table, values) => {
-    const key = KEY[table]
+    const key = keyFor(table)
     // Supabase applique des valeurs par défaut côté serveur : on réplique celles
     // indispensables au rendu (ex. habits.start_date, sinon parseISO plante).
     const defaults: Record<string, unknown> = table === 'habits'
@@ -77,7 +70,7 @@ useHorizon.setState({
   },
 
   update: async (table, id, values) => {
-    const key = KEY[table]
+    const key = keyFor(table)
     const list = useHorizon.getState()[key] as { id: string }[]
     let updated: unknown = null
     useHorizon.setState({
@@ -87,7 +80,7 @@ useHorizon.setState({
   },
 
   remove: async (table, id) => {
-    const key = KEY[table]
+    const key = keyFor(table)
     const list = useHorizon.getState()[key] as { id: string }[]
     useHorizon.setState({ [key]: list.filter((r) => r.id !== id) } as never)
     const st = useHorizon.getState()
@@ -137,20 +130,26 @@ useHorizon.setState({
 
   // Démo : pas de réseau ni d'IA — on fabrique une synthèse factice par sujet
   // pour montrer le rendu (contenu + sources + horodatage).
-  refreshNews: async () => {
+  refreshNews: async (mode = 'jour') => {
     const st = useHorizon.getState()
     const now = new Date().toISOString()
     const digests = st.newsTopics.filter((t) => t.active).map((t) => ({
-      id: genId(), user_id: uid, topic_id: t.id, generated_at: now,
-      content: `— (démo) Exemple de synthèse pour « ${t.label} » : ceci illustre le rendu.\n`
-        + '— En vrai, Claude cherche sur le web les nouvelles des ~15 derniers jours et les résume ici.\n'
-        + '— Chaque puce correspond à une actualité datée et sourcée.',
+      id: genId(), user_id: uid, topic_id: t.id, kind: mode, generated_at: now,
+      content: mode === 'important'
+        ? `— (démo) Fait marquant du trimestre pour « ${t.label} » : ceci illustre le rendu.\n`
+          + '— En vrai, Claude retient les 5 informations les plus structurantes des 3 derniers mois.\n'
+          + '— Chaque puce est datée et classée de la plus importante à la moins.'
+        : `— (démo) Exemple de synthèse pour « ${t.label} » : ceci illustre le rendu.\n`
+          + '— En vrai, Claude cherche sur le web les nouvelles des 14 derniers jours, la semaine écoulée d’abord.\n'
+          + '— Chaque puce correspond à une actualité datée et sourcée.',
       sources: [
         { title: 'Source exemple 1', url: 'https://example.com/actu-1' },
         { title: 'Source exemple 2', url: 'https://example.org/actu-2' },
       ],
     }))
-    const others = st.newsDigests.filter((d) => !st.newsTopics.some((t) => t.active && t.id === d.topic_id))
+    // On ne remplace que les synthèses du mode demandé.
+    const others = st.newsDigests.filter((d) =>
+      (d.kind ?? 'jour') !== mode || !st.newsTopics.some((t) => t.active && t.id === d.topic_id))
     useHorizon.setState({ newsDigests: [...others, ...digests] })
     return { ok: true, updated: digests.length }
   },
@@ -168,13 +167,13 @@ useHorizon.setState({
       level,
       intro: `Quiz de démonstration — niveau ${level}.`,
       questions: level <= 2 ? [
-        { id: 'q1', type: 'qcm', question: 'Quel est le message central du passage ?', choices: ['Mettre sa confiance en Dieu', 'Décrire la nature', 'Raconter une bataille'], answer: 'Mettre sa confiance en Dieu' },
-        { id: 'q2', type: 'qcm', question: 'À quoi ce passage nous invite-t-il concrètement ?', choices: ['Persévérer sans nous épuiser', 'Fuir toute épreuve', 'Chercher la richesse'], answer: 'Persévérer sans nous épuiser' },
-        { id: 'q3', type: 'qcm', question: 'Formulation exacte du verset clé ?', choices: ['renouvellent leur force', 'retrouvent leur courage', 'gardent leur calme'], answer: 'renouvellent leur force' },
-        { id: 'q4', type: 'qcm', question: 'Ils prennent leur vol comme les… ?', choices: ['aigles', 'oiseaux', 'anges'], answer: 'aigles' },
+        { id: 'q1', type: 'qcm', question: 'Quelle attitude CE passage met-il en avant (les autres sont bonnes, mais ailleurs) ?', choices: ['La générosité envers les pauvres', 'L’attente confiante du Seigneur', 'La fidélité à la prière du matin', 'Le respect du jour du sabbat'], answer: 'L’attente confiante du Seigneur' },
+        { id: 'q2', type: 'qcm', question: 'Que promet précisément le texte à ceux qui espèrent ?', choices: ['Une vie sans épreuve', 'Une force renouvelée', 'La prospérité matérielle', 'La fin de leurs ennemis'], answer: 'Une force renouvelée' },
+        { id: 'q3', type: 'qcm', question: 'Mot exact du verset : ils « ___ » leur force.', choices: ['retrouvent', 'renouvellent', 'raffermissent', 'reprennent'], answer: 'renouvellent' },
+        { id: 'q4', type: 'qcm', question: 'Ils prennent leur vol comme les… ?', choices: ['colombes', 'anges', 'aigles', 'oiseaux'], answer: 'aigles' },
       ] : [
-        { id: 'q1', type: 'qcm', question: '« Ne se fatigue point » souligne surtout…', choices: ['Que Dieu ne s’épuise jamais', 'Que l’homme ne se fatigue plus', 'Que la fatigue est un péché'], answer: 'Que Dieu ne s’épuise jamais' },
-        { id: 'q2', type: 'qcm', question: 'Quelle leçon de fond pour ta vie de foi ?', choices: ['L’endurance vient de la confiance en Dieu', 'Les forts réussissent toujours', 'Il faut éviter tout effort'], answer: 'L’endurance vient de la confiance en Dieu' },
+        { id: 'q1', type: 'qcm', question: '« Ne se fatigue point » souligne surtout…', choices: ['Que l’homme ne se fatigue plus', 'Que Dieu ne s’épuise jamais', 'Que la fatigue vient du manque de foi'], answer: 'Que Dieu ne s’épuise jamais' },
+        { id: 'q2', type: 'qcm', question: 'Quelle leçon de fond pour ta vie de foi ?', choices: ['La patience obtient toujours gain de cause', 'L’endurance vient de la confiance en Dieu', 'La force se gagne par l’effort constant'], answer: 'L’endurance vient de la confiance en Dieu' },
         { id: 'q3', type: 'texte', question: 'Complète : « Ils prennent leur vol comme les ___ ».', answer: 'aigles', hint: 'un rapace' },
         { id: 'q4', type: 'texte', question: 'Complète : « ils courent, et ne se ___ point ; ils marchent, et ne se ___ point ».', answer: 'lassent fatiguent' },
       ],
@@ -192,29 +191,7 @@ root.render(
     <BrowserRouter>
       <div>
         <Shell>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/projets" element={<ProjectsView />} />
-            <Route path="/domaines" element={<DomainsView />} />
-            <Route path="/priorites" element={<PrioritiesView />} />
-            <Route path="/temps" element={<TimeView />} />
-            <Route path="/planification" element={<PlanningView />} />
-            <Route path="/habitudes" element={<HabitsView />} />
-            <Route path="/activites" element={<ActivitesLayout />}>
-              <Route index element={<Navigate to="actualites" replace />} />
-              <Route path="actualites" element={<ActualitesView />} />
-              <Route path="ecritures" element={<EvangileView />} />
-            </Route>
-            <Route path="/revues" element={<ReviewsView />} />
-            <Route path="/verifications" element={<VerificationsLayout />}>
-              <Route index element={<VerificationsView />} />
-              <Route path="listes" element={<ListesView />} />
-            </Route>
-            <Route path="/heures-controle" element={<HeuresControleView />} />
-            <Route path="/espace" element={<WorkspaceView />} />
-            <Route path="/parametres" element={<SettingsView />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <AppRoutes />
         </Shell>
       </div>
     </BrowserRouter>

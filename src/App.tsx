@@ -1,26 +1,9 @@
 import { useEffect } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
 import { useHorizon } from './lib/store'
 import { Shell } from './components/Shell'
 import { AuthView } from './views/AuthView'
 import { SetPasswordView } from './views/SetPasswordView'
-import { Dashboard } from './views/Dashboard'
-import { ProjectsView } from './views/ProjectsView'
-import { DomainsView } from './views/DomainsView'
-import { PrioritiesView } from './views/PrioritiesView'
-import { TimeView } from './views/TimeView'
-import { PlanningView } from './views/PlanningView'
-import { HabitsView } from './views/HabitsView'
-import { ActivitesLayout } from './views/ActivitesLayout'
-import { ActualitesView } from './views/ActualitesView'
-import { EvangileView } from './views/EvangileView'
-import { ReviewsView } from './views/ReviewsView'
-import { VerificationsLayout } from './views/VerificationsLayout'
-import { VerificationsView } from './views/VerificationsView'
-import { ListesView } from './views/ListesView'
-import { HeuresControleView } from './views/HeuresControleView'
-import { WorkspaceView } from './views/WorkspaceView'
-import { SettingsView } from './views/SettingsView'
+import { AppRoutes } from './routes'
 
 export default function App() {
   const { session, ready, recovery, init } = useHorizon()
@@ -40,29 +23,7 @@ export default function App() {
 
   return (
     <Shell>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/projets" element={<ProjectsView />} />
-        <Route path="/domaines" element={<DomainsView />} />
-        <Route path="/priorites" element={<PrioritiesView />} />
-        <Route path="/temps" element={<TimeView />} />
-        <Route path="/planification" element={<PlanningView />} />
-        <Route path="/habitudes" element={<HabitsView />} />
-        <Route path="/activites" element={<ActivitesLayout />}>
-          <Route index element={<Navigate to="actualites" replace />} />
-          <Route path="actualites" element={<ActualitesView />} />
-          <Route path="ecritures" element={<EvangileView />} />
-        </Route>
-        <Route path="/revues" element={<ReviewsView />} />
-        <Route path="/verifications" element={<VerificationsLayout />}>
-          <Route index element={<VerificationsView />} />
-          <Route path="listes" element={<ListesView />} />
-        </Route>
-        <Route path="/heures-controle" element={<HeuresControleView />} />
-        <Route path="/espace" element={<WorkspaceView />} />
-        <Route path="/parametres" element={<SettingsView />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <AppRoutes />
     </Shell>
   )
 }

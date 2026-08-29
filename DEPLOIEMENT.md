@@ -19,8 +19,11 @@ git push -u origin main
 1. Va sur [vercel.com](https://vercel.com) → *Sign up with GitHub* (gratuit).
 2. *Add New → Project* → importe le dépôt `horizon`.
 3. Vercel détecte Vite automatiquement. Ajoute les **variables d'environnement** :
-   - `VITE_SUPABASE_URL` = `https://zahrgmswfejabqpgjkfe.supabase.co`
-   - `VITE_SUPABASE_ANON_KEY` = `sb_publishable_izDTsSC9xZOapRmmkBmN-A_t9L2VMZr`
+   - `VITE_SUPABASE_URL` = l'URL du projet Supabase (dashboard → *Project Settings → API*)
+   - `VITE_SUPABASE_ANON_KEY` = la clé **publishable** du même écran
+
+   Ces deux valeurs sont dans `.env` en local (fichier non versionné). Ne les recopie
+   pas dans un fichier suivi par git : ce dépôt est public.
 4. *Deploy*. Tu obtiens une URL du type `https://horizon-xxx.vercel.app`.
 
 Le fichier `vercel.json` (déjà présent) gère le routage de l'application.

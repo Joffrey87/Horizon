@@ -22,10 +22,15 @@ export function SettingsView() {
   const exportJson = () => {
     const payload = {
       exported_at: new Date().toISOString(),
-      app: 'horizon', version: 1,
-      domains: s.domains, objectives: s.objectives, projects: s.projects,
+      app: 'horizon', version: 2,
+      // Toutes les collections du store : un export partiel enfermerait les données
+      // qu'il oublie (étapes, vérifications, anniversaires, listes, actualités…).
+      domains: s.domains, objectives: s.objectives, projects: s.projects, steps: s.steps,
       tasks: s.tasks, ideas: s.ideas, habits: s.habits, habit_logs: s.habitLogs,
-      reviews: s.reviews, layouts: s.layouts, settings: s.settings,
+      reviews: s.reviews, layouts: s.layouts, birthdays: s.birthdays, checks: s.checks,
+      olafatco_jobs: s.olafatcoJobs, news_topics: s.newsTopics, news_digests: s.newsDigests,
+      shopping_lists: s.shoppingLists, shopping_items: s.shoppingItems,
+      settings: s.settings,
     }
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
@@ -43,19 +48,29 @@ export function SettingsView() {
       const uid = s.session?.user.id
       if (!uid) return
       const stamp = <T extends object>(rows: T[]) => rows.map((r) => ({ ...r, user_id: uid }))
+      // Ordre imposé par les clés étrangères (parents avant enfants).
       const order: [string, unknown[]][] = [
         ['domains', raw.domains], ['objectives', raw.objectives], ['projects', raw.projects],
-        ['tasks', raw.tasks], ['ideas', raw.ideas], ['habits', raw.habits],
+        ['steps', raw.steps], ['tasks', raw.tasks], ['ideas', raw.ideas], ['habits', raw.habits],
         ['habit_logs', raw.habit_logs], ['reviews', raw.reviews], ['layouts', raw.layouts],
+        ['birthdays', raw.birthdays], ['checks', raw.checks], ['olafatco_jobs', raw.olafatco_jobs],
+        ['news_topics', raw.news_topics], ['news_digests', raw.news_digests],
+        ['shopping_lists', raw.shopping_lists], ['shopping_items', raw.shopping_items],
       ]
+      let restored = 0
       for (const [table, rows] of order) {
         if (Array.isArray(rows) && rows.length) {
           const { error } = await supabase.from(table).upsert(stamp(rows as object[]))
           if (error) throw error
+          restored += rows.length
         }
       }
+      if (raw.settings && typeof raw.settings === 'object') {
+        const { id: _id, user_id: _uid, updated_at: _u, ...rest } = raw.settings as Record<string, unknown>
+        await s.saveSettings(rest)
+      }
       await s.loadAll()
-      setImportMsg('Import réussi.')
+      setImportMsg(`Import réussi (${restored} élément${restored > 1 ? 's' : ''}).`)
     } catch (e) {
       setImportMsg(`Échec de l'import : ${e instanceof Error ? e.message : e}`)
     }
@@ -64,7 +79,8 @@ export function SettingsView() {
   return (
     <div className="rise mx-auto max-w-xl space-y-4 pt-4">
       <header>
-        <h1 className="text-xl font-semibold">Paramètres</h1>      </header>
+        <h1 className="text-xl font-semibold">Paramètres</h1>
+      </header>
 
       <Card title="Profil">
         <label className="block space-y-1 text-xs text-ink-3">
@@ -122,9 +138,11 @@ export function SettingsView() {
         {importMsg && <p className="mt-2 text-xs text-ink-2">{importMsg}</p>}
       </Card>
 
-      <Card title="Assistant IA">
+      <Card title="Assistant IA (mis de côté)">
         <p className="text-sm leading-relaxed text-ink-2">
-          L'assistant s'appuie sur l'API Claude d'Anthropic via une fonction serveur sécurisée.
+          L'assistant n'est pas accessible dans l'app pour le moment : il reste dans le code
+          (<code className="text-xs">AssistantPanel.tsx</code>), prêt à être réactivé.
+          Il s'appuie sur l'API Claude d'Anthropic via une fonction serveur sécurisée.
           Ta clé API n'est jamais exposée dans le navigateur : elle est stockée comme secret
           Supabase (<code className="text-xs">ANTHROPIC_API_KEY</code>).
         </p>

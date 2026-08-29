@@ -79,7 +79,7 @@ export function TaskForm({ open, task, defaultDate, overrideScheduled, defaultIs
     close()
   }
 
-  const DAYS = [['1', 'L'], ['2', 'M'], ['3', 'M'], ['4', 'J'], ['5', 'V'], ['6', 'S'], ['7', 'D']]
+  const DAYS: [string, string][] = [['1', 'L'], ['2', 'M'], ['3', 'M'], ['4', 'J'], ['5', 'V'], ['6', 'S'], ['7', 'D']]
   const selectedDays = String(current.recur_days).split(',').filter(Boolean)
 
   return (

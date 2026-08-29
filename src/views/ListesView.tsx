@@ -64,7 +64,7 @@ export function ListesView() {
 
       {lists.length === 0 ? (
         <Card>
-          <EmptyState hint="Crée une liste simple (ex. « Travaux ») ou une liste récurrente à 3 rayons.">
+          <EmptyState hint="Crée une liste simple (ex. « Travaux ») ou une liste récurrente à 4 rayons.">
             Aucune liste pour l’instant.
           </EmptyState>
         </Card>
@@ -220,7 +220,7 @@ function ListForm({ onClose, onCreated, count }: { onClose: () => void; onCreate
         <label className="flex items-center gap-2 text-sm text-ink-2">
           <input type="checkbox" checked={recurrent} onChange={(e) => setRecurrent(e.target.checked)}
             className="accent-[color:var(--color-sun)]" />
-          Liste récurrente (3 rayons : alimentaire, bio, non-alimentaire)
+          Liste récurrente (4 rayons : alimentaire, bio, non-alimentaire)
         </label>
         <div className="flex justify-end gap-2 pt-1">
           <button type="button" onClick={onClose} className="btn-ghost px-4 py-2 text-sm">Annuler</button>

@@ -11,7 +11,7 @@ const HORIZON_LABEL: Record<ObjectiveHorizon, string> = {
   long_terme: 'Long terme (3-5 ans)', libre: 'Libre',
 }
 
-const PALETTE = [
+const PALETTE: [string, ...string[]] = [
   '#d97706', '#0d9488', '#8b5cf6', '#dc4a6b', '#3987e5', '#65a30d',
   '#eab308', '#06b6d4', '#e0499c', '#ef6f4c',
 ]
@@ -47,7 +47,8 @@ export function DomainsView() {
     <div className="rise space-y-4 pt-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Domaines & objectifs</h1>        </div>
+          <h1 className="text-xl font-semibold">Domaines & objectifs</h1>
+      </div>
         <button onClick={() => setEditDomain('new')} className="btn-sun flex items-center gap-1.5 px-4 py-2 text-sm">
           <Plus size={15} /> Nouveau domaine
         </button>
@@ -114,7 +115,7 @@ function DomainForm({ state, onClose }: { state: Domain | 'new' | null; onClose:
   const s = useHorizon()
   const domain = state === 'new' ? null : state
   const [form, setForm] = useState<{ name: string; color: string } | null>(null)
-  const current = form ?? { name: domain?.name ?? '', color: domain?.color ?? PALETTE[s.domains.length % 6] }
+  const current = form ?? { name: domain?.name ?? '', color: domain?.color ?? PALETTE[s.domains.length % PALETTE.length] ?? PALETTE[0] }
   const close = () => { setForm(null); onClose() }
 
   const save = async (e: React.FormEvent) => {

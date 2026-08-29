@@ -47,7 +47,8 @@ export function ProjectsView() {
     <div className="rise space-y-4 pt-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Projets</h1>        </div>
+          <h1 className="text-xl font-semibold">Projets</h1>
+      </div>
         <button onClick={() => setCreating(true)} className="btn-sun flex items-center gap-1.5 px-4 py-2 text-sm">
           <Plus size={15} /> Nouveau projet
         </button>
@@ -153,7 +154,8 @@ function ProjectNextTasks({ project }: { project: Project }) {
   const reorder = (from: number, to: number) => {
     if (from === to) return
     const v = [...visible]
-    const [moved] = v.splice(from, 1)
+    const moved = v.splice(from, 1)[0]
+    if (!moved) return
     v.splice(to, 0, moved)
     const newFull = [...v, ...fullOrdered.slice(5)]
     newFull.forEach((t, i) => { if (t.sort_order !== i) void s.update('tasks', t.id, { sort_order: i }) })

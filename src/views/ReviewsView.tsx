@@ -22,7 +22,8 @@ export function ReviewsView() {
   return (
     <div className="rise space-y-4 pt-4">
       <header>
-        <h1 className="text-xl font-semibold">Revues</h1>      </header>
+        <h1 className="text-xl font-semibold">Revues</h1>
+      </header>
 
       <div className="grid gap-3 md:grid-cols-3">
         {(Object.keys(KIND_META) as ReviewKind[]).map((kind) => (

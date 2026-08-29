@@ -6,7 +6,7 @@ import {
 import { fr } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, Plus, CheckCircle2, Circle, RotateCw, Layers, Star, Target, Church, AlertTriangle, ExternalLink, Check, X } from 'lucide-react'
 import { useHorizon } from '../lib/store'
-import { compareTasksByTitleTime, extractHourMinute, iso, tasksForDay, recurrenceLabel, timeQuoteOfDay, spanPart, birthdaysForDay, isMarketParkingDay, feastOnDay, extractEmojis, firstFridayOrSaturday, chosenMassForDay, todayIso, massesInfoUrl } from '../lib/logic'
+import { compareTasksByTitleTime, extractHourMinute, iso, tasksForDay, recurrenceLabel, timeQuoteOfDay, spanPart, birthdaysForDay, isMarketParkingDay, feastOnDay, extractEmojis, firstFridayOrSaturday, chosenMassForDay, todayIso, massesInfoUrl, tripLocationOn, citySlug, hasMaintainedMasses, workShiftOn, massFitsShift, fmtMinutes } from '../lib/logic'
 import { Card, Seg, Modal, ProjectTag } from '../components/ui'
 import { TaskForm } from '../components/TaskForm'
 import type { MassConfig, MassSlot, Objective, Step, Task } from '../lib/types'
@@ -33,7 +33,7 @@ function loadLayers(): CalLayers {
   catch { return DEFAULT_LAYERS }
 }
 const LayersCtx = createContext<{ layers: CalLayers; arilId: string | null }>({ layers: DEFAULT_LAYERS, arilId: null })
-// Ouvre le sélecteur de messe pour un jour de dévotion (1er vendredi/samedi).
+// Ouvre le sélecteur de messe : jours de dévotion (1er vendredi/samedi) et grandes fêtes.
 const MassPickCtx = createContext<(dayIso: string, label: string) => void>(() => {})
 
 /** Couches actives + prédicats de visibilité (un élément « ARIL » = rattaché au domaine « ARIL »). */
@@ -175,16 +175,34 @@ function readDrag(e: React.DragEvent): { kind: Kind; id: string } | null {
   try { return JSON.parse(raw) } catch { return null }
 }
 
-// ---- Sélecteur de messe (jours de dévotion : 1er vendredi / samedi) --------
+// ---- Sélecteur de messe (jours de dévotion, grandes fêtes, case du jour) ---
+
+/** Rend le sélecteur de messe utilisable hors de « Temps » (accueil).
+ *  Enveloppe des `DayCell` : leurs croix ✝ ouvrent alors le même modal. */
+export function MassPickProvider({ children }: { children: React.ReactNode }) {
+  const [pick, setPick] = useState<{ date: string; label: string } | null>(null)
+  return (
+    <MassPickCtx.Provider value={(date, label) => setPick({ date, label })}>
+      {children}
+      {pick && <MassPicker pick={pick} onClose={() => setPick(null)} />}
+    </MassPickCtx.Provider>
+  )
+}
+
 
 function MassPicker({ pick, onClose }: { pick: { date: string; label: string }; onClose: () => void }) {
   const s = useHorizon()
   const check = s.checks.find((c) => c.kind === 'messe_travail')
   const cfg = (check?.config ?? {}) as MassConfig
   const chosen = cfg.chosen ?? {}
-  const homeCity = s.settings?.home_city ?? 'Reims'
+  const homeCity = s.settings?.home_city?.trim() || 'Reims'
+  // Même logique que Vérifications : la ville du jour (séjour éventuel), sa liste
+  // horaire si on en maintient une, et la garde CAPS pour signaler les créneaux impossibles.
+  const city = tripLocationOn(s.tasks, pick.date) ?? homeCity
   const wd = String(getISODay(parseISO(pick.date)))
-  const masses: MassSlot[] = cfg.masses?.[wd] ?? []
+  const cityMasses = cfg.massesByCity?.[citySlug(city)] ?? (hasMaintainedMasses(city) ? cfg.masses : undefined)
+  const masses: MassSlot[] = cityMasses?.[wd] ?? []
+  const shift = workShiftOn(s.tasks, pick.date)
   const current = chosen[pick.date]
   const tag = check ? `source:check:${check.id}` : ''
 
@@ -203,6 +221,13 @@ function MassPicker({ pick, onClose }: { pick: { date: string; label: string }; 
     await s.update('checks', check.id, { config: { ...cfg, chosen: { ...chosen, [pick.date]: `${m.t} ${m.c}` } } })
     onClose()
   }
+  // Ville sans liste horaire (séjour) : on note « j'y vais », l'horaire se choisit sur messes.info.
+  const chooseAway = async () => {
+    if (!check) return
+    await setEvent(`Messe — ${city}`)
+    await s.update('checks', check.id, { config: { ...cfg, chosen: { ...chosen, [pick.date]: `Messe à ${city}` } } })
+    onClose()
+  }
   const clear = async () => {
     if (!check) return
     await setEvent('')
@@ -214,12 +239,19 @@ function MassPicker({ pick, onClose }: { pick: { date: string; label: string }; 
   const dayLabel = format(parseISO(pick.date), 'EEEE d MMMM', { locale: fr })
 
   return (
-    <Modal open onClose={onClose} title={`Messe — ${pick.label}`}>
+    <Modal open onClose={onClose} title={pick.label ? `Messe — ${pick.label}` : 'Messe'}>
       <p className="mb-1 text-sm capitalize text-ink-2">{dayLabel}</p>
       {!check ? (
-        <p className="text-sm text-ink-3">
-          Configure d’abord une vérification « messe » (onglet Vérifications) pour mémoriser tes choix de messe.
-        </p>
+        <div className="space-y-3">
+          <p className="text-sm text-ink-3">
+            Configure une vérification « messe » (onglet Vérifications) pour mémoriser tes choix de messe.
+            En attendant, voici où chercher un horaire :
+          </p>
+          <a href={massesInfoUrl(city)} target="_blank" rel="noopener noreferrer"
+            className="btn-ghost inline-flex items-center gap-1.5 px-3 py-1.5 text-xs">
+            <ExternalLink size={13} /> Voir les messes sur messes.info ({city})
+          </a>
+        </div>
       ) : (
         <div className="space-y-3">
           {current && (
@@ -230,19 +262,28 @@ function MassPicker({ pick, onClose }: { pick: { date: string; label: string }; 
               </button>
             </div>
           )}
+          {(city !== homeCity || shift) && (
+            <p className="text-xs text-ink-3">
+              {city !== homeCity && <>En séjour à <span className="font-medium text-[#a78bfa]">{city}</span>. </>}
+              {shift && <>Tu travailles ce jour-là ({shift.code || `${fmtMinutes(shift.start)}–${fmtMinutes(shift.end)}`}).</>}
+            </p>
+          )}
           {masses.length > 0 ? (
             <ul className="space-y-1">
               {masses.map((m) => {
                 const val = `${m.t} ${m.c}`
                 const active = current === val
+                const clash = shift ? !massFitsShift(m.t, shift) : false
                 return (
                   <li key={val}>
                     <button onClick={() => void choose(m)}
+                      title={clash ? 'Horaire incompatible avec ta garde ce jour-là' : undefined}
                       className={`flex w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-left text-sm transition-colors ${
                         active ? 'border-good/60 bg-good/10' : 'border-line hover:bg-panel-2'
-                      }`}>
+                      } ${clash && !active ? 'opacity-50' : ''}`}>
                       <span className="w-14 shrink-0 tabular-nums text-ink-2">{m.t}</span>
                       <span className="min-w-0 flex-1 truncate text-ink">{m.c}</span>
+                      {clash && !active && <span className="shrink-0 text-[10px] text-ink-3">pendant la garde</span>}
                       {active && <Check size={14} className="text-good" />}
                     </button>
                   </li>
@@ -250,12 +291,24 @@ function MassPicker({ pick, onClose }: { pick: { date: string; label: string }; 
               })}
             </ul>
           ) : (
-            <p className="text-sm text-ink-3">Aucun horaire connu pour ce jour dans ta liste. Utilise le lien ci-dessous.</p>
+            <p className="text-sm text-ink-3">
+              {city === homeCity
+                ? 'Aucun horaire connu pour ce jour dans ta liste. Utilise le lien ci-dessous.'
+                : `Pas de liste horaire pour ${city} : cherche l'horaire sur messes.info, puis note que tu y vas.`}
+            </p>
           )}
-          <a href={massesInfoUrl(homeCity)} target="_blank" rel="noreferrer"
-            className="btn-ghost inline-flex items-center gap-1.5 px-3 py-1.5 text-xs">
-            <ExternalLink size={13} /> Voir les messes sur messes.info ({homeCity})
-          </a>
+          <div className="flex flex-wrap items-center gap-2">
+            <a href={massesInfoUrl(city)} target="_blank" rel="noopener noreferrer"
+              className="btn-ghost inline-flex items-center gap-1.5 px-3 py-1.5 text-xs">
+              <ExternalLink size={13} /> Voir les messes sur messes.info ({city})
+            </a>
+            {masses.length === 0 && current !== `Messe à ${city}` && (
+              <button onClick={() => void chooseAway()} className="btn-ghost px-3 py-1.5 text-xs text-[#4cc79a]"
+                title="Poser la messe au calendrier (sans horaire)">
+                J'y vais
+              </button>
+            )}
+          </div>
         </div>
       )}
     </Modal>
@@ -264,8 +317,10 @@ function MassPicker({ pick, onClose }: { pick: { date: string; label: string }; 
 
 // ---- Cellule d'un jour (partagée par 4 semaines) --------------------------
 
-export function DayCell({ day, tint, emphasize, fit, onEdit, onCreate, onStep, onMove }: {
+export function DayCell({ day, tint, emphasize, fit, massCross, onEdit, onCreate, onStep, onMove }: {
   day: Date; tint?: string; emphasize?: boolean; fit?: boolean
+  /** Affiche toujours la croix « trouver une messe » (accueil), même hors fête. */
+  massCross?: boolean
   onEdit: (t: Task) => void; onCreate: (d: string) => void; onStep: (st: Step) => void; onMove: MoveFn
 }) {
   const s = useHorizon()
@@ -285,6 +340,10 @@ export function DayCell({ day, tint, emphasize, fit, onEdit, onCreate, onStep, o
   const rawMass = layers.messes ? firstFridayOrSaturday(day) : null
   const massLabel = rawMass && dayIso >= todayIso() && day <= addMonths(new Date(), 6) ? rawMass : null
   const chosenMass = massLabel ? chosenMassForDay(s.checks, dayIso) : null
+  // Croix ✝ « trouver une messe » : sur chaque jour, sauf ceux qui portent déjà le
+  // bouton de dévotion (1er vendredi/samedi) — il ouvre déjà le même sélecteur.
+  const showCross = feast !== null || massCross === true || (layers.messes && !massLabel)
+  const crossMass = showCross ? chosenMassForDay(s.checks, dayIso) : null
 
   const handleVoid = (e: React.MouseEvent<HTMLElement>) => {
     if (e.target === e.currentTarget) onCreate(iso(day))
@@ -309,9 +368,14 @@ export function DayCell({ day, tint, emphasize, fit, onEdit, onCreate, onStep, o
           {format(day, 'EEE d', { locale: fr })}
         </p>
         <div className="flex items-center gap-1">
-          {feast && (
-            <span title={`Grande fête catholique : ${feast}`}
-              className="cursor-default text-xs font-semibold leading-none text-sun-soft">✝</span>
+          {showCross && (
+            <button onClick={(e) => { e.stopPropagation(); openMassPicker(dayIso, feast ?? '') }}
+              title={feast
+                ? `${feast} — trouver une messe${crossMass ? ` : ${crossMass}` : ''}`
+                : `Trouver une messe${crossMass ? ` : ${crossMass}` : ''}`}
+              className={`text-xs font-semibold leading-none transition-opacity hover:opacity-70 ${
+                crossMass ? 'text-[#4cc79a]' : feast ? 'text-sun-soft' : emphasize ? 'text-white/60' : 'text-ink-3/70'
+              }`}>✝</button>
           )}
           {massLabel && (
             <button onClick={(e) => { e.stopPropagation(); openMassPicker(dayIso, massLabel) }}
@@ -472,31 +536,41 @@ export function DayCell({ day, tint, emphasize, fit, onEdit, onCreate, onStep, o
 function FourWeeks({ anchor, onEdit, onCreate, onStep, onMove }: {
   anchor: Date; onEdit: (t: Task) => void; onCreate: (d: string) => void; onStep: (st: Step) => void; onMove: MoveFn
 }) {
-  // Vraie grille du mois : la 1re semaine est celle qui contient le 1er ; on ajoute
-  // autant de semaines (4 à 6) qu'il en faut pour couvrir tout le mois.
-  const monthStart = startOfMonth(anchor)
+  // Mois en cours : la grille démarre sur la SEMAINE DU JOUR (pas de semaines déjà
+  // passées) et court au moins 4 semaines, plus s'il en faut pour finir le mois.
+  // Autre mois : grille complète du mois, à partir de la semaine qui contient le 1er.
   const weeks = useMemo(() => {
-    const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 })
-    const gridEnd = endOfWeek(endOfMonth(anchor), { weekStartsOn: 1 })
+    const today = new Date()
+    const gridStart = isSameMonth(anchor, today)
+      ? startOfWeek(today, { weekStartsOn: 1 })
+      : startOfWeek(startOfMonth(anchor), { weekStartsOn: 1 })
+    const monthEnd = endOfWeek(endOfMonth(anchor), { weekStartsOn: 1 })
+    const minEnd = endOfWeek(addWeeks(gridStart, 3), { weekStartsOn: 1 })
+    const gridEnd = monthEnd > minEnd ? monthEnd : minEnd
     const out: Date[][] = []
     for (let start = gridStart; start <= gridEnd; start = addWeeks(start, 1)) {
       out.push(eachDayOfInterval({ start, end: endOfWeek(start, { weekStartsOn: 1 }) }))
     }
     return out
-  }, [monthStart]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [anchor])
 
-  // Jours hors du mois affiché : légèrement atténués pour rester lisibles sans distraire.
+  // Jours hors du mois de référence : légèrement atténués pour rester lisibles sans distraire.
   const outsideTint = 'rgba(120,120,140,0.10)'
+  const first = weeks[0]?.[0] ?? anchor
+  const last = weeks[weeks.length - 1]?.[6] ?? anchor
+  const title = isSameMonth(first, last)
+    ? format(first, 'MMMM yyyy', { locale: fr })
+    : `${format(first, 'MMMM', { locale: fr })} — ${format(last, 'MMMM yyyy', { locale: fr })}`
 
   return (
     <>
-      <p className="text-center text-sm font-medium capitalize">{format(monthStart, 'MMMM yyyy', { locale: fr })}</p>
+      <p className="text-center text-sm font-medium capitalize">{title}</p>
       <div className="space-y-2">
         {weeks.map((days, i) => (
           <div key={i} className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 md:grid-cols-7">
             {days.map((day) => (
               <DayCell key={day.toISOString()} day={day}
-                tint={isSameMonth(day, monthStart) ? undefined : outsideTint}
+                tint={isSameMonth(day, anchor) ? undefined : outsideTint}
                 onEdit={onEdit} onCreate={onCreate} onStep={onStep} onMove={onMove} />
             ))}
           </div>
@@ -565,6 +639,7 @@ function AllDayBand({ day, onEdit, onStep, onMove, onCreate }: {
   const rawMass = layers.messes ? firstFridayOrSaturday(day) : null
   const massLabel = rawMass && iso(day) >= todayIso() && day <= addMonths(new Date(), 6) ? rawMass : null
   const chosenMass = massLabel ? chosenMassForDay(s.checks, iso(day)) : null
+  const feastMass = feast ? chosenMassForDay(s.checks, iso(day)) : null
   const untimed = [...tasksForDay(s.tasks, day)].filter((t) => !extractHourMinute(t.title)).filter(taskVisible)
   // Évènements multi-jours d'abord : leurs barres fines s'alignent d'un jour à l'autre (continuité).
   const spanEvents = untimed.filter((t) => spanPart(t, iso(day)) !== 'single')
@@ -607,10 +682,13 @@ function AllDayBand({ day, onEdit, onStep, onMove, onCreate }: {
       className={`min-h-8 space-y-0.5 border-b border-line-2/60 p-0.5 ${over ? 'bg-sun/10' : ''} ${isToday(day) ? 'bg-sun/5' : ''}`}>
       {spanEvents.map(renderUntimed)}
       {feast && (
-        <div title={`Grande fête catholique : ${feast}`}
-          className="flex items-center gap-1 truncate rounded bg-sun/15 px-1 py-0.5 text-[10px] font-medium text-sun-soft">
+        <button onClick={(e) => { e.stopPropagation(); openMassPicker(iso(day), feast) }}
+          title={`${feast} — trouver une messe${feastMass ? ` : ${feastMass}` : ''}`}
+          className={`flex w-full items-center gap-1 truncate rounded px-1 py-0.5 text-left text-[10px] font-medium ${
+            feastMass ? 'bg-good/15 text-[#4cc79a] hover:bg-good/25' : 'bg-sun/15 text-sun-soft hover:bg-sun/25'
+          }`}>
           <span className="shrink-0">✝</span><span className="truncate">{feast}</span>
-        </div>
+        </button>
       )}
       {massLabel && (
         <button onClick={(e) => { e.stopPropagation(); openMassPicker(iso(day), massLabel) }}

@@ -28,7 +28,8 @@ export function HabitsView() {
         className="flex cursor-pointer flex-wrap items-center justify-between gap-3 rounded-xl px-1 py-1 transition-colors hover:bg-panel-2/40"
         title="Cliquer pour ajouter une habitude">
         <div>
-          <h1 className="text-xl font-semibold">Habitudes</h1>        </div>
+          <h1 className="text-xl font-semibold">Habitudes</h1>
+      </div>
         <button onClick={(e) => { e.stopPropagation(); setEditing('new') }} className="btn-sun flex items-center gap-1.5 px-4 py-2 text-sm">
           <Plus size={15} /> Nouvelle habitude
         </button>

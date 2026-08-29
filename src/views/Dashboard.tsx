@@ -6,14 +6,15 @@ import {
 } from 'lucide-react'
 import type { Task } from '../lib/types'
 import { useHorizon } from '../lib/store'
-import { DayCell } from './TimeView'
+import { DayCell, MassPickProvider } from './TimeView'
 import { TaskForm } from '../components/TaskForm'
 import { HomeBoard } from '../components/HomeBoard'
 import {
-  checksDueCount, computeAlerts, dayPhraseOfDay, domainBalance, eveningPhraseOfWeek, fmtDay, fmtShort,
-  focusOfDay, greetingKind, habitStats, habitsForDay, iso, isRecentlyDone, quoteOfDay,
+  checksDueCount, computeAlerts, dailyScripturePlan, dayPhraseOfDay, domainBalance, eveningPhraseOfWeek,
+  fmtDay, fmtShort, focusOfDay, greetingKind, habitStats, habitsForDay, iso, isRecentlyDone, quoteOfDay,
   suggestedReview, tasksForDay, todayIso, wallpaperOfDay,
 } from '../lib/logic'
+import { readingOfDay, readingQuote, useMassOfDay } from '../lib/aelf'
 import { Card, Badge, ProgressBar, DomainDot, EmptyState } from '../components/ui'
 import { DomainRadar } from '../components/charts'
 
@@ -68,7 +69,13 @@ export function Dashboard() {
   const checksDue = useMemo(() => checksDueCount(s.checks, s.tasks, { homeCity: s.settings?.home_city ?? undefined, feasts: s.settings?.catholic_feasts !== false }), [s.checks, s.tasks, s.settings])
 
   const actifs = s.projects.filter((p) => p.status === 'actif')
-  const quote = quoteOfDay()
+  // Écriture du jour = lecture de la messe du jour (évangile / 1re lecture AT,
+  // un jour sur deux). Repli sur la citation hors ligne si l'AELF est injoignable.
+  const { mass } = useMassOfDay(todayIso())
+  const quote = useMemo(() => {
+    const r = readingOfDay(mass, dailyScripturePlan().kind)
+    return r ? readingQuote(r) : quoteOfDay()
+  }, [mass])
   const review = suggestedReview()
   const firstName = s.settings?.first_name
     ?? s.session?.user.email?.split('@')[0]?.replace(/^./, (c) => c.toUpperCase())
@@ -332,7 +339,7 @@ export function Dashboard() {
               <h1 className="text-2xl font-semibold text-white drop-shadow-md lg:text-3xl">
                 {heroTitle}
               </h1>
-            </div>
+      </div>
             <span className="rounded-full border border-white/20 bg-black/30 px-3 py-1 text-xs capitalize text-white/85 backdrop-blur-md">
               {fmtDay(now)}
             </span>
@@ -348,12 +355,15 @@ export function Dashboard() {
             {/* Case du jour + lendemain (calendrier) — remplace les priorités du jour */}
             <GlassTile icon={<CalendarDays size={15} />} accent="#f59e0b" title="Aujourd'hui & demain"
               className="sm:w-max sm:max-w-full">
-              <div className="flex flex-wrap items-start gap-2">
-                <DayCell day={now} emphasize fit onEdit={setEditing} onCreate={setCreateDate}
-                  onStep={() => navigate('/temps')} onMove={handleDayMove} />
-                <DayCell day={tomorrow} emphasize fit onEdit={setEditing} onCreate={setCreateDate}
-                  onStep={() => navigate('/temps')} onMove={handleDayMove} />
-              </div>
+              {/* La croix ✝ de chaque case ouvre le sélecteur de messe, comme dans « Temps ». */}
+              <MassPickProvider>
+                <div className="flex flex-wrap items-start gap-2">
+                  <DayCell day={now} emphasize fit massCross onEdit={setEditing} onCreate={setCreateDate}
+                    onStep={() => navigate('/temps')} onMove={handleDayMove} />
+                  <DayCell day={tomorrow} emphasize fit massCross onEdit={setEditing} onCreate={setCreateDate}
+                    onStep={() => navigate('/temps')} onMove={handleDayMove} />
+                </div>
+              </MassPickProvider>
             </GlassTile>
 
             {/* Habitudes du jour — navigation par jour + pastilles à 3 états (rien / validé / non validé) */}

@@ -85,7 +85,8 @@ export function PrioritiesView() {
     <div className="rise space-y-4 pt-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Priorités</h1>        </div>
+          <h1 className="text-xl font-semibold">Priorités</h1>
+      </div>
         <Seg value={source} onChange={setSource} options={[
           { value: 'tout', label: 'Tout' }, { value: 'idees', label: 'Idées' }, { value: 'taches', label: 'Tâches' },
         ]} />

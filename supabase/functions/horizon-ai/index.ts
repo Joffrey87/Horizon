@@ -24,11 +24,30 @@ RÈGLES DE RÉPONSE :
 - Si l'utilisateur a trop de projets actifs, suggère lequel mettre en pause et pourquoi.
 - Termine par au plus UNE question, seulement si elle aide à décider.`
 
-Deno.serve(async (req) => {
-  const cors = {
-    'Access-Control-Allow-Origin': '*',
+// Origines autorisées. `*` ouvrait la fonction — et la clé Anthropic qu'elle
+// consomme — à n'importe quel site. Surchargeable par le secret ALLOWED_ORIGINS.
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS')
+  ?? 'https://horizon-sigma-woad.vercel.app,http://localhost:5173')
+  .split(',').map((o) => o.trim()).filter(Boolean)
+
+/** Origine acceptée : liste explicite, plus les déploiements Vercel du projet
+ *  (production et prévisualisations, dont l'URL change à chaque build). */
+function allowed(origin: string): boolean {
+  if (ALLOWED_ORIGINS.includes(origin)) return true
+  return /^https:\/\/horizon-[a-z0-9-]+\.vercel\.app$/.test(origin)
+}
+
+function corsFor(req: Request): Record<string, string> {
+  const origin = req.headers.get('Origin') ?? ''
+  return {
+    'Access-Control-Allow-Origin': allowed(origin) ? origin : (ALLOWED_ORIGINS[0] ?? ''),
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Vary': 'Origin',
   }
+}
+
+Deno.serve(async (req) => {
+  const cors = corsFor(req)
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
 
   try {

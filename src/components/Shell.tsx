@@ -3,6 +3,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import {
   Home, FolderKanban, ListTodo, Compass, CalendarDays, CalendarRange,
   Repeat, ClipboardCheck, Network, Settings, Plus, LogOut, Menu, ArrowLeft, ShieldCheck, Timer, Newspaper,
+  AlertTriangle, X, RotateCw,
 } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import { wallpaperOfDay } from '../lib/logic'
@@ -27,6 +28,9 @@ export function Shell({ children }: { children: ReactNode }) {
   const [capture, setCapture] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const signOut = useHorizon((s) => s.signOut)
+  const error = useHorizon((s) => s.error)
+  const clearError = useHorizon((s) => s.clearError)
+  const loadAll = useHorizon((s) => s.loadAll)
   const navigate = useNavigate()
 
   return (
@@ -112,6 +116,22 @@ export function Shell({ children }: { children: ReactNode }) {
               </span>
             </Link>
           </div>
+          {/* ---- Bandeau d'erreur : une panne réseau ou une écriture perdue se voit,
+               au lieu de passer pour un compte vide ou un enregistrement réussi. ---- */}
+          {error && (
+            <div role="alert"
+              className="mb-3 flex items-start gap-2 rounded-xl border border-[#ef4444]/50 bg-[#ef4444]/12 px-3 py-2 text-sm">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0 text-[#ff6b6b]" />
+              <p className="min-w-0 flex-1 text-ink-2">{error}</p>
+              <button onClick={() => { clearError(); void loadAll() }}
+                className="btn-ghost flex shrink-0 items-center gap-1 px-2 py-1 text-xs" title="Recharger les données">
+                <RotateCw size={12} /> Réessayer
+              </button>
+              <button onClick={clearError} className="btn-ghost shrink-0 p-1 text-ink-3 hover:text-ink" aria-label="Masquer">
+                <X size={14} />
+              </button>
+            </div>
+          )}
           {children}
         </div>
       </div>

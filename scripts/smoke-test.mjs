@@ -2,15 +2,25 @@
 // les 7 objets à travers RLS, puis nettoyage. Sort avec code ≠ 0 en cas d'échec.
 import { createClient } from '@supabase/supabase-js'
 
-const url = process.env.VITE_SUPABASE_URL ?? 'https://zahrgmswfejabqpgjkfe.supabase.co'
-const anon = process.env.VITE_SUPABASE_ANON_KEY ?? 'sb_publishable_izDTsSC9xZOapRmmkBmN-A_t9L2VMZr'
+// Aucun secret en dur : ce fichier est versionné dans un dépôt public.
+// Renseigne l'environnement avant de lancer (ou charge .env) :
+//   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY,
+//   HORIZON_TEST_EMAIL, HORIZON_TEST_PASSWORD
+const url = process.env.VITE_SUPABASE_URL
+const anon = process.env.VITE_SUPABASE_ANON_KEY
+const testEmail = process.env.HORIZON_TEST_EMAIL
+const testPassword = process.env.HORIZON_TEST_PASSWORD
+if (!url || !anon || !testEmail || !testPassword) {
+  console.error('ÉCHEC: variables manquantes — VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, HORIZON_TEST_EMAIL, HORIZON_TEST_PASSWORD')
+  process.exit(1)
+}
 const supabase = createClient(url, anon)
 
 const fail = (msg, err) => { console.error('ÉCHEC:', msg, err ?? ''); process.exit(1) }
 const ok = (msg) => console.log('OK —', msg)
 
 const { data: auth, error: authErr } = await supabase.auth.signInWithPassword({
-  email: 'test-horizon@example.com', password: 'HorizonTest#2026',
+  email: testEmail, password: testPassword,
 })
 if (authErr) fail('connexion', authErr.message)
 ok(`connecté (${auth.user.id.slice(0, 8)}…)`)

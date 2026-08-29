@@ -310,11 +310,16 @@ export interface NewsTopic {
 /** Une source citée dans une synthèse. */
 export interface NewsSource { title: string; url: string }
 
-/** La synthèse générée pour un sujet (remplacée à chaque génération). */
+/** Nature d'une synthèse : veille du jour, ou mémoire du trimestre. */
+export type NewsKind = 'jour' | 'important'
+
+/** La synthèse générée pour un sujet (une par sujet et par nature,
+ *  remplacée à chaque génération de la même nature). */
 export interface NewsDigest {
   id: UUID
   user_id: UUID
   topic_id: UUID
+  kind: NewsKind
   content: string
   sources: NewsSource[]
   generated_at: string

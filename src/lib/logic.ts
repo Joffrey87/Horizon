@@ -224,7 +224,8 @@ export function computeAlerts(opts: {
   // Habitude qui se dégrade (moins de la moitié de l'objectif 2 semaines de suite)
   for (const h of habits.filter((x) => x.active)) {
     const s = habitStats(h, logs, now)
-    const [w2, w3] = [s.trend4w[2], s.trend4w[3]]
+    const w2 = s.trend4w[2] ?? 1
+    const w3 = s.trend4w[3] ?? 1
     if (h.anchor_state !== 'nouvelle' && w2 < 0.5 && w3 < 0.5) {
       alerts.push({
         id: `hab-${h.id}`, kind: 'habitude', severity: 'info',
@@ -458,7 +459,7 @@ export function workShiftOn(tasks: Task[], dayIso: string): { start: number; end
   const shift = parseShift(t.title)
   if (!shift) return null
   const code = t.title.match(/\d{1,2}h\d{0,2}\s*[-–]\s*\d{1,2}h\d{0,2}\s+(\S+)/)
-  return { ...shift, code: code ? code[1] : '' }
+  return { ...shift, code: code?.[1] ?? '' }
 }
 
 /** Dimanche travaillé avec un début strictement avant 15h (M1, M2, J, S1 ; pas N).
@@ -482,8 +483,9 @@ export function fmtMinutes(min: number): string {
  *  (– marge) OU commencée après la fin (+ marge) de la garde. */
 export function massFitsShift(time: string, shift: { start: number; end: number },
   buffer = 30, massMin = 60): boolean {
-  const [h, mm] = time.split(':').map(Number)
-  const massStart = h * 60 + mm
+  const [hh, mm] = time.split(':')
+  const massStart = Number(hh) * 60 + Number(mm ?? 0)
+  if (!Number.isFinite(massStart)) return true // horaire illisible : on ne l'ecarte pas
   const massEnd = massStart + massMin
   return massEnd <= shift.start - buffer || massStart >= shift.end + buffer
 }
@@ -688,7 +690,18 @@ export function scriptureOfDay(now = new Date()): DailyScripture {
   return { testament, reference, title, verse, verseRef, book, chapter, start, end }
 }
 
-/** Citation de l'accueil = verset clé de l'Écriture du jour (même source que la page Écritures). */
+// L'écriture du jour vient normalement des lectures de la messe du jour (AELF,
+// voir lib/aelf.ts). Ce plan dit, pour une date donnée : quel texte mettre en
+// avant (l'évangile ou la 1re lecture, un jour sur deux) et si la page Écritures
+// propose un psaume à apprendre plutôt que le passage (un jour sur deux aussi).
+export type ScriptureKind = 'evangile' | 'lecture1'
+export function dailyScripturePlan(now = new Date()): { kind: ScriptureKind; psalmDay: boolean } {
+  const dayIndex = Math.floor(now.getTime() / 86_400_000)
+  const odd = ((dayIndex % 2) + 2) % 2 === 1
+  return { kind: odd ? 'lecture1' : 'evangile', psalmDay: odd }
+}
+
+/** Citation de l'accueil — repli hors ligne si l'AELF est injoignable. */
 export function quoteOfDay(now = new Date()): { text: string; source: string } {
   const s = scriptureOfDay(now)
   return { text: s.verse, source: s.verseRef }
@@ -714,8 +727,7 @@ const TIME_QUOTES: [string, string][] = [
 ]
 
 export function timeQuoteOfDay(now = new Date()): { text: string; source: string } {
-  const i = Math.floor(now.getTime() / 86_400_000) % TIME_QUOTES.length
-  const [text, source] = TIME_QUOTES[i]
+  const [text, source] = pick(TIME_QUOTES, Math.floor(now.getTime() / 86_400_000), ['', ''])
   return { text, source }
 }
 
@@ -751,23 +763,21 @@ const EVENING_PHRASES = [
 
 /** Phrase du jour — change chaque jour, stable au sein de la journée. */
 export function dayPhraseOfDay(now = new Date()): string {
-  const idx = Math.floor(now.getTime() / 86_400_000) % DAY_PHRASES.length
-  return DAY_PHRASES[idx]
+  return pick(DAY_PHRASES, Math.floor(now.getTime() / 86_400_000), '')
 }
 
 /** Phrase du soir — change moins souvent (rotation hebdomadaire). */
 export function eveningPhraseOfWeek(now = new Date()): string {
-  const weekIndex = Math.floor(now.getTime() / (7 * 86_400_000))
-  return EVENING_PHRASES[weekIndex % EVENING_PHRASES.length]
+  return pick(EVENING_PHRASES, Math.floor(now.getTime() / (7 * 86_400_000)), '')
 }
 
 /** Extrait la première heure trouvée dans un titre : "9h30 dentiste", "14h", "9:00 call…". */
 export function extractHourMinute(title: string): { hour: number; minute: number } | null {
   const m = title.match(/(?<!\d)(\d{1,2})[h:](\d{0,2})(?!\d)/i)
   if (!m) return null
-  const hour = parseInt(m[1], 10)
-  const minute = m[2] ? parseInt(m[2], 10) : 0
-  if (hour > 23 || minute > 59) return null
+  const hour = Number(m[1])
+  const minute = m[2] ? Number(m[2]) : 0
+  if (!Number.isInteger(hour) || hour > 23 || minute > 59) return null
   return { hour, minute }
 }
 
