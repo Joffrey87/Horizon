@@ -26,38 +26,39 @@ async function callClaude(apiKey: string, system: string, user: string, maxToken
     .map((b: { text: string }) => b.text).join('\n').trim()
 }
 
-const QUIZ_SYSTEM = `Tu conçois un quiz sur un passage biblique. Réponds STRICTEMENT en JSON valide (aucun texte hors JSON) :
+const QUIZ_SYSTEM = `Tu conçois un quiz sur un passage biblique pour aider l'utilisateur à en saisir le SENS, puis à mémoriser le verset clé.
+Réponds STRICTEMENT en JSON valide (aucun texte hors JSON), de la forme :
 {"level":<n>,"intro":"<courte phrase>","questions":[{"id":"q1","type":"qcm"|"texte","question":"...","choices":["...","..."],"answer":"...","hint":"..."}]}
 
-COMPOSITION — EXACTEMENT 4 questions, dans l'ordre du passage :
-- 2 questions sur le SENS (message, leçon, application, portée spirituelle).
-- 2 questions de MÉMORISATION du/des verset(s) ESSENTIEL(S) — en priorité le verset clé fourni — pour aider à le retenir PAR CŒUR.
+COMPOSITION — EXACTEMENT 5 questions, dans l'ordre du passage :
+- q1, q2, q3 : le SENS, en 'qcm'. C'est le cœur du quiz.
+- q4, q5 : la MÉMORISATION du verset clé, en TEXTE À TROUS (type 'texte'), à TOUS les niveaux.
 
-QUALITÉ DES PROPOSITIONS (le cœur du travail — vaut à TOUS les niveaux) :
-- Les propositions d'un QCM sont TOUTES du même registre et toutes crédibles : quatre vertus, quatre attitudes justes, quatre lectures spirituelles recevables. JAMAIS une bonne réponse entourée de vices, d'absurdités ou de contre-sens grossiers : ce serait trop facile.
-- Ce qui distingue la bonne réponse : elle est ce que dit CE passage-ci. Les autres sont vraies en général, ou vraies ailleurs dans l'Écriture, mais ABSENTES de ce passage. On teste la lecture attentive, pas le bon sens.
-- Pour la mémorisation : les distracteurs sont des synonymes ou des mots du même champ lexical (registre identique, même connotation) ; seul le mot ou la formulation EXACTE du texte est correcte.
-- Aucune proposition ne doit se trahir par sa longueur, son ton ou sa précision : longueurs comparables, même style.
-- L'ORDRE des propositions doit varier : la bonne réponse ne doit pas se trouver systématiquement en premier — répartis-la au hasard dans la liste.
+LES 3 QUESTIONS DE SENS :
+- Elles portent sur le message central, la leçon à en tirer, ce que le passage enseigne, sa portée spirituelle, son application concrète dans la vie.
+- N'interroge JAMAIS sur la syntaxe, la grammaire, l'ordre des versets ou des idées, ni sur du par-cœur mécanique : la mémorisation, c'est le rôle de q4 et q5.
+- Ce sont de vraies questions de compréhension, pas des devinettes ni des pièges : la bonne réponse est défendable à partir du passage, quelqu'un qui l'a lu et compris doit pouvoir la trouver.
+- 4 propositions, "answer" = le texte exact de la bonne proposition.
+- Les propositions sont plausibles et du même registre, les mauvaises étant erronées au regard de CE passage — jamais d'absurdité ni de contre-sens grossier qui se repère à l'œil.
+- Longueurs et style comparables : aucune proposition ne doit se trahir par sa précision ou sa longueur. Fais VARIER la position de la bonne réponse.
 
-FORMAT SELON LE NIVEAU (impératif) :
-- Niveaux 1 et 2 : les 4 questions sont en 'qcm' (4 propositions, "answer" = le texte exact d'une proposition).
-  * Les 2 questions de mémorisation = choisir la formulation ou le mot EXACT du verset parmi des propositions proches.
-- Niveaux 3 et 4 :
-  * Les 2 questions de SENS portent sur des NUANCES d'interprétation, en 'qcm'.
-  * Les 2 questions de MÉMORISATION sont des TEXTES À TROUS, type 'texte' : cite une phrase du verset clé en remplaçant quelques mots par « ___ » ; "answer" = le(s) mot(s) exact(s) manquant(s), dans l'ordre, séparés par des espaces.
+LES 2 TEXTES À TROUS (q4, q5) :
+- Type 'texte', SANS "choices". Cite une phrase du verset clé fourni (à défaut, du verset le plus marquant du passage) en remplaçant des mots par « ___ ».
+- "answer" = le(s) mot(s) exact(s) manquant(s), dans l'ordre, séparés par des espaces.
+- Jamais de restitution à l'aveugle : la phrase citée garde TOUJOURS au moins la moitié de ses mots visibles, qui servent d'appui. Au plus 3 trous par question, jamais deux trous côte à côte, toujours sur des mots porteurs de sens.
+- Ne demande jamais de redonner un verset entier de mémoire.
+- q4 et q5 portent sur deux endroits différents du verset clé (ou sur deux versets voisins).
+
+PROFONDEUR SELON LE NIVEAU — c'est la compréhension qui se creuse, jamais la difficulté gratuite :
+* niveau 1 : le message central, la leçon évidente. Trous : un mot porteur à la fois.
+* niveau 2 : l'application concrète — à quoi cela engage, comment le vivre. Trous : un à deux mots.
+* niveau 3 : nuances et implications moins évidentes. Trous : de courtes expressions.
+* niveau 4 : portée spirituelle profonde, exigence d'application personnelle, sens second. Trous : jusqu'à 3 mots, expressions entières.
 
 RÈGLES :
-- Uniquement à partir du passage fourni. En français.
-- N'interroge JAMAIS sur la grammaire, la syntaxe, ou l'ordre des versets.
+- En français, uniquement à partir du passage fourni.
 - Les questions doivent être NOUVELLES : ne reprends AUCUNE des questions déjà posées (liste fournie). Chaque niveau apporte d'autres questions.
-- Profondeur STRICTEMENT croissante — mais AUCUN niveau n'est facile ni évident :
-  * niveau 1 : ce que dit VRAIMENT le passage, parmi quatre lectures toutes plausibles spirituellement (trois sont justes ailleurs, pas ici) + mémoriser le mot exact contre des synonymes proches.
-  * niveau 2 : l'application concrète que CE passage demande, distinguée d'applications voisines et également bonnes en soi + mémoriser une expression exacte contre des variantes du même champ lexical.
-  * niveau 3 : PLUS LOIN — nuances et pièges d'interprétation, ce que le texte ne dit PAS malgré les apparences + trous sur des expressions entières.
-  * niveau 4 : ENCORE PLUS LOIN — portée spirituelle profonde, exigence d'application personnelle + trous plus larges, avec parfois une nuance FINE à distinguer (un mot attendu qu'un synonyme proche ne remplacerait pas) — sans excès ni piège tordu.
-- TEXTES À TROUS — jamais de restitution à l'aveugle : la phrase citée garde TOUJOURS au moins la moitié de ses mots visibles, qui servent d'appui. Les « ___ » portent sur les mots porteurs de sens, au plus 3 par question, et jamais deux trous côte à côte. Ne demande jamais de redonner un verset entier de mémoire.
-- Ce qui aiderait à répondre va DANS la question (contexte, début de la phrase, mots voisins), pas seulement dans "hint".
+- Ce qui aide à répondre va DANS la question (contexte, début de la phrase, mots voisins), pas seulement dans "hint".
 - "hint" : indice court et optionnel.`
 
 /** Mélange les propositions de chaque QCM : la bonne réponse ne doit pas se

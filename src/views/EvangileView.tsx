@@ -174,7 +174,8 @@ function SenseQuizCard({ reading }: { reading: MassReading }) {
     <Card>
       <h3 className="flex items-center gap-1.5 font-medium"><Brain size={16} className="text-sun" /> Quizz sur le sens</h3>
       <p className="mt-0.5 text-xs text-ink-3">
-        4 questions par niveau, sur le sens et la leçon du passage. Chaque niveau creuse davantage,
+        5 questions par niveau : 3 sur le sens et la leçon du passage, 2 textes à trous sur le verset
+        clé. Chaque niveau creuse davantage,
         jusqu’au niveau {MAX_LEVEL}. Les niveaux déjà joués se rejouent sans coût.
       </p>
 
@@ -221,7 +222,7 @@ function isRight(given: string, expected: string): boolean {
   return gw.length === ew.length && gw.every((w, i) => w === ew[i])
 }
 
-/** Quiz d'un niveau : les 4 questions sur la même page. On valide en une fois,
+/** Quiz d'un niveau : les 5 questions sur la même page. On valide en une fois,
  *  puis récap « ta réponse » / « bonne réponse » côte à côte, avec correction stricte. */
 function Quiz({ quiz, level, onReplay }: {
   quiz: GospelQuiz; level: number; onReplay: () => void
