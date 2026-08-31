@@ -3,6 +3,7 @@ import { BookOpen, Brain, RefreshCw, RotateCcw, ChevronRight, Eye, EyeOff } from
 import { useHorizon } from '../lib/store'
 import { dailyScripturePlan, todayIso } from '../lib/logic'
 import { readingOfDay, readingQuote, useMassOfDay, type MassReading } from '../lib/aelf'
+import { misselReading, misselTitre, useMisselOfDay } from '../lib/missel'
 import type { GospelQuiz } from '../lib/types'
 import { Card, Badge } from '../components/ui'
 
@@ -16,9 +17,15 @@ const MAX_LEVEL = 4        // au-delà, on tourne en rond : le quizz s'arrête l
 export function EvangileView() {
   const today = todayIso()
   const plan = useMemo(() => dailyScripturePlan(new Date()), [])
-  const { mass, loading, error } = useMassOfDay(today)
-
-  const reading = readingOfDay(mass, plan.kind)
+  // Les lectures suivent le MISSEL DE 1962 : c'est le jour liturgique (fête,
+  // dimanche après la Pentecôte…) qui commande, pas la date du calendrier.
+  const { jour, loading, error } = useMisselOfDay(today)
+  // Le psaume à apprendre reste tiré du lectionnaire AELF (le missel de 1962 a
+  // un graduel, pas de psaume responsorial). AELF sert aussi de repli si le
+  // propre est injoignable — et en mode démo, qui n'a pas de session Supabase.
+  const { mass } = useMassOfDay(today)
+  const duMissel = misselReading(jour, plan.kind)
+  const reading = duMissel ?? readingOfDay(mass, plan.kind)
   const psaume = mass?.psaume
 
   // Un jour sur deux : psaume à apprendre. Sinon : la lecture du jour + quiz sur le sens.
@@ -41,20 +48,21 @@ export function EvangileView() {
       </header>
 
       <Card>
-        {loading ? (
-          <p className="text-sm text-ink-3">Chargement des lectures du jour…</p>
+        {loading && !reading ? (
+          <p className="text-sm text-ink-3">Chargement du propre du jour…</p>
         ) : !reading ? (
           <p className="text-sm text-ink-3">
-            Lectures du jour indisponibles pour l’instant{error ? ` (${error})` : ''}.
+            Propre du jour indisponible pour l’instant{error ? ` (${error})` : ''}.
           </p>
         ) : (
           <>
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <Badge tone={reading.type === 'evangile' ? 'sun' : 'info'}>
-                {reading.type === 'evangile' ? 'Évangile' : 'Première lecture'}
+                {reading.type === 'evangile' ? 'Évangile' : 'Épître'}
               </Badge>
               <h2 className="font-semibold">{reading.ref}</h2>
-              {mass?.name && <span className="text-sm text-ink-3">— {mass.name}</span>}
+              {duMissel && <span className="text-sm capitalize text-ink-3">— {misselTitre(jour)}</span>}
+              {!duMissel && mass?.name && <span className="text-sm text-ink-3">— {mass.name}</span>}
             </div>
 
             {/* Citation courte — c'est celle qui s'affiche sur l'accueil. */}
@@ -68,7 +76,16 @@ export function EvangileView() {
               {reading.text.split('\n\n').map((para, i) => (
                 <p key={i} className="mt-2 whitespace-pre-line text-[15px] leading-relaxed text-ink">{para}</p>
               ))}
-              <p className="mt-3 text-[11px] text-ink-3">Lectures de la messe du jour — AELF.</p>
+              <p className="mt-3 text-[11px] text-ink-3">
+                {duMissel ? (
+                  <>
+                    Propre du jour selon le missel de 1962{jour?.titreLatin ? ` — ${jour.titreLatin}` : ''}.
+                    {jour?.langue === 'la' && ' Traduction française indisponible pour ce jour : texte latin.'}
+                  </>
+                ) : (
+                  <>Propre du missel injoignable{error ? ` (${error})` : ''} : lectures AELF affichées à la place.</>
+                )}
+              </p>
             </div>
           </>
         )}

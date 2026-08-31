@@ -809,3 +809,57 @@ export function greetingKind(now = new Date(), morningGreetedAlready = false): G
   if (h < 10 && !morningGreetedAlready) return 'morning'
   return 'day'
 }
+
+// ---- Missel de 1962 : nom français du jour liturgique ---------------------
+
+const JOURS_SEM = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
+
+/** « 1re », « 2e », « 14e »… (féminin pour « semaine », « 1er » pour un dimanche). */
+function ordinal(n: number, feminin = false): string {
+  if (n === 1) return feminin ? '1re' : '1er'
+  return `${n}e`
+}
+
+/** Nom français d'un jour du temporal, à partir de la clé Divinum Officium
+ *  (`Pent14-0`, `Adv1-3`, `Quad6-0`…). `null` si la clé n'est pas reconnue —
+ *  l'appelant retombe alors sur le nom latin du propre. */
+export function misselDayName(key: string): string | null {
+  const m = /^(PentEpi|Quadp|Adv|Epi|Quad|Pasc|Pent|Nat)(\d+)?(?:-(\d))?/.exec(key)
+  if (!m) return null
+  const [, saison, numStr, jourStr] = m
+  const n = numStr ? Number(numStr) : 0
+  const jour = jourStr !== undefined ? Number(jourStr) : null
+  const dimanche = jour === 0
+  const nomJour = jour !== null ? JOURS_SEM[jour] ?? '' : ''
+
+  // Jours qui ont un nom propre, sans numéro de semaine.
+  const propres: Record<string, string> = {
+    'Quadp1-0': 'dimanche de la Septuagésime',
+    'Quadp2-0': 'dimanche de la Sexagésime',
+    'Quadp3-0': 'dimanche de la Quinquagésime',
+    'Quad6-0': 'dimanche des Rameaux',
+    'Pasc0-0': 'dimanche de Pâques',
+    'Pasc7-0': 'dimanche de la Pentecôte',
+    'Pent01-0': 'dimanche de la Sainte Trinité',
+  }
+  const exact = propres[key.replace(/[a-z]$/, '')]
+  if (exact) return exact
+
+  const dans = (saison2: string) => dimanche
+    ? `${ordinal(n)} dimanche ${saison2}`
+    : `${nomJour} de la ${ordinal(n, true)} semaine ${saison2}`
+
+  switch (saison) {
+    case 'Adv': return dans("de l'Avent")
+    case 'Epi': return dans("après l'Épiphanie")
+    case 'PentEpi': return `${dans("après l'Épiphanie")} (reporté après la Pentecôte)`
+    case 'Quadp': return dimanche ? null : `${nomJour} avant le Carême`
+    case 'Quad': return n >= 5 ? dans('de la Passion') : dans('de Carême')
+    case 'Pasc': return n === 0
+      ? `${nomJour} de Pâques`
+      : dans('après Pâques')
+    case 'Pent': return dans('après la Pentecôte')
+    case 'Nat': return dimanche ? `${ordinal(n)} dimanche après Noël` : 'temps de Noël'
+    default: return null
+  }
+}

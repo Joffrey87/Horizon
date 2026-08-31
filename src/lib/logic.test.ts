@@ -9,7 +9,7 @@ import {
   controlHoursWorkDays, extractEmojis, extractHourMinute, feastOnDay, firstFridayOrSaturday,
   fmtMinutes, hasMaintainedMasses, isLineValid, isMarketParkingDay, isObligationDay, iso,
   lastControlHoursPeriodEnd, lineTotal, massFitsShift, massesInfoUrl, parseShift,
-  proposeControlHours, quadrant, recurrenceDueOn, recurrenceLabel, spanPart, tasksForDay,
+  misselDayName, proposeControlHours, quadrant, recurrenceDueOn, recurrenceLabel, spanPart, tasksForDay,
   tripLocationOn, workShiftOn, worksOn,
 } from './logic'
 
@@ -351,5 +351,42 @@ describe('utilitaires', () => {
   })
   it('iso formate en date locale', () => {
     expect(iso(new Date(2026, 7, 29))).toBe('2026-08-29')
+  })
+})
+
+// ---- missel de 1962 -----------------------------------------------------
+
+describe('misselDayName', () => {
+  it('nomme les dimanches après la Pentecôte', () => {
+    // 30 août 2026 = 14e dimanche après la Pentecôte (Pâques le 5 avril).
+    expect(misselDayName('Pent14-0')).toBe('14e dimanche après la Pentecôte')
+    expect(misselDayName('Pent02-0')).toBe('2e dimanche après la Pentecôte')
+  })
+  it('donne leur nom propre aux dimanches qui en ont un', () => {
+    expect(misselDayName('Pent01-0')).toBe('dimanche de la Sainte Trinité')
+    expect(misselDayName('Pasc0-0')).toBe('dimanche de Pâques')
+    expect(misselDayName('Pasc7-0')).toBe('dimanche de la Pentecôte')
+    expect(misselDayName('Quad6-0')).toBe('dimanche des Rameaux')
+    expect(misselDayName('Quadp1-0')).toBe('dimanche de la Septuagésime')
+    expect(misselDayName('Quadp3-0')).toBe('dimanche de la Quinquagésime')
+  })
+  it('distingue Carême et temps de la Passion', () => {
+    expect(misselDayName('Quad1-0')).toBe('1er dimanche de Carême')
+    expect(misselDayName('Quad5-0')).toBe('5e dimanche de la Passion')
+  })
+  it('nomme les féries par leur semaine', () => {
+    expect(misselDayName('Adv1-3')).toBe("mercredi de la 1re semaine de l'Avent")
+    expect(misselDayName('Pent14-5')).toBe('vendredi de la 14e semaine après la Pentecôte')
+  })
+  it("gère l'Avent et l'Épiphanie", () => {
+    expect(misselDayName('Adv1-0')).toBe("1er dimanche de l'Avent")
+    expect(misselDayName('Epi3-0')).toBe("3e dimanche après l'Épiphanie")
+  })
+  it('ignore le suffixe de variante', () => {
+    expect(misselDayName('Pent01-0r')).toBe('dimanche de la Sainte Trinité')
+  })
+  it('rend null sur une clé inconnue (repli sur le nom latin)', () => {
+    expect(misselDayName('08-15')).toBeNull()
+    expect(misselDayName('nimportequoi')).toBeNull()
   })
 })
