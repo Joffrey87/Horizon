@@ -1,8 +1,10 @@
 // ================================================================
 // HORIZON — Edge Function « horizon-gospel » (mode 'quiz')
-// Quiz sur un passage biblique : 4 questions (2 sur le sens, 2 de
-// mémorisation du/des verset(s) essentiel(s)), profondeur croissante
-// selon `level`, questions non répétées d'un niveau à l'autre.
+// Quiz sur un passage biblique. Deux formats :
+//  - 'jour'     : 5 questions (3 sur le SENS + 2 textes à trous), profondeur
+//                 croissante selon `level`, sans répéter les questions déjà posées ;
+//  - 'revision' : 4 questions (2 sens + 2 trous) à profondeur STABLE et profonde,
+//                 pour revoir en fin de semaine un évangile déjà travaillé.
 // Le passage vient de getbible.net côté app (gratuit) — voir src/lib/bible.ts.
 // Secret requis : ANTHROPIC_API_KEY
 // ================================================================
@@ -26,34 +28,51 @@ async function callClaude(apiKey: string, system: string, user: string, maxToken
     .map((b: { text: string }) => b.text).join('\n').trim()
 }
 
-const QUIZ_SYSTEM = `Tu conçois un quiz sur un passage biblique pour aider l'utilisateur à en saisir le SENS, puis à mémoriser le verset clé.
+type Format = 'jour' | 'revision'
+
+const COMPOSITION_JOUR = `COMPOSITION — EXACTEMENT 5 questions, dans l'ordre du passage :
+- q1, q2, q3 : le SENS, en 'qcm'. C'est le cœur du quiz.
+- q4, q5 : la MÉMORISATION du verset clé, en TEXTE À TROUS (type 'texte').`
+
+const COMPOSITION_REVISION = `COMPOSITION — EXACTEMENT 4 questions, dans l'ordre du passage :
+- q1, q2 : le SENS, en 'qcm'. C'est le cœur du quiz.
+- q3, q4 : la MÉMORISATION du verset clé, en TEXTE À TROUS (type 'texte').`
+
+const PROFONDEUR_JOUR = `PROFONDEUR SELON LE NIVEAU — c'est la compréhension qui se creuse, jamais la difficulté gratuite :
+* niveau 1 : le message central, la leçon évidente. Trous : un mot porteur à la fois.
+* niveau 2 : l'application concrète — à quoi cela engage, comment le vivre. Trous : un à deux mots.
+* niveau 3 : nuances et implications moins évidentes. Trous : de courtes expressions.
+* niveau 4 : portée spirituelle profonde, exigence d'application personnelle, sens second. Trous : jusqu'à 3 mots, expressions entières.`
+
+// Révision de fin de semaine : l'évangile a déjà été travaillé, on reste au
+// niveau le plus profond pour tous les jours révisés (pas de progression).
+const PROFONDEUR_REVISION = `PROFONDEUR — RÉVISION, niveau profond et STABLE (l'équivalent du niveau 4) :
+* Les questions de sens portent sur la portée spirituelle profonde et l'exigence d'application personnelle, pas sur la leçon de surface.
+* Les trous font jusqu'à 3 mots et peuvent porter sur des expressions entières.
+* Ce passage a déjà été étudié cette semaine : on vérifie ce qui en reste, sans le réexpliquer.`
+
+const quizSystem = (composition: string, profondeur: string) => `Tu conçois un quiz sur un passage biblique pour aider l'utilisateur à en saisir le SENS, puis à mémoriser le verset clé.
 Réponds STRICTEMENT en JSON valide (aucun texte hors JSON), de la forme :
 {"level":<n>,"intro":"<courte phrase>","questions":[{"id":"q1","type":"qcm"|"texte","question":"...","choices":["...","..."],"answer":"...","hint":"..."}]}
 
-COMPOSITION — EXACTEMENT 5 questions, dans l'ordre du passage :
-- q1, q2, q3 : le SENS, en 'qcm'. C'est le cœur du quiz.
-- q4, q5 : la MÉMORISATION du verset clé, en TEXTE À TROUS (type 'texte'), à TOUS les niveaux.
+${composition}
 
-LES 3 QUESTIONS DE SENS :
+LES QUESTIONS DE SENS :
 - Elles portent sur le message central, la leçon à en tirer, ce que le passage enseigne, sa portée spirituelle, son application concrète dans la vie.
-- N'interroge JAMAIS sur la syntaxe, la grammaire, l'ordre des versets ou des idées, ni sur du par-cœur mécanique : la mémorisation, c'est le rôle de q4 et q5.
+- N'interroge JAMAIS sur la syntaxe, la grammaire, l'ordre des versets ou des idées, ni sur du par-cœur mécanique : la mémorisation est le rôle des questions à trous.
 - Ce sont de vraies questions de compréhension, pas des devinettes ni des pièges : la bonne réponse est défendable à partir du passage, quelqu'un qui l'a lu et compris doit pouvoir la trouver.
 - 4 propositions, "answer" = le texte exact de la bonne proposition.
 - Les propositions sont plausibles et du même registre, les mauvaises étant erronées au regard de CE passage — jamais d'absurdité ni de contre-sens grossier qui se repère à l'œil.
 - Longueurs et style comparables : aucune proposition ne doit se trahir par sa précision ou sa longueur. Fais VARIER la position de la bonne réponse.
 
-LES 2 TEXTES À TROUS (q4, q5) :
+LES 2 TEXTES À TROUS :
 - Type 'texte', SANS "choices". Cite une phrase du verset clé fourni (à défaut, du verset le plus marquant du passage) en remplaçant des mots par « ___ ».
 - "answer" = le(s) mot(s) exact(s) manquant(s), dans l'ordre, séparés par des espaces.
 - Jamais de restitution à l'aveugle : la phrase citée garde TOUJOURS au moins la moitié de ses mots visibles, qui servent d'appui. Au plus 3 trous par question, jamais deux trous côte à côte, toujours sur des mots porteurs de sens.
 - Ne demande jamais de redonner un verset entier de mémoire.
-- q4 et q5 portent sur deux endroits différents du verset clé (ou sur deux versets voisins).
+- Les deux portent sur deux endroits différents du verset clé (ou sur deux versets voisins).
 
-PROFONDEUR SELON LE NIVEAU — c'est la compréhension qui se creuse, jamais la difficulté gratuite :
-* niveau 1 : le message central, la leçon évidente. Trous : un mot porteur à la fois.
-* niveau 2 : l'application concrète — à quoi cela engage, comment le vivre. Trous : un à deux mots.
-* niveau 3 : nuances et implications moins évidentes. Trous : de courtes expressions.
-* niveau 4 : portée spirituelle profonde, exigence d'application personnelle, sens second. Trous : jusqu'à 3 mots, expressions entières.
+${profondeur}
 
 RÈGLES :
 - En français, uniquement à partir du passage fourni.
@@ -108,7 +127,8 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
     if (!apiKey) return json({ error: 'ANTHROPIC_API_KEY manquante' }, 500)
 
-    const { reference, passage, level, keyVerse, verseRef, avoid } = await req.json()
+    const { reference, passage, level, keyVerse, verseRef, avoid, format: fmt } = await req.json()
+    const format: Format = fmt === 'revision' ? 'revision' : 'jour'
     if (!reference) return json({ error: 'référence manquante' }, 400)
 
     const lvl = Math.max(1, Number(level) || 1)
@@ -117,9 +137,14 @@ Deno.serve(async (req) => {
       + (keyVerse ? `Verset clé (essentiel à mémoriser) : « ${keyVerse} » (${verseRef ?? ''})\n` : '')
       + `\nTEXTE :\n${passage ?? '(texte non fourni — appuie-toi sur la référence)'}\n\n`
       + (avoidList.length ? `Questions déjà posées aux niveaux précédents (NE LES REPRENDS PAS) :\n- ${avoidList.join('\n- ')}\n\n` : '')
-      + `Génère le quiz au NIVEAU ${lvl}.`
+      + (format === 'revision'
+        ? `Génère le quiz de RÉVISION de ce passage.`
+        : `Génère le quiz au NIVEAU ${lvl}.`)
 
-    const raw = await callClaude(apiKey, QUIZ_SYSTEM, user, 1500)
+    const systeme = format === 'revision'
+      ? quizSystem(COMPOSITION_REVISION, PROFONDEUR_REVISION)
+      : quizSystem(COMPOSITION_JOUR, PROFONDEUR_JOUR)
+    const raw = await callClaude(apiKey, systeme, user, 1500)
     let quiz: unknown
     try {
       quiz = JSON.parse(raw)

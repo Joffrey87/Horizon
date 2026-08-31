@@ -9,7 +9,7 @@ import {
   controlHoursWorkDays, extractEmojis, extractHourMinute, feastOnDay, firstFridayOrSaturday,
   fmtMinutes, hasMaintainedMasses, isLineValid, isMarketParkingDay, isObligationDay, iso,
   lastControlHoursPeriodEnd, lineTotal, massFitsShift, massesInfoUrl, parseShift,
-  misselDayName, proposeControlHours, quadrant, recurrenceDueOn, recurrenceLabel, spanPart, tasksForDay,
+  misselDayName, proposeControlHours, revisionWeek, quadrant, recurrenceDueOn, recurrenceLabel, spanPart, tasksForDay,
   tripLocationOn, workShiftOn, worksOn,
 } from './logic'
 
@@ -388,5 +388,26 @@ describe('misselDayName', () => {
   it('rend null sur une clé inconnue (repli sur le nom latin)', () => {
     expect(misselDayName('08-15')).toBeNull()
     expect(misselDayName('nimportequoi')).toBeNull()
+  })
+})
+
+describe('revisionWeek', () => {
+  it('le dimanche, prend le lundi→samedi qui précèdent', () => {
+    const r = revisionWeek(new Date(2026, 7, 30)) // dimanche 30 août 2026
+    expect(r.sunday).toBe('2026-08-30')
+    expect(r.days).toEqual([
+      '2026-08-24', '2026-08-25', '2026-08-26', '2026-08-27', '2026-08-28', '2026-08-29',
+    ])
+  })
+  it('garde la même semaine du dimanche au samedi suivant', () => {
+    const dimanche = revisionWeek(new Date(2026, 7, 30))
+    for (const d of [31, 1, 2, 3, 4, 5]) {
+      const jour = d === 31 ? new Date(2026, 7, 31) : new Date(2026, 8, d)
+      expect(revisionWeek(jour)).toEqual(dimanche)
+    }
+  })
+  it('bascule au dimanche suivant', () => {
+    expect(revisionWeek(new Date(2026, 8, 6)).sunday).toBe('2026-09-06')
+    expect(revisionWeek(new Date(2026, 8, 6)).days[0]).toBe('2026-08-31')
   })
 })

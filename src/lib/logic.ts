@@ -863,3 +863,15 @@ export function misselDayName(key: string): string | null {
     default: return null
   }
 }
+
+/** Semaine à réviser : les six jours (lundi → samedi) qui précèdent le dernier
+ *  dimanche. Le dimanche ouvre la révision, qui reste disponible jusqu'au
+ *  samedi suivant — l'ancre ne change qu'au dimanche d'après. */
+export function revisionWeek(now = new Date()): { sunday: string; days: string[] } {
+  const d = new Date(now)
+  d.setHours(12, 0, 0, 0)
+  const back = getISODay(d) % 7 // dimanche (7) → 0, lundi (1) → 1 … samedi (6) → 6
+  const sunday = addDays(d, -back)
+  const days = Array.from({ length: 6 }, (_, i) => iso(addDays(sunday, i - 6)))
+  return { sunday: iso(sunday), days }
+}

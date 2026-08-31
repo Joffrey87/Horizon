@@ -54,7 +54,7 @@ interface HorizonState {
   cycleHabitDay: (habitId: string, date: string) => Promise<void>
   refreshNews: (mode?: NewsKind) => Promise<{ ok: boolean; updated?: number; error?: string }>
   resetShopping: (listId: string) => Promise<void>
-  gospelQuiz: (reference: string, passage: string, level: number, opts?: { keyVerse?: string; verseRef?: string; avoid?: string[] }) => Promise<{ ok: boolean; quiz?: GospelQuiz; error?: string }>
+  gospelQuiz: (reference: string, passage: string, level: number, opts?: { keyVerse?: string; verseRef?: string; avoid?: string[]; format?: 'jour' | 'revision' }) => Promise<{ ok: boolean; quiz?: GospelQuiz; error?: string }>
   clearRecovery: () => void
   clearError: () => void
   signOut: () => Promise<void>
@@ -253,7 +253,11 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   gospelQuiz: async (reference, passage, level, opts) => {
     try {
       const { data, error } = await supabase.functions.invoke('horizon-gospel', {
-        body: { reference, passage, level, keyVerse: opts?.keyVerse, verseRef: opts?.verseRef, avoid: opts?.avoid },
+        body: {
+          reference, passage, level,
+          keyVerse: opts?.keyVerse, verseRef: opts?.verseRef, avoid: opts?.avoid,
+          format: opts?.format ?? 'jour',
+        },
       })
       if (error) throw error
       if (data?.error) throw new Error(data.error)

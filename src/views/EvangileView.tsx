@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Brain, RefreshCw, RotateCcw, ChevronRight, Eye, EyeOff } from 'lucide-react'
+import { addDays, format as fmtDate, parseISO } from 'date-fns'
+import { fr } from 'date-fns/locale'
+import { BookOpen, Brain, RefreshCw, RotateCcw, ChevronRight, ChevronLeft, Eye, EyeOff, CalendarDays } from 'lucide-react'
 import { useHorizon } from '../lib/store'
-import { dailyScripturePlan, todayIso } from '../lib/logic'
-import { readingOfDay, readingQuote, useMassOfDay, type MassReading } from '../lib/aelf'
-import { misselReading, misselTitre, useMisselOfDay } from '../lib/missel'
+import { dailyScripturePlan, iso, revisionWeek, todayIso } from '../lib/logic'
+import { fetchMass, readingOfDay, readingQuote, useMassOfDay, type MassReading } from '../lib/aelf'
+import { fetchMissel, misselReading, misselTitre, useMisselOfDay } from '../lib/missel'
 import type { GospelQuiz } from '../lib/types'
 import { Card, Badge } from '../components/ui'
 
@@ -13,20 +15,31 @@ const MAXLEVEL_KEY = (ref: string) => `horizon.gospel.maxlevel.${ref}`
 const GENTS_KEY = (ref: string) => `horizon.gospel.gents.${ref}` // horodatage de la session de quiz
 const RESET_MS = 3_600_000 // 1 h : au-delà, on repart au niveau 1 (quiz régénéré)
 const MAX_LEVEL = 4        // au-delà, on tourne en rond : le quizz s'arrête là
+const BACK_DAYS = 7        // on peut revenir sur les jours précédents (quiz compris)
+// Révision de la semaine : un niveau par évangile du lundi au samedi précédents.
+const WEEK_KEY = (sunday: string, i: number) => `horizon.gospel.semaine.${sunday}.${i}`
 
 export function EvangileView() {
   const today = todayIso()
-  const plan = useMemo(() => dailyScripturePlan(new Date()), [])
+  // On peut revenir sur les jours précédents : le quiz suit la date choisie.
+  const [date, setDate] = useState(today)
+  const [semaineOuverte, setSemaineOuverte] = useState(false)
+  const plan = useMemo(() => dailyScripturePlan(parseISO(date)), [date])
   // Les lectures suivent le MISSEL DE 1962 : c'est le jour liturgique (fête,
   // dimanche après la Pentecôte…) qui commande, pas la date du calendrier.
-  const { jour, loading, error } = useMisselOfDay(today)
+  const { jour, loading, error } = useMisselOfDay(date)
   // Le psaume à apprendre reste tiré du lectionnaire AELF (le missel de 1962 a
   // un graduel, pas de psaume responsorial). AELF sert aussi de repli si le
   // propre est injoignable — et en mode démo, qui n'a pas de session Supabase.
-  const { mass } = useMassOfDay(today)
+  const { mass } = useMassOfDay(date)
   const duMissel = misselReading(jour, plan.kind)
   const reading = duMissel ?? readingOfDay(mass, plan.kind)
   const psaume = mass?.psaume
+  const plusAncien = iso(addDays(parseISO(today), -BACK_DAYS))
+  const decaler = (n: number) => setDate((d) => {
+    const cible = iso(addDays(parseISO(d), n))
+    return cible > today || cible < plusAncien ? d : cible
+  })
 
   // Un jour sur deux : psaume à apprendre. Sinon : la lecture du jour + quiz sur le sens.
   const psalmMode = plan.psalmDay && !!psaume
@@ -37,13 +50,27 @@ export function EvangileView() {
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sun/15 text-sun">
           <BookOpen size={18} />
         </span>
-        <div>
+        <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold">Écritures du jour</h1>
           <p className="text-xs text-ink-3">
             {psalmMode
               ? 'La lecture de la messe du jour, puis le psaume à apprendre par cœur.'
               : 'La lecture de la messe du jour, puis un quiz pour en saisir le sens.'}
           </p>
+        </div>
+        {/* Revenir sur un jour précédent : la lecture ET son quiz suivent. */}
+        <div className="flex shrink-0 items-center gap-1">
+          <button onClick={() => decaler(-1)} disabled={date <= plusAncien}
+            className="btn-ghost p-2 disabled:opacity-30" aria-label="Jour précédent" title="Jour précédent">
+            <ChevronLeft size={15} />
+          </button>
+          <span className="min-w-24 text-center text-xs capitalize text-ink-2">
+            {date === today ? "aujourd'hui" : fmtDate(parseISO(date), 'EEE d MMM', { locale: fr })}
+          </span>
+          <button onClick={() => decaler(1)} disabled={date >= today}
+            className="btn-ghost p-2 disabled:opacity-30" aria-label="Jour suivant" title="Jour suivant">
+            <ChevronRight size={15} />
+          </button>
         </div>
       </header>
 
@@ -92,8 +119,20 @@ export function EvangileView() {
       </Card>
 
       {psalmMode
-        ? <PsalmCard psaume={psaume!} dayKey={today} />
+        ? <PsalmCard psaume={psaume!} dayKey={date} />
         : reading && <SenseQuizCard reading={reading} />}
+
+      {/* Révision de la semaine écoulée : ouverte le dimanche, disponible
+          jusqu'au samedi suivant. */}
+      {semaineOuverte
+        ? <SemaineQuizCard onClose={() => setSemaineOuverte(false)} />
+        : (
+          <button onClick={() => setSemaineOuverte(true)}
+            className="btn-ghost flex w-full items-center justify-center gap-2 rounded-xl border border-line py-2.5 text-sm">
+            <CalendarDays size={15} className="text-sun" />
+            Réviser les évangiles de la semaine
+          </button>
+        )}
     </div>
   )
 }
@@ -453,6 +492,115 @@ function PsalmCard({ psaume, dayKey }: { psaume: MassReading; dayKey: string }) 
           </button>
         )}
       </div>
+    </Card>
+  )
+}
+
+// ---- Révision de la semaine ------------------------------------------------
+
+/** Les six évangiles du lundi au samedi qui précèdent le dernier dimanche.
+ *  Un niveau par jour, 4 questions chacun, tous à la profondeur du niveau 4 :
+ *  il s'agit de revoir ce qui a été travaillé, pas de recommencer une montée.
+ *  Numérotés 5 à 10 — ils prolongent les 4 niveaux de l'évangile du jour.
+ *  Ouverte le dimanche, elle reste disponible jusqu'au samedi suivant. */
+function SemaineQuizCard({ onClose }: { onClose: () => void }) {
+  const s = useHorizon()
+  const semaine = useMemo(() => revisionWeek(new Date()), [])
+  type JourEvangile = { date: string; ref: string; texte: string }
+  const [jours, setJours] = useState<(JourEvangile | null)[]>([])
+  const [chargement, setChargement] = useState(true)
+  const [actif, setActif] = useState<number | null>(null)
+  const [quiz, setQuiz] = useState<GospelQuiz | null>(null)
+  const [nonce, setNonce] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const [erreur, setErreur] = useState<string | null>(null)
+
+  // Les six évangiles (fetchMissel garde chaque jour en cache local).
+  useEffect(() => {
+    let vivant = true
+    setChargement(true)
+    void Promise.all(semaine.days.map(async (d): Promise<JourEvangile | null> => {
+      // Même repli que pour la lecture du jour : AELF si le propre est injoignable.
+      let ev: MassReading | undefined
+      try { ev = misselReading(await fetchMissel(d), 'evangile') } catch { /* repli */ }
+      if (!ev) {
+        try { ev = readingOfDay(await fetchMass(d), 'evangile') } catch { /* jour sans lecture */ }
+      }
+      return ev ? { date: d, ref: ev.ref, texte: ev.text } : null
+    })).then((r) => { if (vivant) { setJours(r); setChargement(false) } })
+    return () => { vivant = false }
+  }, [semaine.sunday]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const ouvrir = async (i: number) => {
+    const j = jours[i]
+    if (!j) return
+    setErreur(null)
+    const cle = WEEK_KEY(semaine.sunday, i)
+    const cache = localStorage.getItem(cle)
+    if (cache) {
+      try {
+        setQuiz(JSON.parse(cache) as GospelQuiz); setActif(i); setNonce((n) => n + 1)
+        return
+      } catch { /* cache corrompu : on régénère */ }
+    }
+    setBusy(true)
+    const r = await s.gospelQuiz(j.ref, j.texte, MAX_LEVEL, { verseRef: j.ref, format: 'revision' })
+    setBusy(false)
+    if (r.ok && r.quiz) {
+      try { localStorage.setItem(cle, JSON.stringify(r.quiz)) } catch { /* quota */ }
+      setQuiz(r.quiz); setActif(i); setNonce((n) => n + 1)
+    } else {
+      setErreur(r.error?.includes('ANTHROPIC') ? 'Quiz indisponible : clé API Anthropic à configurer.' : (r.error ?? 'Quiz indisponible.'))
+    }
+  }
+
+  const disponibles = jours.filter(Boolean).length
+
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="flex items-center gap-1.5 font-medium">
+            <CalendarDays size={16} className="text-sun" /> Révision de la semaine
+          </h3>
+          <p className="mt-0.5 text-xs text-ink-3">
+            Les évangiles du lundi {fmtDate(parseISO(semaine.days[0] ?? semaine.sunday), 'd MMM', { locale: fr })} au
+            samedi {fmtDate(parseISO(semaine.days[5] ?? semaine.sunday), 'd MMM', { locale: fr })} —
+            un niveau par jour, 4 questions, tous à la profondeur du niveau {MAX_LEVEL}.
+          </p>
+        </div>
+        <button onClick={onClose} className="btn-ghost shrink-0 px-2 py-1 text-xs text-ink-3">Fermer</button>
+      </div>
+
+      {chargement ? (
+        <p className="mt-3 text-sm text-ink-3">Chargement des évangiles de la semaine…</p>
+      ) : disponibles === 0 ? (
+        <p className="mt-3 text-sm text-ink-3">
+          Évangiles de la semaine indisponibles (le propre du missel n’a pas pu être chargé).
+        </p>
+      ) : (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          {jours.map((j, i) => (
+            <button key={semaine.days[i]} onClick={() => void ouvrir(i)} disabled={!j || busy}
+              title={j ? `${j.ref} — ${fmtDate(parseISO(j.date), 'EEEE d MMMM', { locale: fr })}` : 'Évangile indisponible'}
+              className={`rounded-lg border px-3 py-1.5 text-sm transition-colors disabled:opacity-40 ${
+                actif === i ? 'border-sun/50 bg-sun/15 text-sun-soft' : 'border-line text-ink-2 hover:bg-panel-2 hover:text-ink'
+              }`}>
+              <span className="font-medium">Niveau {MAX_LEVEL + 1 + i}</span>
+              <span className="ml-1.5 text-xs capitalize text-ink-3">
+                {fmtDate(parseISO(semaine.days[i] ?? semaine.sunday), 'EEE', { locale: fr })}
+              </span>
+            </button>
+          ))}
+          {busy && <RefreshCw size={14} className="animate-spin text-ink-3" />}
+        </div>
+      )}
+
+      {erreur && <p className="mt-3 text-sm text-[#ec7f97]">{erreur}</p>}
+      {quiz && actif !== null && (
+        <Quiz key={`sem-${actif}-${nonce}`} quiz={quiz} level={MAX_LEVEL + 1 + actif}
+          onReplay={() => void ouvrir(actif)} />
+      )}
     </Card>
   )
 }
