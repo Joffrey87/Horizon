@@ -68,6 +68,14 @@ const COLLECTION: Record<Table, keyof HorizonState> = {
   shopping_lists: 'shoppingLists', shopping_items: 'shoppingItems',
 }
 
+/** Noms lisibles des collections, dans l'ordre des requêtes de `loadAll`. */
+const TABLES = [
+  'domaines', 'objectifs', 'projets', 'étapes', 'tâches', 'idées', 'habitudes',
+  'suivi des habitudes', 'revues', 'dispositions', 'réglages', 'anniversaires',
+  'vérifications', 'heures de contrôle', "sujets d'actualité", 'synthèses',
+  'listes de courses', 'articles',
+]
+
 export const useHorizon = create<HorizonState>((set, get) => ({
   session: null,
   recovery: false,
@@ -99,33 +107,61 @@ export const useHorizon = create<HorizonState>((set, get) => ({
 
   loadAll: async () => {
     set({ loading: true, error: null })
-    const responses = await Promise.all([
-      supabase.from('domains').select('*').order('sort_order'),
-      supabase.from('objectives').select('*').order('sort_order'),
-      supabase.from('projects').select('*').order('created_at'),
-      supabase.from('steps').select('*').order('sort_order'),
-      supabase.from('tasks').select('*').order('created_at'),
-      supabase.from('ideas').select('*').order('created_at', { ascending: false }),
-      supabase.from('habits').select('*').order('created_at'),
-      supabase.from('habit_logs').select('*'),
-      supabase.from('reviews').select('*').order('review_date', { ascending: false }),
-      supabase.from('layouts').select('*'),
-      supabase.from('settings').select('*').maybeSingle(),
-      supabase.from('birthdays').select('*'),
-      supabase.from('checks').select('*').order('sort_order'),
-      supabase.from('olafatco_jobs').select('*').order('created_at', { ascending: false }),
-      supabase.from('news_topics').select('*').order('sort_order'),
-      supabase.from('news_digests').select('*'),
-      supabase.from('shopping_lists').select('*').order('sort_order'),
-      supabase.from('shopping_items').select('*').order('sort_order'),
-    ])
+    // Des fabriques et non des promesses : on doit pouvoir relancer une requête.
+    // L'ordre est celui de la déstructuration ci-dessous — ne pas y toucher.
+    const requetes = [
+      () => supabase.from('domains').select('*').order('sort_order'),
+      () => supabase.from('objectives').select('*').order('sort_order'),
+      () => supabase.from('projects').select('*').order('created_at'),
+      () => supabase.from('steps').select('*').order('sort_order'),
+      () => supabase.from('tasks').select('*').order('created_at'),
+      () => supabase.from('ideas').select('*').order('created_at', { ascending: false }),
+      () => supabase.from('habits').select('*').order('created_at'),
+      () => supabase.from('habit_logs').select('*'),
+      () => supabase.from('reviews').select('*').order('review_date', { ascending: false }),
+      () => supabase.from('layouts').select('*'),
+      () => supabase.from('settings').select('*').maybeSingle(),
+      () => supabase.from('birthdays').select('*'),
+      () => supabase.from('checks').select('*').order('sort_order'),
+      () => supabase.from('olafatco_jobs').select('*').order('created_at', { ascending: false }),
+      () => supabase.from('news_topics').select('*').order('sort_order'),
+      () => supabase.from('news_digests').select('*'),
+      () => supabase.from('shopping_lists').select('*').order('sort_order'),
+      () => supabase.from('shopping_items').select('*').order('sort_order'),
+    ]
+    type Reponse = { data: unknown; error: { message?: string } | null }
+    const lancer = (i: number) => requetes[i]!() as unknown as Promise<Reponse>
+
+    let responses = await Promise.all(requetes.map((_, i) => lancer(i)))
+    // Un échec au démarrage est souvent passager : Supabase répond parfois
+    // « JWT issued at future » (PGRST303) quand l'horloge de son service d'auth
+    // devance celle de son API — le jeton doit « vieillir » de quelques secondes
+    // pour être accepté. On relance les requêtes tombées avant d'alarmer.
+    for (const attente of [900, 3000]) {
+      if (!responses.some((r) => r.error)) break
+      await new Promise((r) => setTimeout(r, attente))
+      responses = await Promise.all(
+        responses.map((r, i) => (r.error ? lancer(i) : Promise.resolve(r))),
+      )
+    }
     const [dom, obj, pro, stp, tas, ide, hab, log, rev, lay, setg, bd, chk, oja, nto, ndi, shl, shi] = responses
     // Une table en échec conserve ce qui était déjà chargé : mieux vaut un écran
     // incomplet et signalé qu'un compte qui paraît vide.
     const prev = get()
-    const keep = <T,>(res: { data: T[] | null; error: unknown }, fallback: T[]): T[] =>
-      res.error ? fallback : (res.data ?? [])
+    const keep = <T,>(res: Reponse | undefined, fallback: T[]): T[] =>
+      !res || res.error ? fallback : ((res.data as T[] | null) ?? [])
     const failed = responses.filter((r) => r.error)
+    const premiere = failed[0]?.error?.message ?? 'réseau'
+    const noms = responses.map((r, i) => (r.error ? (TABLES[i] ?? '?') : null)).filter(Boolean)
+    // Au-delà de trois, on ne récite pas la liste : elle devient illisible.
+    const tables = noms.length > 3
+      ? `${noms.slice(0, 3).join(', ')} et ${noms.length - 3} autres`
+      : noms.join(', ')
+    // « JWT issued at future » ne vient ni du réseau ni des données : c'est un
+    // décalage d'horloge interne à Supabase. On le dit, plutôt que d'inquiéter.
+    const message = /issued at future|JWT/i.test(premiere)
+      ? `Supabase a refusé le jeton pour ${tables} (décalage d'horloge de son côté, PGRST303). C'est passager : réessaie dans un instant.`
+      : `Chargement incomplet : ${tables} n'a pas pu être lu (${premiere}).`
     set({
       domains: keep(dom, prev.domains), objectives: keep(obj, prev.objectives), projects: keep(pro, prev.projects),
       steps: keep(stp, prev.steps), tasks: keep(tas, prev.tasks), ideas: keep(ide, prev.ideas),
@@ -134,10 +170,9 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       olafatcoJobs: keep(oja, prev.olafatcoJobs), newsTopics: keep(nto, prev.newsTopics),
       newsDigests: keep(ndi, prev.newsDigests), shoppingLists: keep(shl, prev.shoppingLists),
       shoppingItems: keep(shi, prev.shoppingItems),
-      settings: setg.error ? prev.settings : (setg.data ?? null),
+      settings: !setg || setg.error ? prev.settings : ((setg.data as Settings | null) ?? null),
       loading: false,
-      error: failed.length === 0 ? null
-        : `Chargement incomplet : ${failed.length} donnée${failed.length > 1 ? 's' : ''} n'a pas pu être lue (${failed[0]?.error?.message ?? 'réseau'}).`,
+      error: failed.length === 0 ? null : message,
     })
   },
 
