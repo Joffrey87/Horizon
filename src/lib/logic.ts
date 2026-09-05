@@ -10,7 +10,7 @@ import {
 import { fr } from 'date-fns/locale'
 import type {
   Alert, Birthday, Check, Domain, Habit, HabitLog, HoursRules, OlafatcoJob, OlafatcoLine,
-  Project, Review, Settings, Task,
+  Project, ProjectStatus, Review, Settings, Task,
 } from './types'
 
 /** Anniversaires tombant un jour donné (récurrence annuelle : jour + mois). */
@@ -72,6 +72,11 @@ export function tasksForDay(tasks: Task[], day: Date): Task[] {
     return dayIso === today && t.due_date !== null && t.due_date < today
       && (t.scheduled_date === null || t.scheduled_date <= today)
   })
+}
+
+/** Libellé d'affichage d'un statut de projet. */
+export const STATUS_LABEL: Record<ProjectStatus, string> = {
+  actif: 'Actif', pause: 'En pause', termine: 'Terminé', abandonne: 'Abandonné',
 }
 
 /** Position d'un item multi-jours (end_date) sur un jour donné, pour un rendu continu. */

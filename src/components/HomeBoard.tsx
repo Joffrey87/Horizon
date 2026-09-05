@@ -34,7 +34,11 @@ function ordreManuel(tasks: Task[]): Task[] {
  *  depuis la fiche du projet — l'accueil est une vue de ce sur quoi on se
  *  concentre, pas la liste de tout ce qui reste à faire.
  *  Les positions sont mémorisées dans un layout dédié (projection « accueil »). */
-export function HomeBoard({ panneaux = [] }: { panneaux?: PanneauAccueil[] }) {
+export function HomeBoard({ panneaux = [], onOuvrirProjet }: {
+  panneaux?: PanneauAccueil[]
+  /** Ouvre la fiche du projet SUR la page hôte. À défaut, on navigue vers Projets. */
+  onOuvrirProjet?: (id: string) => void
+}) {
   const s = useHorizon()
   const navigate = useNavigate()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -178,7 +182,9 @@ export function HomeBoard({ panneaux = [] }: { panneaux?: PanneauAccueil[] }) {
                   poignée est toute la barre. On glisse donc par la poignée. */}
               <button type="button"
                 onPointerDown={(e) => e.stopPropagation()}
-                onClick={() => navigate('/projets', { state: { openProjectId: p.id } })}
+                onClick={() => onOuvrirProjet
+                  ? onOuvrirProjet(p.id)
+                  : navigate('/projets', { state: { openProjectId: p.id } })}
                 title="Ouvrir le projet"
                 className="min-w-0 flex-1 cursor-pointer truncate text-left text-xs font-semibold hover:underline">
                 {p.title}

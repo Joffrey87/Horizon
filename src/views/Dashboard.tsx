@@ -9,6 +9,7 @@ import { useHorizon } from '../lib/store'
 import { DayCell, MassPickProvider } from './TimeView'
 import { TaskForm } from '../components/TaskForm'
 import { HomeBoard, type PanneauAccueil } from '../components/HomeBoard'
+import { FicheProjet } from './FicheProjet'
 import {
   checksDueCount, computeAlerts, dailyScripturePlan, dayPhraseOfDay, domainBalance, eveningPhraseOfWeek,
   fmtDay, fmtShort, focusOfDay, greetingKind, habitStats, habitsForDay, iso, isRecentlyDone, quoteOfDay,
@@ -36,6 +37,8 @@ export function Dashboard() {
   const today = todayIso()
 
   const [cockpitOpen, setCockpitOpen] = useState(false)
+  // La fiche d'un projet s'ouvre ICI : on la ferme, on est toujours sur l'accueil.
+  const [ficheProjet, setFicheProjet] = useState<string | null>(null)
   const navigate = useNavigate()
   // Case du jour (calendrier) embarquée sur l'accueil : édition/création de tâches.
   const [editing, setEditing] = useState<Task | null>(null)
@@ -435,7 +438,7 @@ export function Dashboard() {
 
           {/* ---- Espace visuel : projets ET panneaux, tous déplaçables ---- */}
           <div className="my-2 min-h-0 flex-1">
-            <HomeBoard panneaux={panneaux} />
+            <HomeBoard panneaux={panneaux} onOuvrirProjet={setFicheProjet} />
           </div>
 
           {/* ---- Bas : la date, centrée, au ras du bord ---- */}
@@ -444,6 +447,9 @@ export function Dashboard() {
           </p>
         </div>
       </section>
+
+      {/* Fiche d'un projet, ouverte depuis sa tuile — sans quitter l'accueil. */}
+      {ficheProjet && <FicheProjet projectId={ficheProjet} onClose={() => setFicheProjet(null)} />}
 
       {/* ---- Bouton flottant : ouvre le cockpit ---- */}
       <button onClick={() => setCockpitOpen(true)}
