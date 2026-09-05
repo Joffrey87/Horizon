@@ -387,8 +387,26 @@ export interface CalendarFeed {
   ical_url: string
   domain_id: UUID | null
   active: boolean
+  /** UID iCal des séries écartées : plus jamais proposées. */
+  ignored: string[]
   last_sync_at: string | null
   last_error: string | null
   last_count: number | null
   created_at: string
+}
+
+/** Un évènement d'agenda externe PROPOSÉ à l'import : rien n'entre dans
+ *  « Temps » sans que l'utilisateur l'ait choisi. `uid` désigne la série
+ *  entière (écarter, c'est écarter toutes ses occurrences). */
+export interface PropositionAgenda {
+  uid: string
+  cle: string
+  titre: string
+  debut: string
+  fin: string | null
+  lieu: string | null
+  duree: number | null
+  recurrent: boolean
+  feed_id: UUID
+  feed_label: string
 }

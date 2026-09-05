@@ -9,6 +9,7 @@ import { useHorizon } from '../lib/store'
 import { compareTasksByTitleTime, extractHourMinute, iso, tasksForDay, recurrenceLabel, timeQuoteOfDay, spanPart, birthdaysForDay, isMarketParkingDay, feastOnDay, extractEmojis, firstFridayOrSaturday, chosenMassForDay, todayIso, massesInfoUrl, tripLocationOn, citySlug, hasMaintainedMasses, workShiftOn, massFitsShift, fmtMinutes } from '../lib/logic'
 import { Card, Seg, Modal, ProjectTag } from '../components/ui'
 import { TaskForm } from '../components/TaskForm'
+import { AgendaPropositions } from '../components/AgendaPropositions'
 import type { MassConfig, MassSlot, Objective, Step, Task } from '../lib/types'
 
 type View = '4sem' | 'semaine' | 'trimestre' | 'annee'
@@ -132,6 +133,9 @@ export function TimeView() {
           </button>
         ))}
       </div>
+
+      {/* Évènements d'agenda externe en attente de tri : rien n'entre sans accord. */}
+      <div className="shrink-0"><AgendaPropositions /></div>
 
       <LayersCtx.Provider value={{ layers, arilId }}>
         <MassPickCtx.Provider value={(date, label) => setMassPick({ date, label })}>

@@ -190,10 +190,10 @@ function AgendasCard() {
     const r = await s.syncAgenda()
     setBusy(false)
     if (!r.ok) { setMsg(`Échec : ${r.error}`); return }
-    const lignes = (r.agendas ?? []).map((a) => a.erreur
-      ? `${a.label} : ${a.erreur}`
-      : `${a.label} : ${a.importes} évènement${a.importes > 1 ? 's' : ''} à jour${a.retires ? `, ${a.retires} retiré${a.retires > 1 ? 's' : ''}` : ''}`)
-    setMsg(lignes.length ? lignes.join(' · ') : 'Aucun agenda configuré.')
+    const n = r.propositions ?? 0
+    setMsg(n === 0
+      ? 'Agenda relu : rien de nouveau à proposer.'
+      : `${n} évènement${n > 1 ? 's' : ''} à trier — le choix se fait dans « Temps ».`)
   }
 
   /** L'adresse ne se réaffiche pas en clair : un agenda se remplace, pas se relit. */

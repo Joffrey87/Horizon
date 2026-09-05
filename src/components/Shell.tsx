@@ -47,7 +47,11 @@ export function Shell({ children }: { children: ReactNode }) {
     if (Date.now() - dernier < SYNC_MS) return
     // Marqué AVANT l'appel : la synchro recharge le store, ce qui repasserait ici.
     try { localStorage.setItem(SYNC_KEY, String(Date.now())) } catch { /* stockage indispo */ }
-    void syncAgenda()
+    // L'échec ne doit PAS rester muet : sans ça, un agenda qui ne se synchronise
+    // pas se présente comme un agenda vide.
+    void syncAgenda().then((r) => {
+      if (!r.ok) useHorizon.setState({ error: `Agenda non synchronisé : ${r.error}` })
+    })
   }, [nbAgendas, syncAgenda])
 
   return (

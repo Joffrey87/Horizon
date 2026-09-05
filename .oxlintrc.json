@@ -11,7 +11,7 @@
   },
   "overrides": [
     {
-      "files": ["scripts/**"],
+      "files": ["scripts/**", "supabase/functions/**"],
       "rules": { "no-console": "off" }
     }
   ]

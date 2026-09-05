@@ -9,7 +9,7 @@ import { supabase } from './supabase'
 import { capturesEnAttente, depiler } from './capture'
 import type {
   Birthday, CalendarFeed, Check, Domain, GospelQuiz, Habit, HabitLog, Idea, Layout, NewsDigest, NewsKind, NewsTopic,
-  Objective, OlafatcoJob, Project, Review, Settings, ShoppingItem, ShoppingList, Step, Task,
+  Objective, OlafatcoJob, Project, PropositionAgenda, Review, Settings, ShoppingItem, ShoppingList, Step, Task,
 } from './types'
 
 type Table =
@@ -47,6 +47,8 @@ interface HorizonState {
   shoppingLists: ShoppingList[]
   shoppingItems: ShoppingItem[]
   calendarFeeds: CalendarFeed[]
+  /** Évènements d'agenda proposés à l'import, jamais encore acceptés. */
+  propositionsAgenda: PropositionAgenda[]
   settings: Settings | null
 
   init: () => Promise<void>
@@ -59,8 +61,13 @@ interface HorizonState {
   cycleHabitDay: (habitId: string, date: string) => Promise<void>
   refreshNews: (mode?: NewsKind) => Promise<{ ok: boolean; updated?: number; error?: string }>
   resetShopping: (listId: string) => Promise<void>
-  /** Réimporte les agendas externes (fonction Edge `sync-agenda`), puis recharge. */
-  syncAgenda: () => Promise<{ ok: boolean; agendas?: { label: string; importes: number; retires: number; erreur?: string }[]; error?: string }>
+  /** Relit les agendas externes : met à jour les évènements déjà acceptés et
+   *  remplit `propositionsAgenda` avec les nouveautés — sans rien importer. */
+  syncAgenda: () => Promise<{ ok: boolean; propositions?: number; error?: string }>
+  /** Fait entrer un évènement proposé dans « Temps ». */
+  accepterProposition: (p: PropositionAgenda) => Promise<boolean>
+  /** Écarte toute la série : elle ne sera plus jamais proposée. */
+  ignorerSerie: (feedId: string, uid: string) => Promise<void>
   gospelQuiz: (reference: string, passage: string, level: number, opts?: { keyVerse?: string; verseRef?: string; avoid?: string[]; format?: 'jour' | 'revision' }) => Promise<{ ok: boolean; quiz?: GospelQuiz; error?: string }>
   clearRecovery: () => void
   clearError: () => void
@@ -97,7 +104,8 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   enAttente: capturesEnAttente().length,
   domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
   habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
-  newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], calendarFeeds: [], settings: null,
+  newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], calendarFeeds: [],
+  propositionsAgenda: [], settings: null,
 
   init: async () => {
     const { data } = await supabase.auth.getSession()
@@ -309,11 +317,37 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       const { data, error } = await supabase.functions.invoke('sync-agenda')
       if (error) throw error
       if (data?.error) throw new Error(data.error)
+      const propositions = (data?.propositions ?? []) as PropositionAgenda[]
+      set({ propositionsAgenda: propositions })
       await get().loadAll()
-      return { ok: true, agendas: data?.agendas ?? [] }
+      return { ok: true, propositions: propositions.length }
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e) }
     }
+  },
+
+  accepterProposition: async (p) => {
+    const cree = await get().insert('tasks', {
+      title: p.titre, scheduled_date: p.debut, end_date: p.fin,
+      location: p.lieu, duration_min: p.duree, is_task: false, status: 'a_faire',
+      // Même marqueur que la fonction de synchro : l'évènement est désormais
+      // suivi (mis à jour, retiré s'il disparaît) et ne sera plus proposé.
+      notes: `source:gcal:${p.feed_id}:${p.cle}`,
+      domain_id: get().calendarFeeds.find((f) => f.id === p.feed_id)?.domain_id ?? null,
+    })
+    if (!cree) return false
+    set({ propositionsAgenda: get().propositionsAgenda.filter((x) => x.cle !== p.cle) })
+    return true
+  },
+
+  ignorerSerie: async (feedId, uid) => {
+    const feed = get().calendarFeeds.find((f) => f.id === feedId)
+    if (!feed) return
+    const maj = await get().update('calendar_feeds', feedId, {
+      ignored: [...new Set([...(feed.ignored ?? []), uid])],
+    })
+    if (!maj) return
+    set({ propositionsAgenda: get().propositionsAgenda.filter((x) => x.uid !== uid) })
   },
 
   gospelQuiz: async (reference, passage, level, opts) => {
