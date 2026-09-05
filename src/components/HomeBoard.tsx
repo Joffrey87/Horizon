@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GripVertical, Circle, Eye, EyeOff, FolderKanban } from 'lucide-react'
 import { useHorizon } from '../lib/store'
@@ -6,8 +6,23 @@ import type { Task } from '../lib/types'
 
 type Pos = { x: number; y: number }
 
-const CARD_W = 224 // largeur des cartes (w-56)
+const CARD_W = 224 // largeur des cartes projet (w-56)
 const VISIBLE_MAX = 3 // nb de tâches « visibles » montrées par projet
+
+/** Un panneau déplaçable qui n'est pas un projet (Aujourd'hui, Habitudes…).
+ *  Il partage la mécanique et la mémoire de position des cartes projet. */
+export interface PanneauAccueil {
+  /** Clé de position, stable et distincte des projets (ex. `panneau:aujourdhui`). */
+  id: string
+  titre: string
+  icone: ReactNode
+  accent: string
+  largeur?: number
+  /** Hauteur maximale (ex. '60%') ; au-delà, le contenu défile. */
+  hauteurMax?: string
+  defaut?: Pos
+  contenu: ReactNode
+}
 
 /** Ordonne les prochaines tâches ouvertes d'un projet : planifiées d'abord (date la
  *  plus proche), puis par échéance, puis par importance/urgence, puis ancienneté. */
@@ -27,7 +42,7 @@ function orderTasks(tasks: Task[]): Task[] {
 /** Espace visuel de l'accueil : une carte déplaçable par projet actif, montrant
  *  ses 3 prochaines tâches « visibles ». L'œil masque/révèle une tâche de cet espace.
  *  Les positions sont mémorisées dans un layout dédié (projection « accueil »). */
-export function HomeBoard() {
+export function HomeBoard({ panneaux = [] }: { panneaux?: PanneauAccueil[] }) {
   const s = useHorizon()
   const navigate = useNavigate()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -38,18 +53,28 @@ export function HomeBoard() {
   const [positions, setPositions] = useState<Record<string, Pos>>({})
   const [revealed, setRevealed] = useState<Record<string, boolean>>({}) // projets dont on montre les tâches masquées
 
-  // Positions initiales : mémorisées, sinon disposition en grille par défaut.
+  // Positions initiales : mémorisées, sinon disposition par défaut. Les clés
+  // sont celles du stockage (`pro-<id>` pour un projet, `panneau:*` sinon) :
+  // une seule convention, de bout en bout.
   useEffect(() => {
     const saved = layout?.data.positions ?? {}
     const next: Record<string, Pos> = {}
+    for (const pan of panneaux) {
+      next[pan.id] = saved[pan.id] ?? pan.defaut ?? { x: 0, y: 0 }
+    }
+    // Les projets se rangent sous les panneaux tant qu'ils n'ont pas été placés.
+    const decalage = panneaux.length ? 250 : 0
     actifs.forEach((p, i) => {
-      next[p.id] = saved[`pro-${p.id}`] ?? { x: (i % 4) * (CARD_W + 16), y: Math.floor(i / 4) * 168 }
+      next[`pro-${p.id}`] = saved[`pro-${p.id}`]
+        ?? { x: (i % 4) * (CARD_W + 16), y: decalage + Math.floor(i / 4) * 168 }
     })
     setPositions(next)
-  }, [layout, actifs])
+    // `panneaux` est reconstruit à chaque rendu du parent : on ne s'y fie pas
+    // pour déclencher l'effet, seules les clés comptent.
+  }, [layout, actifs, panneaux.map((p) => p.id).join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const savePositions = async (pos: Record<string, Pos>) => {
-    const data = { positions: Object.fromEntries(Object.entries(pos).map(([id, p]) => [`pro-${id}`, p])) }
+    const data = { positions: pos }
     if (layout) await s.update('layouts', layout.id, { data, updated_at: new Date().toISOString() })
     else await s.insert('layouts', { name: 'Accueil', projection: 'accueil', is_default: false, data })
   }
@@ -76,18 +101,40 @@ export function HomeBoard() {
     void savePositions(positions)
   }
 
-  if (actifs.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-white/50">Aucun projet actif à afficher ici.</p>
-      </div>
-    )
-  }
-
   return (
     <div ref={containerRef} className="relative h-full w-full overflow-hidden">
+      {/* Panneaux déplaçables (Aujourd'hui, Habitudes…) : même mécanique que les projets. */}
+      {panneaux.map((pan) => {
+        const pos = positions[pan.id] ?? pan.defaut ?? { x: 0, y: 0 }
+        return (
+          <div key={pan.id}
+            className="absolute flex flex-col overflow-hidden rounded-2xl border border-white/15 bg-gradient-to-br from-white/8 to-black/25 text-white shadow-lg shadow-black/25 backdrop-blur-[3px]"
+            style={{ left: pos.x, top: pos.y, width: pan.largeur ?? 300, maxHeight: pan.hauteurMax }}>
+            <div onPointerDown={(e) => onHandleDown(e, pan.id)} onPointerMove={onHandleMove} onPointerUp={onHandleUp}
+              className="flex shrink-0 touch-none cursor-grab items-center gap-2 border-b border-white/10 px-3 py-2 active:cursor-grabbing"
+              style={{ background: `${pan.accent}22` }}>
+              <GripVertical size={13} className="shrink-0 text-white/40" />
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg"
+                style={{ background: `${pan.accent}33`, color: pan.accent }}>
+                {pan.icone}
+              </span>
+              <p className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-white/75">
+                {pan.titre}
+              </p>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-3">{pan.contenu}</div>
+          </div>
+        )
+      })}
+
+      {actifs.length === 0 && panneaux.length === 0 && (
+        <p className="flex h-full items-center justify-center text-sm text-white/50">
+          Aucun projet actif à afficher ici.
+        </p>
+      )}
+
       {actifs.map((p) => {
-        const pos = positions[p.id] ?? { x: 0, y: 0 }
+        const pos = positions[`pro-${p.id}`] ?? { x: 0, y: 0 }
         const domain = s.domains.find((d) => d.id === p.domain_id)
         const color = domain?.color ?? '#f59e0b'
         // Tâches ET évènements (ex. neuvaine) ouverts du projet.
@@ -102,7 +149,7 @@ export function HomeBoard() {
           <div key={p.id} className="absolute rounded-xl border border-white/15 bg-black/45 text-white shadow-lg shadow-black/30 backdrop-blur-md"
             style={{ left: pos.x, top: pos.y, width: CARD_W }}>
             {/* Poignée de déplacement + titre projet */}
-            <div onPointerDown={(e) => onHandleDown(e, p.id)} onPointerMove={onHandleMove} onPointerUp={onHandleUp}
+            <div onPointerDown={(e) => onHandleDown(e, `pro-${p.id}`)} onPointerMove={onHandleMove} onPointerUp={onHandleUp}
               className="flex touch-none cursor-grab items-center gap-1.5 rounded-t-xl border-b border-white/10 px-2 py-1.5 active:cursor-grabbing"
               style={{ background: `${color}22` }}>
               <GripVertical size={13} className="shrink-0 text-white/40" />

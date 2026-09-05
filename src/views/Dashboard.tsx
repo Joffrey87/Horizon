@@ -8,7 +8,7 @@ import type { Task } from '../lib/types'
 import { useHorizon } from '../lib/store'
 import { DayCell, MassPickProvider } from './TimeView'
 import { TaskForm } from '../components/TaskForm'
-import { HomeBoard } from '../components/HomeBoard'
+import { HomeBoard, type PanneauAccueil } from '../components/HomeBoard'
 import {
   checksDueCount, computeAlerts, dailyScripturePlan, dayPhraseOfDay, domainBalance, eveningPhraseOfWeek,
   fmtDay, fmtShort, focusOfDay, greetingKind, habitStats, habitsForDay, iso, isRecentlyDone, quoteOfDay,
@@ -115,6 +115,92 @@ export function Dashboard() {
     : greeting === 'evening'
       ? eveningPhraseOfWeek(now)
       : dayPhraseOfDay(now)
+
+  // ---- Panneaux déplaçables de l'espace d'accueil ----------------------------
+  // Ils partagent la mécanique et la mémoire de position des cartes projet
+  // (voir HomeBoard). Leur `id` sert de clé de position : ne pas le changer.
+  const panneaux: PanneauAccueil[] = [
+    {
+      id: 'panneau:aujourdhui',
+      titre: "Aujourd'hui & demain",
+      icone: <CalendarDays size={14} />,
+      accent: '#f59e0b',
+      largeur: 480,
+      // Jamais plus de 60 % de la hauteur : au-delà, le contenu défile — ce
+      // panneau ne doit pas manger l'espace des autres.
+      hauteurMax: '60%',
+      defaut: { x: 0, y: 0 },
+      contenu: (
+        // La croix ✝ de chaque case ouvre le sélecteur de messe, comme dans « Temps ».
+        <MassPickProvider>
+          <div className="flex flex-wrap items-start gap-2">
+            <DayCell day={now} emphasize fit massCross onEdit={setEditing} onCreate={setCreateDate}
+              onStep={() => navigate('/temps')} onMove={handleDayMove} />
+            <DayCell day={tomorrow} emphasize fit massCross onEdit={setEditing} onCreate={setCreateDate}
+              onStep={() => navigate('/temps')} onMove={handleDayMove} />
+          </div>
+        </MassPickProvider>
+      ),
+    },
+    {
+      id: 'panneau:habitudes',
+      titre: 'Habitudes du jour',
+      icone: <Repeat size={14} />,
+      accent: '#0d9488',
+      largeur: 250,
+      defaut: { x: 500, y: 0 },
+      contenu: (
+        <>
+          {/* La navigation par jour passe SOUS le titre : le panneau reste étroit. */}
+          <div className="mb-2 flex items-center justify-center gap-1 border-b border-white/10 pb-2">
+            <button onClick={() => setHabitOffset((o) => o - 1)} aria-label="Jour précédent"
+              className="flex h-6 w-6 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white">
+              <ChevronLeft size={15} />
+            </button>
+            <span className="min-w-[4.5rem] text-center text-[11px] font-medium tabular-nums text-white/70">
+              {habitOffset === 0 ? "Aujourd'hui" : fmtShort(habitDate)}
+            </span>
+            <button onClick={() => setHabitOffset((o) => Math.min(0, o + 1))} disabled={habitOffset >= 0}
+              aria-label="Jour suivant"
+              className="flex h-6 w-6 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-25">
+              <ChevronRight size={15} />
+            </button>
+          </div>
+          {habitsOfDay.length === 0 ? (
+            <p className="text-sm text-white/60">Rien de prévu.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {habitsOfDay.map((h) => {
+                const log = s.habitLogs.find((l) => l.habit_id === h.id && l.log_date === habitIso)
+                const state = !log ? 'none' : log.done ? 'ok' : 'ko'
+                return (
+                  <li key={h.id}>
+                    <button onClick={() => void s.cycleHabitDay(h.id, habitIso)}
+                      title="Cliquer : validé → non validé → rien"
+                      className="group flex w-full items-center gap-2 text-left">
+                      <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-md border transition-colors ${
+                        state === 'ok' ? 'border-good/70 bg-good/70 text-white'
+                          : state === 'ko' ? 'border-bad/70 bg-bad/70 text-white'
+                            : 'border-white/40 group-hover:border-white/70'
+                      }`}>
+                        {state === 'ok' && <CheckCircle2 size={12} />}
+                        {state === 'ko' && <X size={12} />}
+                      </span>
+                      <span className={`truncate text-sm ${
+                        state === 'ok' ? 'text-white/50 line-through'
+                          : state === 'ko' ? 'text-white/50'
+                            : 'text-white/90'
+                      }`}>{h.title}</span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </>
+      ),
+    },
+  ]
 
   // ---- Premier lancement : proposer les domaines par défaut ----
   if (!s.loading && s.domains.length === 0) {
@@ -327,115 +413,42 @@ export function Dashboard() {
   return (
     <div className="rise space-y-4">
       {/* ---- Accueil immersif : paysage seul, plus de contenu au scroll ---- */}
-      <section className="relative -mx-4 -mb-4 -mt-4 h-[calc(100vh-3rem)] min-h-[600px] overflow-hidden rounded-2xl border border-line lg:-mx-8">
+      <section className="relative -mx-4 -mb-12 -mt-4 h-[calc(100dvh-1rem)] min-h-[600px] overflow-hidden rounded-2xl border border-line lg:-mx-8">
         <img src={wallpaperOfDay(now)} alt="" aria-hidden
           className="absolute inset-0 h-full w-full object-cover" />
         {/* voiles pour la lisibilité */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/10 to-black/50" />
 
-        <div className="relative flex h-full flex-col p-6 lg:p-8">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-semibold text-white drop-shadow-md lg:text-3xl">
-                {heroTitle}
-              </h1>
-      </div>
-            <span className="rounded-full border border-white/20 bg-black/30 px-3 py-1 text-xs capitalize text-white/85 backdrop-blur-md">
-              {fmtDay(now)}
-            </span>
-          </div>
-
-          {/* ---- Espace visuel : projets prioritaires déplaçables + tâches visibles ---- */}
-          <div className="my-3 min-h-0 flex-1">
-            <HomeBoard />
-          </div>
-
-          {/* ---- Modules essentiels du cockpit, translucides sur le paysage ---- */}
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-            {/* Case du jour + lendemain (calendrier) — remplace les priorités du jour */}
-            <GlassTile icon={<CalendarDays size={15} />} accent="#f59e0b" title="Aujourd'hui & demain"
-              className="sm:w-max sm:max-w-full">
-              {/* La croix ✝ de chaque case ouvre le sélecteur de messe, comme dans « Temps ». */}
-              <MassPickProvider>
-                <div className="flex flex-wrap items-start gap-2">
-                  <DayCell day={now} emphasize fit massCross onEdit={setEditing} onCreate={setCreateDate}
-                    onStep={() => navigate('/temps')} onMove={handleDayMove} />
-                  <DayCell day={tomorrow} emphasize fit massCross onEdit={setEditing} onCreate={setCreateDate}
-                    onStep={() => navigate('/temps')} onMove={handleDayMove} />
-                </div>
-              </MassPickProvider>
-            </GlassTile>
-
-            {/* Habitudes du jour — navigation par jour + pastilles à 3 états (rien / validé / non validé) */}
-            <GlassTile icon={<Repeat size={15} />} accent="#0d9488" title="Habitudes du jour"
-              className="sm:ml-auto sm:w-max"
-              headerRight={(
-                <>
-                  <button onClick={() => setHabitOffset((o) => o - 1)}
-                    aria-label="Jour précédent"
-                    className="flex h-6 w-6 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white">
-                    <ChevronLeft size={15} />
-                  </button>
-                  <span className="min-w-[4.5rem] text-center text-[11px] font-medium tabular-nums text-white/70">
-                    {habitOffset === 0 ? "Aujourd'hui" : fmtShort(habitDate)}
-                  </span>
-                  <button onClick={() => setHabitOffset((o) => Math.min(0, o + 1))}
-                    disabled={habitOffset >= 0}
-                    aria-label="Jour suivant"
-                    className="flex h-6 w-6 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-25">
-                    <ChevronRight size={15} />
-                  </button>
-                </>
-              )}>
-              {habitsOfDay.length === 0 ? (
-                <p className="text-sm text-white/60">Rien de prévu.</p>
-              ) : (
-                <ul className="space-y-1.5">
-                  {habitsOfDay.map((h) => {
-                    const log = s.habitLogs.find((l) => l.habit_id === h.id && l.log_date === habitIso)
-                    const state = !log ? 'none' : log.done ? 'ok' : 'ko'
-                    return (
-                      <li key={h.id}>
-                        <button onClick={() => void s.cycleHabitDay(h.id, habitIso)}
-                          title="Cliquer : validé → non validé → rien"
-                          className="group flex w-full items-center gap-2 text-left">
-                          <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-md border transition-colors ${
-                            state === 'ok' ? 'border-good/70 bg-good/70 text-white'
-                              : state === 'ko' ? 'border-bad/70 bg-bad/70 text-white'
-                                : 'border-white/40 group-hover:border-white/70'
-                          }`}>
-                            {state === 'ok' && <CheckCircle2 size={12} />}
-                            {state === 'ko' && <X size={12} />}
-                          </span>
-                          <span className={`truncate text-sm ${
-                            state === 'ok' ? 'text-white/50 line-through'
-                              : state === 'ko' ? 'text-white/50'
-                                : 'text-white/90'
-                          }`}>{h.title}</span>
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </GlassTile>
-          </div>
-
-          {/* Citation discrète en bas, uniquement si activée */}
-          {s.settings?.daily_quote !== false && (
-            <div className="mt-3 text-center">
-              <p className="text-xs italic text-white/70 drop-shadow">
+        <div className="relative flex h-full flex-col p-4 lg:p-6">
+          {/* ---- Haut : salutation et citation. Tout le reste de la hauteur
+                  revient à l'espace de travail. ---- */}
+          <div className="shrink-0 pr-36">
+            <h1 className="text-2xl font-semibold text-white drop-shadow-md lg:text-3xl">
+              {heroTitle}
+            </h1>
+            {s.settings?.daily_quote !== false && (
+              <p className="mt-1 text-xs italic text-white/70 drop-shadow">
                 « {quote.text} »{quote.source && <span className="not-italic text-white/50"> — {quote.source}</span>}
               </p>
-            </div>
-          )}
+            )}
+          </div>
+
+          {/* ---- Espace visuel : projets ET panneaux, tous déplaçables ---- */}
+          <div className="my-2 min-h-0 flex-1">
+            <HomeBoard panneaux={panneaux} />
+          </div>
+
+          {/* ---- Bas : la date, centrée, au ras du bord ---- */}
+          <p className="shrink-0 text-center text-[11px] capitalize tracking-wide text-white/60 drop-shadow">
+            {fmtDay(now)}
+          </p>
         </div>
       </section>
 
       {/* ---- Bouton flottant : ouvre le cockpit ---- */}
       <button onClick={() => setCockpitOpen(true)}
         aria-label="Ouvrir le cockpit"
-        className="fixed right-4 top-1/2 z-30 flex -translate-y-1/2 items-center gap-2 rounded-full border border-white/25 bg-black/55 px-4 py-2.5 text-white shadow-lg shadow-black/40 backdrop-blur-md transition-colors hover:bg-black/75">
+        className="fixed right-4 top-4 z-30 flex items-center gap-2 rounded-full border border-white/25 bg-black/55 px-4 py-2.5 text-white shadow-lg shadow-black/40 backdrop-blur-md transition-colors hover:bg-black/75">
         <LayoutDashboard size={16} />
         <span className="text-xs font-semibold uppercase tracking-[0.16em]">Cockpit</span>
       </button>
@@ -480,29 +493,6 @@ export function Dashboard() {
 
 
 /** Tuile translucide de l'accueil : icône colorée, léger dégradé, halo teinté. */
-function GlassTile({ icon, accent, title, to, className = '', headerRight, children }: {
-  icon: React.ReactNode; accent: string; title: string; to?: string; className?: string
-  headerRight?: React.ReactNode; children: React.ReactNode
-}) {
-  const inner = (
-    <>
-      <div className="mb-2.5 flex items-center gap-2">
-        <span className="flex h-7 w-7 items-center justify-center rounded-lg"
-          style={{ background: `${accent}33`, color: accent, boxShadow: `0 0 16px ${accent}55` }}>
-          {icon}
-        </span>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/75">{title}</p>
-        {headerRight && <div className="ml-auto flex items-center gap-1">{headerRight}</div>}
-      </div>
-      {children}
-    </>
-  )
-  const cls = `group relative overflow-hidden rounded-2xl border border-white/15 bg-gradient-to-br from-white/8 to-black/20 p-4 text-white shadow-lg shadow-black/20 backdrop-blur-[3px] transition-all ${className}`
-  return to
-    ? <Link to={to} className={`${cls} hover:-translate-y-0.5 hover:border-white/25`}>{inner}</Link>
-    : <div className={cls}>{inner}</div>
-}
-
 function StatCard({ value, label, to, warn = false }: { value: string; label: string; to: string; warn?: boolean }) {
   return (
     <Link to={to} className="card card-hover p-4">
