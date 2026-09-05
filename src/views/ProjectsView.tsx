@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { differenceInCalendarDays, format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Plus, Pencil, CheckCircle2, Circle, Trash2, Layers, CalendarClock, NotebookPen, GripVertical } from 'lucide-react'
@@ -22,14 +22,18 @@ export function ProjectsView() {
   const [openProject, setOpenProject] = useState<Project | null>(null)
   const [noteProject, setNoteProject] = useState<Project | null>(null)
   const location = useLocation()
+  const navigate = useNavigate()
 
-  // Ouverture directe d'un projet depuis une autre page (ex. double-clic sur l'accueil).
+  // Ouverture directe d'un projet depuis une autre page (clic sur son titre
+  // depuis l'accueil). L'intention est CONSOMMÉE aussitôt : sans ça, la moindre
+  // mise à jour du store rouvrirait la fiche, y compris après fermeture.
   useEffect(() => {
     const id = (location.state as { openProjectId?: string } | null)?.openProjectId
     if (!id) return
     const p = s.projects.find((x) => x.id === id)
     if (p) setOpenProject(p)
-  }, [location.state, s.projects])
+    navigate(location.pathname, { replace: true, state: null })
+  }, [location.state, location.pathname, navigate, s.projects])
 
   const wip = s.settings?.wip_limit ?? 5
   const actifs = s.projects.filter((p) => p.status === 'actif')

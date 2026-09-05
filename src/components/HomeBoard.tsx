@@ -107,9 +107,16 @@ export function HomeBoard() {
               style={{ background: `${color}22` }}>
               <GripVertical size={13} className="shrink-0 text-white/40" />
               <FolderKanban size={12} className="shrink-0" style={{ color }} />
-              <span className="min-w-0 flex-1 truncate text-xs font-semibold"
-                onDoubleClick={() => navigate('/projets', { state: { openProjectId: p.id } })}
-                title="Double-clic : ouvrir le projet">{p.title}</span>
+              {/* Le titre ouvre le projet au simple clic. Il arrête le pointerdown :
+                  sans ça il déclencherait le déplacement de la carte, dont la
+                  poignée est toute la barre. On glisse donc par la poignée. */}
+              <button type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => navigate('/projets', { state: { openProjectId: p.id } })}
+                title="Ouvrir le projet"
+                className="min-w-0 flex-1 cursor-pointer truncate text-left text-xs font-semibold hover:underline">
+                {p.title}
+              </button>
               <span className="shrink-0 text-[10px] tabular-nums text-white/55">{p.progress}%</span>
             </div>
 
