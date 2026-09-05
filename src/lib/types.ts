@@ -376,3 +376,19 @@ export interface Alert {
   severity: 'info' | 'warn'
   link?: string
 }
+
+/** Un agenda externe au format iCal (Google Agenda…) importé dans `tasks`.
+ *  `ical_url` est une clé d'accès en lecture à l'agenda : elle ne doit jamais
+ *  sortir de la base (RLS) ni entrer dans le dépôt, qui est public. */
+export interface CalendarFeed {
+  id: UUID
+  user_id: UUID
+  label: string
+  ical_url: string
+  domain_id: UUID | null
+  active: boolean
+  last_sync_at: string | null
+  last_error: string | null
+  last_count: number | null
+  created_at: string
+}

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import {
   Home, FolderKanban, ListTodo, Compass, CalendarDays, CalendarRange,
@@ -8,6 +8,11 @@ import {
 import { useHorizon } from '../lib/store'
 import { wallpaperOfDay } from '../lib/logic'
 import { QuickCapture } from './QuickCapture'
+
+// Agendas externes : on resynchronise au plus une fois par demi-heure. Inutile
+// d'aller plus vite — Google met son propre export iCal en cache.
+const SYNC_KEY = 'horizon.agenda.sync'
+const SYNC_MS = 30 * 60 * 1000
 
 const NAV = [
   { to: '/', label: 'Accueil', icon: Home },
@@ -31,7 +36,19 @@ export function Shell({ children }: { children: ReactNode }) {
   const error = useHorizon((s) => s.error)
   const clearError = useHorizon((s) => s.clearError)
   const loadAll = useHorizon((s) => s.loadAll)
+  const syncAgenda = useHorizon((s) => s.syncAgenda)
+  const nbAgendas = useHorizon((s) => s.calendarFeeds.length)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (nbAgendas === 0) return
+    let dernier = 0
+    try { dernier = Number(localStorage.getItem(SYNC_KEY) ?? 0) } catch { /* stockage indispo */ }
+    if (Date.now() - dernier < SYNC_MS) return
+    // Marqué AVANT l'appel : la synchro recharge le store, ce qui repasserait ici.
+    try { localStorage.setItem(SYNC_KEY, String(Date.now())) } catch { /* stockage indispo */ }
+    void syncAgenda()
+  }, [nbAgendas, syncAgenda])
 
   return (
     <div className="flex min-h-screen overflow-x-hidden">

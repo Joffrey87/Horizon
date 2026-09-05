@@ -8,14 +8,14 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import { capturesEnAttente, depiler } from './capture'
 import type {
-  Birthday, Check, Domain, GospelQuiz, Habit, HabitLog, Idea, Layout, NewsDigest, NewsKind, NewsTopic,
+  Birthday, CalendarFeed, Check, Domain, GospelQuiz, Habit, HabitLog, Idea, Layout, NewsDigest, NewsKind, NewsTopic,
   Objective, OlafatcoJob, Project, Review, Settings, ShoppingItem, ShoppingList, Step, Task,
 } from './types'
 
 type Table =
   | 'domains' | 'objectives' | 'projects' | 'steps' | 'tasks' | 'ideas'
   | 'habits' | 'habit_logs' | 'reviews' | 'layouts' | 'birthdays' | 'checks' | 'olafatco_jobs'
-  | 'news_topics' | 'news_digests' | 'shopping_lists' | 'shopping_items'
+  | 'news_topics' | 'news_digests' | 'shopping_lists' | 'shopping_items' | 'calendar_feeds'
 
 interface HorizonState {
   session: Session | null
@@ -46,6 +46,7 @@ interface HorizonState {
   newsDigests: NewsDigest[]
   shoppingLists: ShoppingList[]
   shoppingItems: ShoppingItem[]
+  calendarFeeds: CalendarFeed[]
   settings: Settings | null
 
   init: () => Promise<void>
@@ -58,6 +59,8 @@ interface HorizonState {
   cycleHabitDay: (habitId: string, date: string) => Promise<void>
   refreshNews: (mode?: NewsKind) => Promise<{ ok: boolean; updated?: number; error?: string }>
   resetShopping: (listId: string) => Promise<void>
+  /** Réimporte les agendas externes (fonction Edge `sync-agenda`), puis recharge. */
+  syncAgenda: () => Promise<{ ok: boolean; agendas?: { label: string; importes: number; retires: number; erreur?: string }[]; error?: string }>
   gospelQuiz: (reference: string, passage: string, level: number, opts?: { keyVerse?: string; verseRef?: string; avoid?: string[]; format?: 'jour' | 'revision' }) => Promise<{ ok: boolean; quiz?: GospelQuiz; error?: string }>
   clearRecovery: () => void
   clearError: () => void
@@ -74,6 +77,7 @@ const COLLECTION: Record<Table, keyof HorizonState> = {
   birthdays: 'birthdays', checks: 'checks', olafatco_jobs: 'olafatcoJobs',
   news_topics: 'newsTopics', news_digests: 'newsDigests',
   shopping_lists: 'shoppingLists', shopping_items: 'shoppingItems',
+  calendar_feeds: 'calendarFeeds',
 }
 
 /** Noms lisibles des collections, dans l'ordre des requêtes de `loadAll`. */
@@ -81,7 +85,7 @@ const TABLES = [
   'domaines', 'objectifs', 'projets', 'étapes', 'tâches', 'idées', 'habitudes',
   'suivi des habitudes', 'revues', 'dispositions', 'réglages', 'anniversaires',
   'vérifications', 'heures de contrôle', "sujets d'actualité", 'synthèses',
-  'listes de courses', 'articles',
+  'listes de courses', 'articles', 'agendas',
 ]
 
 export const useHorizon = create<HorizonState>((set, get) => ({
@@ -93,7 +97,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   enAttente: capturesEnAttente().length,
   domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
   habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
-  newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], settings: null,
+  newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], calendarFeeds: [], settings: null,
 
   init: async () => {
     const { data } = await supabase.auth.getSession()
@@ -107,7 +111,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
         set({
           domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
           habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
-          newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], settings: null,
+          newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], calendarFeeds: [], settings: null,
         })
       }
     })
@@ -141,6 +145,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       () => supabase.from('news_digests').select('*'),
       () => supabase.from('shopping_lists').select('*').order('sort_order'),
       () => supabase.from('shopping_items').select('*').order('sort_order'),
+      () => supabase.from('calendar_feeds').select('*').order('created_at'),
     ]
     type Reponse = { data: unknown; error: { message?: string } | null }
     const lancer = (i: number) => requetes[i]!() as unknown as Promise<Reponse>
@@ -157,7 +162,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
         responses.map((r, i) => (r.error ? lancer(i) : Promise.resolve(r))),
       )
     }
-    const [dom, obj, pro, stp, tas, ide, hab, log, rev, lay, setg, bd, chk, oja, nto, ndi, shl, shi] = responses
+    const [dom, obj, pro, stp, tas, ide, hab, log, rev, lay, setg, bd, chk, oja, nto, ndi, shl, shi, cal] = responses
     // Une table en échec conserve ce qui était déjà chargé : mieux vaut un écran
     // incomplet et signalé qu'un compte qui paraît vide.
     const prev = get()
@@ -182,7 +187,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       layouts: keep(lay, prev.layouts), birthdays: keep(bd, prev.birthdays), checks: keep(chk, prev.checks),
       olafatcoJobs: keep(oja, prev.olafatcoJobs), newsTopics: keep(nto, prev.newsTopics),
       newsDigests: keep(ndi, prev.newsDigests), shoppingLists: keep(shl, prev.shoppingLists),
-      shoppingItems: keep(shi, prev.shoppingItems),
+      shoppingItems: keep(shi, prev.shoppingItems), calendarFeeds: keep(cal, prev.calendarFeeds),
       settings: !setg || setg.error ? prev.settings : ((setg.data as Settings | null) ?? null),
       loading: false,
       error: failed.length === 0 ? null : message,
@@ -299,6 +304,18 @@ export const useHorizon = create<HorizonState>((set, get) => ({
 
   // Page Écritures : quiz de mémorisation généré à la demande par l'edge function.
   // (Le passage lui-même vient de getbible.net, sans clé — voir lib/bible.ts.)
+  syncAgenda: async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-agenda')
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
+      await get().loadAll()
+      return { ok: true, agendas: data?.agendas ?? [] }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  },
+
   gospelQuiz: async (reference, passage, level, opts) => {
     try {
       const { data, error } = await supabase.functions.invoke('horizon-gospel', {

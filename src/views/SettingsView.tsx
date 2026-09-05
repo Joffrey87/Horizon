@@ -1,8 +1,10 @@
 import { useRef, useState } from 'react'
-import { Download, Upload } from 'lucide-react'
+import { format, parseISO } from 'date-fns'
+import { fr } from 'date-fns/locale'
+import { CalendarSync, Download, Plus, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import { supabase } from '../lib/supabase'
-import { Card } from '../components/ui'
+import { Card, DomainDot } from '../components/ui'
 
 export function SettingsView() {
   const s = useHorizon()
@@ -138,6 +140,8 @@ export function SettingsView() {
         {importMsg && <p className="mt-2 text-xs text-ink-2">{importMsg}</p>}
       </Card>
 
+      <AgendasCard />
+
       <Card title="Assistant IA (mis de côté)">
         <p className="text-sm leading-relaxed text-ink-2">
           L'assistant n'est pas accessible dans l'app pour le moment : il reste dans le code
@@ -152,5 +156,122 @@ export function SettingsView() {
         </p>
       </Card>
     </div>
+  )
+}
+
+/** Agendas externes (iCal) : Google Agenda et compagnie.
+ *
+ *  L'adresse iCal est une CLÉ D'ACCÈS EN LECTURE à l'agenda — elle se colle
+ *  ici, va en base protégée par RLS, et n'apparaît jamais en clair ensuite. */
+function AgendasCard() {
+  const s = useHorizon()
+  const [ouvert, setOuvert] = useState(false)
+  const [label, setLabel] = useState('')
+  const [url, setUrl] = useState('')
+  const [domainId, setDomainId] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  const ajouter = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!label.trim() || !url.trim()) return
+    setBusy(true)
+    const cree = await s.insert('calendar_feeds', {
+      label: label.trim(), ical_url: url.trim(), domain_id: domainId || null,
+    })
+    setBusy(false)
+    if (!cree) return
+    setLabel(''); setUrl(''); setDomainId(''); setOuvert(false)
+    void synchroniser()
+  }
+
+  const synchroniser = async () => {
+    setBusy(true); setMsg(null)
+    const r = await s.syncAgenda()
+    setBusy(false)
+    if (!r.ok) { setMsg(`Échec : ${r.error}`); return }
+    const lignes = (r.agendas ?? []).map((a) => a.erreur
+      ? `${a.label} : ${a.erreur}`
+      : `${a.label} : ${a.importes} évènement${a.importes > 1 ? 's' : ''} à jour${a.retires ? `, ${a.retires} retiré${a.retires > 1 ? 's' : ''}` : ''}`)
+    setMsg(lignes.length ? lignes.join(' · ') : 'Aucun agenda configuré.')
+  }
+
+  /** L'adresse ne se réaffiche pas en clair : un agenda se remplace, pas se relit. */
+  const apercu = (u: string) => { try { return new URL(u).host } catch { return 'adresse enregistrée' } }
+
+  return (
+    <Card title="Agendas externes">
+      <p className="mb-3 text-xs text-ink-3">
+        Les évènements d’un agenda iCal (Google Agenda…) remontent dans « Temps », comme le
+        planning CAPS. Google met son export iCal en cache : un ajout peut mettre quelques
+        heures à apparaître — c’est chez eux, pas ici.
+      </p>
+
+      {s.calendarFeeds.length > 0 && (
+        <ul className="mb-3 space-y-1.5">
+          {s.calendarFeeds.map((f) => {
+            const dom = s.domains.find((d) => d.id === f.domain_id)
+            return (
+              <li key={f.id} className="flex items-center gap-2 rounded-lg bg-panel-2/60 px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-1.5 text-sm text-ink">
+                    {dom && <DomainDot color={dom.color} size={7} />}{f.label}
+                  </p>
+                  <p className="text-[11px] text-ink-3">
+                    {apercu(f.ical_url)}
+                    {f.last_sync_at && ` · synchronisé le ${format(parseISO(f.last_sync_at), "d MMM 'à' HH'h'mm", { locale: fr })}`}
+                    {typeof f.last_count === 'number' && ` · ${f.last_count} évènements`}
+                  </p>
+                  {f.last_error && <p className="text-[11px] text-[#ec7f97]">{f.last_error}</p>}
+                </div>
+                <button onClick={() => void s.update('calendar_feeds', f.id, { active: !f.active })}
+                  className="btn-ghost shrink-0 p-1.5 text-ink-3" title={f.active ? 'Mettre en pause' : 'Réactiver'}>
+                  <span className={`block h-3.5 w-3.5 rounded-full border-2 ${f.active ? 'border-good bg-good/40' : 'border-line-2'}`} />
+                </button>
+                <button onClick={() => { if (confirm(`Retirer l’agenda « ${f.label} » ? Ses évènements resteront dans Horizon.`)) void s.remove('calendar_feeds', f.id) }}
+                  className="btn-ghost shrink-0 p-1.5 text-ink-3 hover:text-[#ec7f97]" title="Retirer">
+                  <Trash2 size={14} />
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      {ouvert ? (
+        <form onSubmit={ajouter} className="space-y-2">
+          <input required value={label} onChange={(e) => setLabel(e.target.value)}
+            placeholder="Nom (ex. Perso, Famille, ARIL)" className="field w-full" />
+          <input required type="url" value={url} onChange={(e) => setUrl(e.target.value)}
+            placeholder="Adresse privée au format iCal (…/basic.ics)" className="field w-full" />
+          <select value={domainId} onChange={(e) => setDomainId(e.target.value)} className="field w-full">
+            <option value="">Sans domaine</option>
+            {s.domains.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+          <div className="flex gap-2">
+            <button type="submit" disabled={busy} className="btn-sun px-4 py-2 text-sm disabled:opacity-50">Ajouter</button>
+            <button type="button" onClick={() => setOuvert(false)} className="btn-ghost px-4 py-2 text-sm">Annuler</button>
+          </div>
+          <p className="text-[11px] text-ink-3">
+            Google Agenda → Paramètres de l’agenda → « Intégrer l’agenda » → <strong>Adresse secrète au format iCal</strong>.
+            Cette adresse donne accès à ton agenda : ne la partage nulle part.
+          </p>
+        </form>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setOuvert(true)} className="btn-ghost flex items-center gap-1.5 px-4 py-2 text-sm">
+            <Plus size={15} /> Ajouter un agenda
+          </button>
+          {s.calendarFeeds.length > 0 && (
+            <button onClick={() => void synchroniser()} disabled={busy}
+              className="btn-ghost flex items-center gap-1.5 px-4 py-2 text-sm disabled:opacity-50">
+              {busy ? <RefreshCw size={15} className="animate-spin" /> : <CalendarSync size={15} />}
+              Synchroniser maintenant
+            </button>
+          )}
+        </div>
+      )}
+      {msg && <p className="mt-2 text-xs text-ink-2">{msg}</p>}
+    </Card>
   )
 }
