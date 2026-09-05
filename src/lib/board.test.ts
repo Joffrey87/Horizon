@@ -2,7 +2,7 @@
 // Bornage des cartes de l'accueil : aucun bord ne doit dépasser du cadre.
 // ================================================================
 import { describe, it, expect } from 'vitest'
-import { borner } from './HomeBoard'
+import { borner } from './board'
 
 const cadre = { width: 1000, height: 600 }
 const CARTE = { w: 300, h: 200 }

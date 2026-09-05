@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { GripVertical, Circle, FolderKanban, PinOff } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import type { Task } from '../lib/types'
-
-export type Pos = { x: number; y: number }
+import { borner, type Pos } from '../lib/board'
 
 const CARD_W = 224 // largeur des cartes projet (w-56)
 
@@ -23,13 +22,6 @@ export interface PanneauAccueil {
   contenu: ReactNode
 }
 
-/** Garde une carte entièrement dans le cadre : aucun bord ne doit dépasser.
- *  Si le cadre est plus petit que la carte, elle se colle au bord haut/gauche. */
-export function borner(x: number, y: number, w: number, h: number, box?: { width: number; height: number }): Pos {
-  const maxX = box ? Math.max(0, box.width - w) : Number.MAX_SAFE_INTEGER
-  const maxY = box ? Math.max(0, box.height - h) : Number.MAX_SAFE_INTEGER
-  return { x: Math.max(0, Math.min(maxX, x)), y: Math.max(0, Math.min(maxY, y)) }
-}
 
 /** Ordre MANUEL du projet : celui que l'utilisateur a fixé en réorganisant la
  *  liste dans la fiche du projet. L'accueil doit montrer cet ordre-là. */
