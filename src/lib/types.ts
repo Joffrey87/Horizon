@@ -98,6 +98,8 @@ export interface Task {
   recurrence_rule: string | null // 'daily' | 'weekly:1,3,5' | 'monthly:15'
   notable: boolean // apparaît dans les vues trimestre / année
   home_hidden: boolean // masquée de l'espace visuel de l'accueil (œil)
+  /** Épinglée sur l'accueil : seules les épinglées y remontent. */
+  home_pinned: boolean
   sort_order: number // ordre manuel des tâches d'un projet (drag & drop)
   done_at: string | null
   created_at: string

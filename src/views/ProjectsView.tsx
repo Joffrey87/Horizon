@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { differenceInCalendarDays, format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Plus, Pencil, CheckCircle2, Circle, Trash2, Layers, CalendarClock, NotebookPen, GripVertical } from 'lucide-react'
+import { Plus, Pencil, CheckCircle2, Circle, Trash2, Layers, CalendarClock, NotebookPen, GripVertical, Pin } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import { Card, Badge, ProgressBar, DomainDot, Modal, EmptyState, Seg, NoteArea } from '../components/ui'
 import { TaskForm } from '../components/TaskForm'
@@ -185,6 +185,12 @@ function ProjectNextTasks({ project }: { project: Project }) {
           </button>
           <span className="min-w-0 flex-1 truncate text-sm text-ink-2">{t.title}</span>
           {t.scheduled_date && <span className="shrink-0 text-[10px] text-ink-3">{fmtDate(t.scheduled_date)}</span>}
+          <button onClick={() => void s.update('tasks', t.id, { home_pinned: !t.home_pinned })}
+            className={`shrink-0 transition-opacity ${t.home_pinned ? 'text-sun' : 'text-ink-3 opacity-0 hover:text-ink-2 group-hover:opacity-100'}`}
+            aria-label={t.home_pinned ? 'Retirer de l’accueil' : 'Épingler sur l’accueil'}
+            title={t.home_pinned ? 'Épinglée sur l’accueil' : 'Épingler sur l’accueil'}>
+            <Pin size={12} fill={t.home_pinned ? 'currentColor' : 'none'} />
+          </button>
         </li>
       ))}
       {fullOrdered.length > 5 && (
@@ -224,7 +230,18 @@ function ProjectDetail({ project, onEdit, onNote, onClose }: {
   const domain = s.domains.find((d) => d.id === project.domain_id)
   const [taskEdit, setTaskEdit] = useState<Task | null>(null)
 
+  // Ordre MANUEL du projet : c'est lui que l'accueil reprend pour les épinglées.
   const directTasks = s.tasks.filter((t) => t.project_id === project.id && !t.step_id)
+    .sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at))
+
+  const reorder = (from: number, to: number) => {
+    if (from === to) return
+    const v = [...directTasks]
+    const moved = v.splice(from, 1)[0]
+    if (!moved) return
+    v.splice(to, 0, moved)
+    v.forEach((t, i) => { if (t.sort_order !== i) void s.update('tasks', t.id, { sort_order: i }) })
+  }
   const steps = s.steps.filter((st) => st.project_id === project.id)
 
   const addTask = (title: string, step_id: string | null) => {
@@ -277,7 +294,13 @@ function ProjectDetail({ project, onEdit, onNote, onClose }: {
         {/* Tâches directes */}
         <section className="space-y-2">
           <h3 className="block-title flex items-center gap-1.5">Tâches</h3>
-          <TaskList tasks={directTasks} onToggle={(t) => toggle(s, t)} onOpen={setTaskEdit} onDelete={(t) => void s.remove('tasks', t.id)} />
+          <p className="text-xs text-ink-3">
+            Glisse pour fixer l’ordre. L’épingle choisit ce qui remonte sur l’accueil.
+          </p>
+          <TaskList tasks={directTasks} onToggle={(t) => toggle(s, t)} onOpen={setTaskEdit}
+            onDelete={(t) => void s.remove('tasks', t.id)}
+            onTogglePin={(t) => void s.update('tasks', t.id, { home_pinned: !t.home_pinned })}
+            onReorder={reorder} />
           <QuickAdd placeholder="Ajouter une tâche…" onAdd={(v) => addTask(v, null)} />
         </section>
 
@@ -304,16 +327,29 @@ function toggle(s: ReturnType<typeof useHorizon.getState>, t: Task) {
   void s.update('tasks', t.id, done ? { status: 'a_faire', done_at: null } : { status: 'fait', done_at: new Date().toISOString() })
 }
 
-function TaskList({ tasks, onToggle, onOpen, onDelete }: {
+/** Liste de tâches d'un projet. Quand `onReorder` est fourni, les lignes se
+ *  glissent pour fixer l'ordre du projet — c'est cet ordre que l'accueil
+ *  reprend. L'épingle choisit ce qui remonte sur l'accueil. */
+function TaskList({ tasks, onToggle, onOpen, onDelete, onTogglePin, onReorder }: {
   tasks: Task[]; onToggle: (t: Task) => void; onOpen: (t: Task) => void; onDelete: (t: Task) => void
+  onTogglePin?: (t: Task) => void
+  onReorder?: (from: number, to: number) => void
 }) {
+  const [dragIdx, setDragIdx] = useState<number | null>(null)
   if (tasks.length === 0) return <p className="text-xs text-ink-3">—</p>
   return (
     <ul className="space-y-1">
-      {tasks.map((t) => {
+      {tasks.map((t, i) => {
         const done = t.status === 'fait'
+        const glissable = !!onReorder
         return (
-          <li key={t.id} className="group flex items-center gap-2">
+          <li key={t.id} draggable={glissable}
+            onDragStart={glissable ? (e) => { setDragIdx(i); e.dataTransfer.effectAllowed = 'move' } : undefined}
+            onDragOver={glissable ? (e) => e.preventDefault() : undefined}
+            onDrop={glissable ? (e) => { e.preventDefault(); if (dragIdx !== null) onReorder(dragIdx, i); setDragIdx(null) } : undefined}
+            onDragEnd={glissable ? () => setDragIdx(null) : undefined}
+            className={`group flex items-center gap-2 rounded-md px-1 transition-colors hover:bg-panel-2/50 ${dragIdx === i ? 'opacity-50' : ''}`}>
+            {glissable && <GripVertical size={13} className="shrink-0 cursor-grab text-ink-3" />}
             <button onClick={() => onToggle(t)} className="shrink-0" aria-label={done ? 'Marquer à faire' : 'Marquer fait'}>
               {done ? <CheckCircle2 size={16} className="text-[#4cc79a]" /> : <Circle size={16} className="text-ink-3 hover:text-sun" />}
             </button>
@@ -321,6 +357,14 @@ function TaskList({ tasks, onToggle, onOpen, onDelete }: {
               <span className={`block truncate text-sm ${done ? 'text-ink-3 line-through' : 'text-ink-2'}`}>{t.title}</span>
             </button>
             {t.scheduled_date && <span className="shrink-0 text-[10px] text-ink-3">{fmtDate(t.scheduled_date)}</span>}
+            {onTogglePin && !done && (
+              <button onClick={() => onTogglePin(t)}
+                className={`shrink-0 transition-opacity ${t.home_pinned ? 'text-sun' : 'text-ink-3 opacity-0 hover:text-ink-2 group-hover:opacity-100'}`}
+                aria-label={t.home_pinned ? 'Retirer de l’accueil' : 'Épingler sur l’accueil'}
+                title={t.home_pinned ? 'Épinglée sur l’accueil' : 'Épingler sur l’accueil'}>
+                <Pin size={13} fill={t.home_pinned ? 'currentColor' : 'none'} />
+              </button>
+            )}
             <button onClick={() => onDelete(t)} className="shrink-0 text-ink-3 opacity-0 transition-opacity hover:text-[#ec7f97] group-hover:opacity-100" aria-label="Supprimer">
               <Trash2 size={13} />
             </button>
