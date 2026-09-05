@@ -6,6 +6,7 @@
 import { create } from 'zustand'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
+import { capturesEnAttente, depiler } from './capture'
 import type {
   Birthday, Check, Domain, GospelQuiz, Habit, HabitLog, Idea, Layout, NewsDigest, NewsKind, NewsTopic,
   Objective, OlafatcoJob, Project, Review, Settings, ShoppingItem, ShoppingList, Step, Task,
@@ -25,6 +26,9 @@ interface HorizonState {
    *  Sans lui, une panne se présentait comme un compte vide et une écriture
    *  perdue comme un succès. */
   error: string | null
+  /** Captures faites hors ligne, encore sur l'appareil. Renvoyées dès que
+   *  le réseau revient — se vider la tête ne dépend jamais du réseau. */
+  enAttente: number
   domains: Domain[]
   objectives: Objective[]
   projects: Project[]
@@ -57,6 +61,10 @@ interface HorizonState {
   gospelQuiz: (reference: string, passage: string, level: number, opts?: { keyVerse?: string; verseRef?: string; avoid?: string[]; format?: 'jour' | 'revision' }) => Promise<{ ok: boolean; quiz?: GospelQuiz; error?: string }>
   clearRecovery: () => void
   clearError: () => void
+  /** Réessaie d'envoyer les captures mises de côté. Sans effet si la file est
+   *  vide ; s'arrête au premier échec (le réseau est manifestement toujours là). */
+  flushCaptures: () => Promise<void>
+  refreshEnAttente: () => void
   signOut: () => Promise<void>
 }
 
@@ -82,6 +90,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   ready: false,
   loading: false,
   error: null,
+  enAttente: capturesEnAttente().length,
   domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
   habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
   newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], settings: null,
@@ -102,6 +111,10 @@ export const useHorizon = create<HorizonState>((set, get) => ({
         })
       }
     })
+    // Le réseau revient : on renvoie ce qui attendait sur l'appareil.
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', () => { void get().flushCaptures() })
+    }
     if (data.session) await get().loadAll()
   },
 
@@ -174,6 +187,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       loading: false,
       error: failed.length === 0 ? null : message,
     })
+    if (failed.length === 0) void get().flushCaptures()
   },
 
   insert: async (table, values) => {
@@ -311,6 +325,19 @@ export const useHorizon = create<HorizonState>((set, get) => ({
 
   clearRecovery: () => set({ recovery: false }),
   clearError: () => set({ error: null }),
+  refreshEnAttente: () => set({ enAttente: capturesEnAttente().length }),
+
+  flushCaptures: async () => {
+    if (!get().session) return
+    for (const c of capturesEnAttente()) {
+      const cree = c.kind === 'idee'
+        ? await get().insert('ideas', { title: c.title, domain_id: c.domain_id, status: 'active' })
+        : await get().insert('tasks', { title: c.title, domain_id: c.domain_id, status: 'a_faire' })
+      if (!cree) break // toujours hors ligne : on garde le reste pour plus tard
+      depiler(c.id)
+    }
+    get().refreshEnAttente()
+  },
 
   signOut: async () => { await supabase.auth.signOut() },
 }))
