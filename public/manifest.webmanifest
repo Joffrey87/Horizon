@@ -1,0 +1,38 @@
+{
+  "name": "Horizon",
+  "short_name": "Horizon",
+  "description": "Tableau de bord personnel — capture, priorités, temps.",
+  "lang": "fr",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f0d0a",
+  "theme_color": "#0f0d0a",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Capturer",
+      "short_name": "Capturer",
+      "description": "Noter une idée ou une tâche sans ouvrir l'app",
+      "url": "/capture",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Priorités",
+      "short_name": "Priorités",
+      "description": "Trier ce qui est important et ce qui est urgent",
+      "url": "/priorites",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
+  "share_target": {
+    "action": "/capture",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  }
+}

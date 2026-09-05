@@ -21,6 +21,7 @@ import { VerificationsView } from './views/VerificationsView'
 import { ListesView } from './views/ListesView'
 import { HeuresControleView } from './views/HeuresControleView'
 import { SettingsView } from './views/SettingsView'
+import { CaptureView } from './views/CaptureView'
 
 // L'espace visuel embarque React Flow (~300 Ko) pour une seule route : il n'est
 // chargé qu'à l'ouverture de /espace, plus au premier écran.
@@ -35,6 +36,8 @@ export function AppRoutes() {
       <Route path="/projets" element={<ProjectsView />} />
       <Route path="/domaines" element={<DomainsView />} />
       <Route path="/priorites" element={<PrioritiesView />} />
+      {/* Cible du raccourci « Capturer » et du partage Android (manifest). */}
+      <Route path="/capture" element={<CaptureView />} />
       <Route path="/temps" element={<TimeView />} />
       <Route path="/planification" element={<PlanningView />} />
       <Route path="/habitudes" element={<HabitsView />} />
