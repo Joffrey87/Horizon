@@ -11,7 +11,7 @@ import { TaskForm } from '../components/TaskForm'
 import { HomeBoard, type PanneauAccueil } from '../components/HomeBoard'
 import { FicheProjet } from './FicheProjet'
 import {
-  checksDueCount, computeAlerts, dailyScripturePlan, dayPhraseOfDay, domainBalance, eveningPhraseOfWeek,
+  checksDueCount, computeAlerts, dayPhraseOfDay, domainBalance, eveningPhraseOfWeek,
   fmtDay, fmtShort, focusOfDay, greetingKind, habitStats, habitsForDay, iso, isRecentlyDone, quoteOfDay,
   suggestedReview, tasksForDay, todayIso, wallpaperOfDay,
 } from '../lib/logic'
@@ -72,11 +72,11 @@ export function Dashboard() {
   const checksDue = useMemo(() => checksDueCount(s.checks, s.tasks, { homeCity: s.settings?.home_city ?? undefined, feasts: s.settings?.catholic_feasts !== false }), [s.checks, s.tasks, s.settings])
 
   const actifs = s.projects.filter((p) => p.status === 'actif')
-  // Écriture du jour = lecture de la messe du jour (évangile / 1re lecture AT,
-  // un jour sur deux). Repli sur la citation hors ligne si l'AELF est injoignable.
+  // Écriture du jour = l'évangile de la messe du jour. Repli sur la citation
+  // hors ligne si l'AELF est injoignable.
   const { mass } = useMassOfDay(todayIso())
   const quote = useMemo(() => {
-    const r = readingOfDay(mass, dailyScripturePlan().kind)
+    const r = readingOfDay(mass, 'evangile')
     return r ? readingQuote(r) : quoteOfDay()
   }, [mass])
   const review = suggestedReview()

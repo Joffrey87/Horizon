@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { addDays, format as fmtDate, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { BookOpen, Brain, RefreshCw, RotateCcw, ChevronRight, ChevronLeft, Eye, EyeOff, CalendarDays } from 'lucide-react'
+import { BookOpen, Brain, RefreshCw, RotateCcw, ChevronRight, ChevronLeft, CalendarDays } from 'lucide-react'
 import { useHorizon } from '../lib/store'
-import { dailyScripturePlan, iso, revisionWeek, todayIso } from '../lib/logic'
+import { iso, revisionWeek, todayIso } from '../lib/logic'
 import { fetchMass, readingOfDay, readingQuote, useMassOfDay, type MassReading } from '../lib/aelf'
 import { fetchMissel, misselReading, misselTitre, useMisselOfDay } from '../lib/missel'
 import type { GospelQuiz } from '../lib/types'
@@ -24,25 +24,20 @@ export function EvangileView() {
   // On peut revenir sur les jours précédents : le quiz suit la date choisie.
   const [date, setDate] = useState(today)
   const [semaineOuverte, setSemaineOuverte] = useState(false)
-  const plan = useMemo(() => dailyScripturePlan(parseISO(date)), [date])
   // Les lectures suivent le MISSEL DE 1962 : c'est le jour liturgique (fête,
   // dimanche après la Pentecôte…) qui commande, pas la date du calendrier.
   const { jour, loading, error } = useMisselOfDay(date)
-  // Le psaume à apprendre reste tiré du lectionnaire AELF (le missel de 1962 a
-  // un graduel, pas de psaume responsorial). AELF sert aussi de repli si le
-  // propre est injoignable — et en mode démo, qui n'a pas de session Supabase.
+  // AELF sert de repli si le propre est injoignable — et en mode démo, qui n'a
+  // pas de session Supabase.
   const { mass } = useMassOfDay(date)
-  const duMissel = misselReading(jour, plan.kind)
-  const reading = duMissel ?? readingOfDay(mass, plan.kind)
-  const psaume = mass?.psaume
+  // TOUJOURS l'évangile : c'est lui qu'on lit et sur lequel porte le quiz.
+  const duMissel = misselReading(jour, 'evangile')
+  const reading = duMissel ?? readingOfDay(mass, 'evangile')
   const plusAncien = iso(addDays(parseISO(today), -BACK_DAYS))
   const decaler = (n: number) => setDate((d) => {
     const cible = iso(addDays(parseISO(d), n))
     return cible > today || cible < plusAncien ? d : cible
   })
-
-  // Un jour sur deux : psaume à apprendre. Sinon : la lecture du jour + quiz sur le sens.
-  const psalmMode = plan.psalmDay && !!psaume
 
   return (
     <div className="rise space-y-4">
@@ -53,9 +48,7 @@ export function EvangileView() {
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold">Écritures du jour</h1>
           <p className="text-xs text-ink-3">
-            {psalmMode
-              ? 'La lecture de la messe du jour, puis le psaume à apprendre par cœur.'
-              : 'La lecture de la messe du jour, puis un quiz pour en saisir le sens.'}
+            L’évangile du jour, puis un quiz pour en saisir le sens.
           </p>
         </div>
         {/* Revenir sur un jour précédent : la lecture ET son quiz suivent. */}
@@ -84,9 +77,7 @@ export function EvangileView() {
         ) : (
           <>
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              <Badge tone={reading.type === 'evangile' ? 'sun' : 'info'}>
-                {reading.type === 'evangile' ? 'Évangile' : 'Épître'}
-              </Badge>
+              <Badge tone="sun">Évangile</Badge>
               <h2 className="font-semibold">{reading.ref}</h2>
               {duMissel && <span className="text-sm capitalize text-ink-3">— {misselTitre(jour)}</span>}
               {!duMissel && mass?.name && <span className="text-sm text-ink-3">— {mass.name}</span>}
@@ -118,9 +109,7 @@ export function EvangileView() {
         )}
       </Card>
 
-      {psalmMode
-        ? <PsalmCard psaume={psaume!} dayKey={date} />
-        : reading && <SenseQuizCard reading={reading} />}
+      {reading && <SenseQuizCard reading={reading} />}
 
       {/* Révision de la semaine écoulée : ouverte le dimanche, disponible
           jusqu'au samedi suivant. */}
@@ -361,138 +350,6 @@ function Quiz({ quiz, level, onReplay }: {
         <RotateCcw size={14} /> Rejouer ce niveau
       </button>
     </div>
-  )
-}
-
-// ---- Jours « psaume » : apprendre par cœur, puis texte à trous --------------
-
-const MASK_RATIOS = [0.2, 0.4, 0.6, 0.85]
-
-/** Générateur pseudo-aléatoire déterministe : même jour + même niveau = mêmes trous. */
-function seeded(seed: string) {
-  let h = 2166136261
-  for (let i = 0; i < seed.length; i++) { h ^= seed.charCodeAt(i); h = Math.imul(h, 16777619) }
-  return () => { h = (Math.imul(h, 48271) + 11) >>> 0; return h / 4294967296 }
-}
-
-/** Comparaison souple : casse, accents et ponctuation ignorés. */
-function norm(w: string): string {
-  return w.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
-}
-
-interface Token { word: string; blank: boolean }
-
-/** Découpe le psaume en lignes de mots, avec les trous du niveau demandé. */
-function buildLines(text: string, level: number, dayKey: string): Token[][] {
-  const ratio = MASK_RATIOS[Math.min(level, MASK_RATIOS.length) - 1] ?? 0.2
-  const rand = seeded(`${dayKey}|${level}`)
-  return text.split('\n').filter((l) => l.trim()).map((line) => {
-    const words = line.trim().split(/\s+/)
-    // Au moins un trou par ligne dès le niveau 2, sinon on suit le taux.
-    const idx = words.map((_, i) => i).filter(() => rand() < ratio)
-    if (idx.length === 0 && level >= 2 && words.length > 0) idx.push(Math.floor(rand() * words.length))
-    const set = new Set(idx)
-    return words.map((word, wi) => ({ word, blank: set.has(wi) }))
-  })
-}
-
-function PsalmCard({ psaume, dayKey }: { psaume: MassReading; dayKey: string }) {
-  const [level, setLevel] = useState(1)
-  const [showText, setShowText] = useState(true)
-  const [answers, setAnswers] = useState<Record<string, string>>({})
-  const [validated, setValidated] = useState(false)
-  const lines = useMemo(() => buildLines(psaume.text, level, dayKey), [psaume.text, level, dayKey])
-
-  const reset = (lvl: number) => { setLevel(lvl); setAnswers({}); setValidated(false) }
-
-  const blanks = lines.flatMap((l, li) => l.map((t, wi) => ({ ...t, key: `${li}-${wi}` })).filter((t) => t.blank))
-  const correct = blanks.filter((b) => norm(answers[b.key] ?? '') === norm(b.word)).length
-
-  return (
-    <Card>
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 className="flex items-center gap-1.5 font-medium"><Brain size={16} className="text-sun" /> Psaume à apprendre</h3>
-        <Badge tone="info">{psaume.ref}</Badge>
-      </div>
-      <p className="mt-0.5 text-xs text-ink-3">
-        Le psaume de la messe du jour. On le lit, puis on le retrouve de mémoire : à chaque niveau, il manque plus de mots.
-      </p>
-
-      {psaume.refrain && (
-        <blockquote className="mt-3 border-l-2 border-sun/50 pl-3 text-[15px] italic leading-relaxed text-ink">
-          « {psaume.refrain} »
-          {psaume.refrainRef && <span className="mt-0.5 block text-xs not-italic text-ink-3">{psaume.refrainRef}</span>}
-        </blockquote>
-      )}
-
-      <div className="mt-4 border-t border-line pt-3">
-        <div className="mb-1 flex items-center justify-between">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">Le texte</p>
-          <button onClick={() => setShowText((v) => !v)} className="btn-ghost flex items-center gap-1.5 px-2 py-1 text-xs">
-            {showText ? <><EyeOff size={13} /> Masquer</> : <><Eye size={13} /> Afficher</>}
-          </button>
-        </div>
-        {showText
-          ? psaume.text.split('\n\n').map((para, i) => (
-              <p key={i} className="mt-2 whitespace-pre-line text-[15px] leading-relaxed text-ink">{para}</p>
-            ))
-          : <p className="text-sm text-ink-3">Texte masqué — à toi de jouer.</p>}
-      </div>
-
-      <div className="mt-4 border-t border-line pt-3">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {MASK_RATIOS.map((r, i) => (
-            <button key={i} onClick={() => reset(i + 1)}
-              className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
-                level === i + 1 ? 'border-sun/50 bg-sun/15 text-sun-soft' : 'border-line text-ink-2 hover:bg-panel-2 hover:text-ink'
-              }`}>
-              Niveau {i + 1} <span className="text-[11px] opacity-70">({Math.round(r * 100)} %)</span>
-            </button>
-          ))}
-        </div>
-
-        <div className="mt-3 space-y-1.5">
-          {lines.map((line, li) => (
-            <p key={li} className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-[15px] leading-relaxed text-ink">
-              {line.map((t, wi) => {
-                const key = `${li}-${wi}`
-                if (!t.blank) return <span key={key}>{t.word}</span>
-                const given = answers[key] ?? ''
-                const ok = norm(given) === norm(t.word)
-                return (
-                  <input key={key} value={given} disabled={validated}
-                    onChange={(e) => setAnswers((a) => ({ ...a, [key]: e.target.value }))}
-                    style={{ width: `${Math.max(4, t.word.length + 1)}ch` }}
-                    aria-label={`Mot manquant ${wi + 1}`}
-                    className={`field px-1.5 py-0.5 text-center text-[14px] ${
-                      validated ? (ok ? 'border-good/60 bg-good/10' : 'border-[#ec7f97]/60 bg-[#ec7f97]/10') : ''
-                    }`} />
-                )
-              })}
-            </p>
-          ))}
-        </div>
-
-        {validated ? (
-          <div className="mt-3 space-y-2">
-            <p className="text-sm text-ink-2">{correct} / {blanks.length} mots retrouvés.</p>
-            {blanks.some((b) => norm(answers[b.key] ?? '') !== norm(b.word)) && (
-              <p className="text-sm text-ink-3">
-                À revoir : {blanks.filter((b) => norm(answers[b.key] ?? '') !== norm(b.word)).map((b) => b.word).join(', ')}
-              </p>
-            )}
-            <button onClick={() => reset(level)} className="btn-ghost flex items-center gap-1.5 px-4 py-2 text-sm">
-              <RotateCcw size={14} /> Recommencer ce niveau
-            </button>
-          </div>
-        ) : (
-          <button onClick={() => setValidated(true)} disabled={blanks.length === 0}
-            className="btn-sun mt-3 flex items-center gap-1.5 px-4 py-2 text-sm disabled:opacity-50">
-            Vérifier <ChevronRight size={15} />
-          </button>
-        )}
-      </div>
-    </Card>
   )
 }
 

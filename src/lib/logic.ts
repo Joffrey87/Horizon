@@ -700,11 +700,6 @@ export function scriptureOfDay(now = new Date()): DailyScripture {
 // avant (l'évangile ou la 1re lecture, un jour sur deux) et si la page Écritures
 // propose un psaume à apprendre plutôt que le passage (un jour sur deux aussi).
 export type ScriptureKind = 'evangile' | 'lecture1'
-export function dailyScripturePlan(now = new Date()): { kind: ScriptureKind; psalmDay: boolean } {
-  const dayIndex = Math.floor(now.getTime() / 86_400_000)
-  const odd = ((dayIndex % 2) + 2) % 2 === 1
-  return { kind: odd ? 'lecture1' : 'evangile', psalmDay: odd }
-}
 
 /** Citation de l'accueil — repli hors ligne si l'AELF est injoignable. */
 export function quoteOfDay(now = new Date()): { text: string; source: string } {
