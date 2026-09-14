@@ -23,10 +23,13 @@ useHorizon.setState({
   ready: true, loading: false,
   // La démo n'appelle aucune fonction serveur : la synchro d'agenda est neutralisée.
   syncAgenda: async () => ({ ok: true, agendas: [] }),
+  celesteAction: async () => ({ ok: false, error: 'Pas d’agent en mode démo' }),
+  saveCelesteRules: async () => {},
   session: { user: { id: uid, email: 'demo@horizon.local' } } as unknown as Session,
   domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
   habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
   newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], settings: null,
+  celesteRules: null, celesteProposals: [],
 })
 
 // Mode démo pleinement interactif : les mutations restent locales (aucun réseau,
@@ -37,7 +40,7 @@ const KEY: Record<string, keyof ReturnType<typeof useHorizon.getState>> = {
   reviews: 'reviews', layouts: 'layouts', birthdays: 'birthdays', checks: 'checks',
   olafatco_jobs: 'olafatcoJobs', news_topics: 'newsTopics', news_digests: 'newsDigests',
   shopping_lists: 'shoppingLists', shopping_items: 'shoppingItems',
-  calendar_feeds: 'calendarFeeds',
+  calendar_feeds: 'calendarFeeds', celeste_proposals: 'celesteProposals',
 }
 /** Clé du store pour une table Supabase — lève si la table n'est pas gérée en démo. */
 const keyFor = (table: string): keyof ReturnType<typeof useHorizon.getState> => {

@@ -8,14 +8,16 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import { capturesEnAttente, depiler } from './capture'
 import type {
-  Birthday, CalendarFeed, Check, Domain, GospelQuiz, Habit, HabitLog, Idea, Layout, NewsDigest, NewsKind, NewsTopic,
-  Objective, OlafatcoJob, Project, PropositionAgenda, Review, Settings, ShoppingItem, ShoppingList, Step, Task,
+  Birthday, CalendarFeed, CelesteProposal, CelesteRules, Check, Domain, GospelQuiz, Habit, HabitLog, Idea, Layout,
+  NewsDigest, NewsKind, NewsTopic, Objective, OlafatcoJob, Project, PropositionAgenda, Review, Settings, ShoppingItem,
+  ShoppingList, Step, Task,
 } from './types'
 
 type Table =
   | 'domains' | 'objectives' | 'projects' | 'steps' | 'tasks' | 'ideas'
   | 'habits' | 'habit_logs' | 'reviews' | 'layouts' | 'birthdays' | 'checks' | 'olafatco_jobs'
   | 'news_topics' | 'news_digests' | 'shopping_lists' | 'shopping_items' | 'calendar_feeds'
+  | 'celeste_proposals'
 
 interface HorizonState {
   session: Session | null
@@ -49,6 +51,9 @@ interface HorizonState {
   calendarFeeds: CalendarFeed[]
   /** Évènements d'agenda proposés à l'import, jamais encore acceptés. */
   propositionsAgenda: PropositionAgenda[]
+  /** Agent Céleste : règles (null tant que l'agent n'a jamais tourné) et demandes vues. */
+  celesteRules: CelesteRules | null
+  celesteProposals: CelesteProposal[]
   settings: Settings | null
 
   init: () => Promise<void>
@@ -69,6 +74,10 @@ interface HorizonState {
   /** Écarte toute la série : elle ne sera plus jamais proposée. */
   ignorerSerie: (feedId: string, uid: string) => Promise<void>
   gospelQuiz: (reference: string, passage: string, level: number, opts?: { keyVerse?: string; verseRef?: string; avoid?: string[]; format?: 'jour' | 'revision' }) => Promise<{ ok: boolean; quiz?: GospelQuiz; error?: string }>
+  /** Agent Céleste : enregistre les règles (crée la ligne si besoin). */
+  saveCelesteRules: (values: Partial<CelesteRules>) => Promise<void>
+  /** Agent Céleste : action de la fonction Edge (scan, accept, unaccept), puis rechargement. */
+  celesteAction: (action: 'scan' | 'accept' | 'unaccept', proposalId?: string) => Promise<{ ok: boolean; error?: string; result?: Record<string, unknown> }>
   clearRecovery: () => void
   clearError: () => void
   /** Réessaie d'envoyer les captures mises de côté. Sans effet si la file est
@@ -85,6 +94,7 @@ const COLLECTION: Record<Table, keyof HorizonState> = {
   news_topics: 'newsTopics', news_digests: 'newsDigests',
   shopping_lists: 'shoppingLists', shopping_items: 'shoppingItems',
   calendar_feeds: 'calendarFeeds',
+  celeste_proposals: 'celesteProposals',
 }
 
 /** Noms lisibles des collections, dans l'ordre des requêtes de `loadAll`. */
@@ -92,7 +102,7 @@ const TABLES = [
   'domaines', 'objectifs', 'projets', 'étapes', 'tâches', 'idées', 'habitudes',
   'suivi des habitudes', 'revues', 'dispositions', 'réglages', 'anniversaires',
   'vérifications', 'heures de contrôle', "sujets d'actualité", 'synthèses',
-  'listes de courses', 'articles', 'agendas',
+  'listes de courses', 'articles', 'agendas', 'règles Céleste', 'remplas Céleste',
 ]
 
 export const useHorizon = create<HorizonState>((set, get) => ({
@@ -105,7 +115,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
   habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
   newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], calendarFeeds: [],
-  propositionsAgenda: [], settings: null,
+  propositionsAgenda: [], celesteRules: null, celesteProposals: [], settings: null,
 
   init: async () => {
     const { data } = await supabase.auth.getSession()
@@ -119,7 +129,8 @@ export const useHorizon = create<HorizonState>((set, get) => ({
         set({
           domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
           habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
-          newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], calendarFeeds: [], settings: null,
+          newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], calendarFeeds: [],
+          celesteRules: null, celesteProposals: [], settings: null,
         })
       }
     })
@@ -154,6 +165,8 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       () => supabase.from('shopping_lists').select('*').order('sort_order'),
       () => supabase.from('shopping_items').select('*').order('sort_order'),
       () => supabase.from('calendar_feeds').select('*').order('created_at'),
+      () => supabase.from('celeste_rules').select('*').maybeSingle(),
+      () => supabase.from('celeste_proposals').select('*').order('date'),
     ]
     type Reponse = { data: unknown; error: { message?: string } | null }
     const lancer = (i: number) => requetes[i]!() as unknown as Promise<Reponse>
@@ -170,7 +183,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
         responses.map((r, i) => (r.error ? lancer(i) : Promise.resolve(r))),
       )
     }
-    const [dom, obj, pro, stp, tas, ide, hab, log, rev, lay, setg, bd, chk, oja, nto, ndi, shl, shi, cal] = responses
+    const [dom, obj, pro, stp, tas, ide, hab, log, rev, lay, setg, bd, chk, oja, nto, ndi, shl, shi, cal, cru, cpr] = responses
     // Une table en échec conserve ce qui était déjà chargé : mieux vaut un écran
     // incomplet et signalé qu'un compte qui paraît vide.
     const prev = get()
@@ -196,6 +209,8 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       olafatcoJobs: keep(oja, prev.olafatcoJobs), newsTopics: keep(nto, prev.newsTopics),
       newsDigests: keep(ndi, prev.newsDigests), shoppingLists: keep(shl, prev.shoppingLists),
       shoppingItems: keep(shi, prev.shoppingItems), calendarFeeds: keep(cal, prev.calendarFeeds),
+      celesteProposals: keep(cpr, prev.celesteProposals),
+      celesteRules: !cru || cru.error ? prev.celesteRules : ((cru.data as CelesteRules | null) ?? null),
       settings: !setg || setg.error ? prev.settings : ((setg.data as Settings | null) ?? null),
       loading: false,
       error: failed.length === 0 ? null : message,
@@ -362,6 +377,38 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       if (error) throw error
       if (data?.error) throw new Error(data.error)
       return { ok: true, quiz: data?.quiz as GospelQuiz }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  },
+
+  saveCelesteRules: async (values) => {
+    const user_id = get().session?.user.id
+    if (!user_id) return
+    const { data, error } = await supabase.from('celeste_rules')
+      .upsert({ ...values, user_id, updated_at: new Date().toISOString() }).select('*').single()
+    if (error || !data) { set({ error: `Règles Céleste non enregistrées : ${error?.message ?? 'réponse vide'}` }); return }
+    set({ celesteRules: data as CelesteRules })
+  },
+
+  // L'agent (fonction Edge) fait le travail auprès de Céleste ; on recharge
+  // ensuite règles et propositions, qu'il a mises à jour lui-même.
+  celesteAction: async (action, proposalId) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('celeste', { body: { action, proposal_id: proposalId } })
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
+      const [{ data: regles }, { data: props }] = await Promise.all([
+        supabase.from('celeste_rules').select('*').maybeSingle(),
+        supabase.from('celeste_proposals').select('*').order('date'),
+      ])
+      set({ celesteRules: (regles as CelesteRules | null) ?? get().celesteRules, celesteProposals: (props as CelesteProposal[] | null) ?? get().celesteProposals })
+      if (action !== 'scan') {
+        // « Temps » a pu gagner ou perdre une vacation.
+        const { data: tasks } = await supabase.from('tasks').select('*').order('created_at')
+        if (tasks) set({ tasks: tasks as Task[] })
+      }
+      return { ok: data?.ok !== false, error: data?.error as string | undefined, result: data as Record<string, unknown> }
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e) }
     }

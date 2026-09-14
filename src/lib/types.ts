@@ -412,3 +412,53 @@ export interface PropositionAgenda {
   feed_id: UUID
   feed_label: string
 }
+
+// ---- Agent Céleste (remplacements) ----------------------------------------
+
+export type CelesteMode = 'auto_premiere' | 'confirmation' | 'auto'
+
+/** Règles de disponibilité de l'agent Céleste (une ligne par utilisateur).
+ *  Les identifiants Céleste ne sont PAS ici (secrets de la fonction Edge). */
+export interface CelesteRules {
+  user_id: UUID
+  enabled: boolean
+  /** auto_premiere : accepte seul la première demande compatible puis passe en
+   *  confirmation ; confirmation : propose et attend ; auto : accepte toujours. */
+  mode: CelesteMode
+  delay_seconds: number
+  no_weekdays: number[]      // jours ISO refusés (7 = dimanche)
+  no_shifts: string[]        // codes de vacation refusés (N, S2…)
+  no_teams: string[]         // équipes refusées
+  refuse_reserved: boolean   // demandes fléchées (« Pour Marie », réservée) écartées
+  no_keywords: string[]      // mots du commentaire qui font écarter
+  min_notice_days: number
+  max_per_week: number | null
+  ntfy_topic: string | null
+  last_scan_at: string | null
+  last_error: string | null
+  updated_at: string
+}
+
+export type CelesteStatus = 'proposee' | 'acceptee' | 'ignoree' | 'refusee' | 'expiree' | 'annulee' | 'erreur'
+
+/** Une demande de remplacement vue par l'agent, et ce qu'il en a fait. */
+export interface CelesteProposal {
+  id: UUID
+  user_id: UUID
+  celeste_id: string
+  date: string               // ISO 'yyyy-MM-dd'
+  shift_code: string         // S1, M2, N…
+  start_time: string         // « 15:00 »
+  end_time: string
+  ends_next_day: boolean
+  team: string | null
+  points: number | null
+  comment: string | null
+  poster: string | null
+  status: CelesteStatus
+  reason: string | null      // règle en cause, ou message d'erreur
+  auto: boolean              // acceptée par l'agent seul
+  task_id: UUID | null
+  decided_at: string | null
+  created_at: string
+}

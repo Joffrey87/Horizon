@@ -80,6 +80,7 @@ export function Dashboard() {
     return r ? readingQuote(r) : quoteOfDay()
   }, [mass])
   const review = suggestedReview()
+  const remplasEnAttente = s.celesteProposals.filter((p) => p.status === 'proposee').length
   const firstName = s.settings?.first_name
     ?? s.session?.user.email?.split('@')[0]?.replace(/^./, (c) => c.toUpperCase())
 
@@ -249,6 +250,16 @@ export function Dashboard() {
       {review.kind && (
         <Link to="/revues" className="card card-hover flex items-center justify-between px-4 py-3">
           <p className="text-sm"><span className="text-sun-soft">Revue :</span> {review.label}</p>
+          <ArrowRight size={16} className="text-ink-3" />
+        </Link>
+      )}
+
+      {/* Agent Céleste : une demande de rempla attend ta décision. */}
+      {remplasEnAttente > 0 && (
+        <Link to="/remplas" className="card card-hover flex items-center justify-between border-sun/40 bg-sun/10 px-4 py-3">
+          <p className="text-sm">
+            <span className="text-sun-soft">Rempla :</span> {remplasEnAttente} demande{remplasEnAttente > 1 ? 's' : ''} à valider
+          </p>
           <ArrowRight size={16} className="text-ink-3" />
         </Link>
       )}

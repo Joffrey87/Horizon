@@ -3,7 +3,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import {
   Home, FolderKanban, ListTodo, Compass, CalendarDays, CalendarRange,
   Repeat, ClipboardCheck, Network, Settings, Plus, LogOut, Menu, ArrowLeft, ShieldCheck, Timer, Newspaper,
-  AlertTriangle, X, RotateCw,
+  AlertTriangle, X, RotateCw, ArrowLeftRight,
 } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import { wallpaperOfDay } from '../lib/logic'
@@ -26,6 +26,7 @@ const NAV = [
   { to: '/revues', label: 'Revues', icon: ClipboardCheck },
   { to: '/verifications', label: 'Vérifications', icon: ShieldCheck },
   { to: '/heures-controle', label: 'Heures de contrôle', icon: Timer },
+  { to: '/remplas', label: 'Remplas', icon: ArrowLeftRight },
   { to: '/espace', label: 'Espace visuel', icon: Network },
 ]
 

@@ -20,6 +20,7 @@ import { VerificationsLayout } from './views/VerificationsLayout'
 import { VerificationsView } from './views/VerificationsView'
 import { ListesView } from './views/ListesView'
 import { HeuresControleView } from './views/HeuresControleView'
+import { RemplasView } from './views/RemplasView'
 import { SettingsView } from './views/SettingsView'
 import { CaptureView } from './views/CaptureView'
 
@@ -53,6 +54,7 @@ export function AppRoutes() {
         <Route path="listes" element={<ListesView />} />
       </Route>
       <Route path="/heures-controle" element={<HeuresControleView />} />
+      <Route path="/remplas" element={<RemplasView />} />
       <Route path="/espace" element={<Suspense fallback={<Chargement />}><WorkspaceView /></Suspense>} />
       <Route path="/parametres" element={<SettingsView />} />
       <Route path="*" element={<Navigate to="/" replace />} />
