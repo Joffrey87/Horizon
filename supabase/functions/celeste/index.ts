@@ -270,22 +270,20 @@ function verifier(d: Demande, r: Regles, moi: string, taches: TacheAgenda[], acc
 
 // ---- notifications (ntfy) --------------------------------------------------
 
-/** Push ntfy. Le clic ouvre Temps (vue mois) sur la vacation concernee — date dans
- *  le chemin : Android perd la query string en ouvrant le lien dans la PWA. */
-async function notifier(topic: string | null, titre: string, message: string, tags: string[], date?: string): Promise<void> {
-  if (!topic) return
-  try {
-    await fetch('https://ntfy.sh', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        topic, title: titre, message, tags, priority: 4,
-        click: date ? `${APP_URL}/temps/${date}` : `${APP_URL}/remplas`,
-      }),
-    })
-  } catch (e) {
-    console.error('ntfy :', e)
+/** Push ntfy, envoye PAR LA BASE (rpc ntfy_publish, pg_net) : ntfy.sh plafonne
+ *  par IP et les fonctions Edge partagent la leur (429 quota atteint), la base
+ *  a la sienne. Le clic ouvre Temps (vue mois) sur la vacation concernee - date
+ *  dans le chemin : Android perd la query string en ouvrant le lien dans la PWA.
+ *  Renvoie un compte rendu (diagnostic). */
+async function notifier(db: SupabaseClient, topic: string | null, titre: string, message: string, tags: string[], date?: string): Promise<string> {
+  if (!topic) return 'pas de topic'
+  const payload = {
+    topic, title: titre, message, tags, priority: 4,
+    click: date ? `${APP_URL}/temps/${date}` : `${APP_URL}/remplas`,
   }
+  const { data, error } = await db.rpc('ntfy_publish', { payload })
+  if (error) { console.error('ntfy :', error.message); return `erreur: ${error.message}` }
+  return `pg_net #${data}`
 }
 
 // ---- propositions ----------------------------------------------------------
@@ -438,7 +436,7 @@ async function scan(db: SupabaseClient, uid: string): Promise<Record<string, unk
 
       if (mode === 'confirmation') {
         compteRendu.proposees++
-        await notifier(r.ntfy_topic, 'Rempla disponible — à valider', resume(p) + (p.comment ? `\n« ${p.comment} »` : ''), ['calendar'], p.date)
+        await notifier(db, r.ntfy_topic, 'Rempla disponible — à valider', resume(p) + (p.comment ? `\n« ${p.comment} »` : ''), ['calendar'], p.date)
         continue
       }
 
@@ -450,14 +448,14 @@ async function scan(db: SupabaseClient, uid: string): Promise<Record<string, unk
       if (maj.status === 'acceptee') {
         compteRendu.acceptees++
         acceptees.push(maj)
-        await notifier(r.ntfy_topic, 'Rempla accepté ✔', `${resume(maj)}\nAnnulable depuis Horizon.`, ['white_check_mark'], maj.date)
+        await notifier(db, r.ntfy_topic, 'Rempla accepté ✔', `${resume(maj)}\nAnnulable depuis Horizon.`, ['white_check_mark'], maj.date)
         if (mode === 'auto_premiere') {
           // Le test est fait : désormais on demande avant.
           mode = 'confirmation'
           await db.from('celeste_rules').update({ mode }).eq('user_id', uid)
         }
       } else {
-        await notifier(r.ntfy_topic, 'Rempla non accepté', `${resume(maj)}\n${maj.reason ?? ''}`, ['warning'], maj.date)
+        await notifier(db, r.ntfy_topic, 'Rempla non accepté', `${resume(maj)}\n${maj.reason ?? ''}`, ['warning'], maj.date)
       }
     }
 
@@ -506,9 +504,9 @@ async function simuler(db: SupabaseClient, uid: string, sim: Simulation): Promis
     return { ok: true, verdict: 'refusee', reason: raison }
   }
   await db.from('celeste_proposals').upsert({ ...base, status: 'proposee', reason: null, decided_at: null }, { onConflict: 'user_id,celeste_id' })
-  await notifier(r.ntfy_topic, 'Rempla disponible — à valider', resume(base) + `
+  const ntfy = await notifier(db, r.ntfy_topic, 'Rempla disponible — à valider', resume(base) + `
 « ${base.comment} »`, ['calendar'], base.date)
-  return { ok: true, verdict: 'proposee', notified: !!r.ntfy_topic }
+  return { ok: true, verdict: 'proposee', ntfy }
 }
 
 // ---- serveur ---------------------------------------------------------------
