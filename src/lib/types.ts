@@ -427,6 +427,8 @@ export interface CelesteRules {
   mode: CelesteMode
   delay_seconds: number
   no_weekdays: number[]      // jours ISO refusés (7 = dimanche)
+  /** Jour refusé mais ouvert à certaines vacations : { "4": ["N"] } = jeudi, sauf en nuit. */
+  weekday_exceptions: Record<string, string[]>
   no_shifts: string[]        // codes de vacation refusés (N, S2…)
   no_teams: string[]         // équipes refusées
   refuse_reserved: boolean   // demandes fléchées (« Pour Marie », réservée) écartées

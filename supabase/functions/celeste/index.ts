@@ -211,6 +211,8 @@ interface Regles {
   mode: 'auto_premiere' | 'confirmation' | 'auto'
   delay_seconds: number
   no_weekdays: number[]
+  /** Jour refuse mais ouvert a certaines vacations : { "4": ["N"] } = jeudi, sauf en nuit. */
+  weekday_exceptions: Record<string, string[]>
   no_shifts: string[]
   no_teams: string[]
   refuse_reserved: boolean
@@ -232,7 +234,10 @@ function verifier(d: Demande, r: Regles, moi: string, taches: TacheAgenda[], acc
   const commentaire = d.comment ?? ''
 
   const iso = jourIso(date)
-  if (r.no_weekdays.includes(iso)) return `jamais le ${JOURS[iso]}`
+  const sauf = r.weekday_exceptions?.[String(iso)] ?? []
+  if (r.no_weekdays.includes(iso) && !sauf.includes(code)) {
+    return sauf.length ? `jamais le ${JOURS[iso]} (sauf ${sauf.join(', ')})` : `jamais le ${JOURS[iso]}`
+  }
   if (r.no_shifts.includes(code)) return `vacation ${code} refusée`
   if (equipe && r.no_teams.includes(equipe)) return `équipe ${equipe} refusée`
   if (r.refuse_reserved) {
@@ -262,13 +267,17 @@ function verifier(d: Demande, r: Regles, moi: string, taches: TacheAgenda[], acc
 
 // ---- notifications (ntfy) --------------------------------------------------
 
-async function notifier(topic: string | null, titre: string, message: string, tags: string[]): Promise<void> {
+/** Push ntfy. Le clic ouvre Temps sur la semaine de la vacation concernee. */
+async function notifier(topic: string | null, titre: string, message: string, tags: string[], date?: string): Promise<void> {
   if (!topic) return
   try {
     await fetch('https://ntfy.sh', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic, title: titre, message, click: `${APP_URL}/remplas`, tags, priority: 4 }),
+      body: JSON.stringify({
+        topic, title: titre, message, tags, priority: 4,
+        click: date ? `${APP_URL}/temps?date=${date}` : `${APP_URL}/remplas`,
+      }),
     })
   } catch (e) {
     console.error('ntfy :', e)
@@ -359,7 +368,8 @@ async function retirer(db: SupabaseClient, s: SessionCeleste, p: Proposition): P
 // ---- scan ------------------------------------------------------------------
 
 const REGLES_DEFAUT = {
-  enabled: true, mode: 'auto_premiere', delay_seconds: 10, no_weekdays: [7], no_shifts: [], no_teams: ['10'],
+  enabled: true, mode: 'auto_premiere', delay_seconds: 10, no_weekdays: [4, 7], weekday_exceptions: { '4': ['N'] },
+  no_shifts: [], no_teams: ['10'],
   refuse_reserved: true, no_keywords: [], min_notice_days: 0, max_per_week: null, ntfy_topic: null,
 }
 
@@ -423,7 +433,7 @@ async function scan(db: SupabaseClient, uid: string): Promise<Record<string, unk
 
       if (mode === 'confirmation') {
         compteRendu.proposees++
-        await notifier(r.ntfy_topic, 'Rempla disponible — à valider', resume(p) + (p.comment ? `\n« ${p.comment} »` : ''), ['calendar'])
+        await notifier(r.ntfy_topic, 'Rempla disponible — à valider', resume(p) + (p.comment ? `\n« ${p.comment} »` : ''), ['calendar'], p.date)
         continue
       }
 
@@ -435,14 +445,14 @@ async function scan(db: SupabaseClient, uid: string): Promise<Record<string, unk
       if (maj.status === 'acceptee') {
         compteRendu.acceptees++
         acceptees.push(maj)
-        await notifier(r.ntfy_topic, 'Rempla accepté ✔', `${resume(maj)}\nAnnulable depuis Horizon.`, ['white_check_mark'])
+        await notifier(r.ntfy_topic, 'Rempla accepté ✔', `${resume(maj)}\nAnnulable depuis Horizon.`, ['white_check_mark'], maj.date)
         if (mode === 'auto_premiere') {
           // Le test est fait : désormais on demande avant.
           mode = 'confirmation'
           await db.from('celeste_rules').update({ mode }).eq('user_id', uid)
         }
       } else {
-        await notifier(r.ntfy_topic, 'Rempla non accepté', `${resume(maj)}\n${maj.reason ?? ''}`, ['warning'])
+        await notifier(r.ntfy_topic, 'Rempla non accepté', `${resume(maj)}\n${maj.reason ?? ''}`, ['warning'], maj.date)
       }
     }
 
@@ -487,6 +497,8 @@ Deno.serve(async (req) => {
     if (!p) return json({ error: 'Proposition introuvable' }, 404)
     const prop = p as Proposition
 
+    // Proposition de demonstration (inseree a la main, pas issue de Celeste) : rien a accepter.
+    if (prop.celeste_id.startsWith('test-')) return json({ error: 'Proposition de test : ignore-la, elle ne vient pas de Celeste' }, 409)
     if (action === 'accept') {
       if (prop.status !== 'proposee') return json({ error: `Proposition déjà ${prop.status}` }, 409)
       const s = await ouvrirSession(db, uid)

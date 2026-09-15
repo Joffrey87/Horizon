@@ -1,4 +1,5 @@
 import { createContext, useContext, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   addMonths, addWeeks, eachDayOfInterval, endOfMonth, endOfWeek, format, getDate, getDaysInMonth,
   getISODay, isSameMonth, isToday, parseISO, startOfMonth, startOfWeek,
@@ -10,7 +11,7 @@ import { compareTasksByTitleTime, extractHourMinute, iso, tasksForDay, recurrenc
 import { Card, Seg, Modal, ProjectTag } from '../components/ui'
 import { TaskForm } from '../components/TaskForm'
 import { AgendaPropositions } from '../components/AgendaPropositions'
-import type { MassConfig, MassSlot, Objective, Step, Task } from '../lib/types'
+import type { CelesteProposal, MassConfig, MassSlot, Objective, Step, Task } from '../lib/types'
 
 type View = '4sem' | 'semaine' | 'trimestre' | 'annee'
 type Kind = 'task' | 'step' | 'objective'
@@ -52,8 +53,12 @@ function useLayerFilter() {
 
 export function TimeView() {
   const s = useHorizon()
-  const [view, setView] = useState<View>('4sem')
-  const [anchor, setAnchor] = useState(new Date())
+  // « /temps?date=2026-10-23 » (lien d'une notification de rempla) : on ouvre
+  // directement la semaine de ce jour.
+  const [params] = useSearchParams()
+  const dateDemandee = params.get('date')
+  const [view, setView] = useState<View>(dateDemandee ? 'semaine' : '4sem')
+  const [anchor, setAnchor] = useState(() => (dateDemandee ? parseISO(dateDemandee) : new Date()))
   const [editing, setEditing] = useState<Task | null>(null)
   const [createDate, setCreateDate] = useState<string | null>(null)
   const [overrideScheduled, setOverrideScheduled] = useState<string | undefined>(undefined)
@@ -321,6 +326,21 @@ function MassPicker({ pick, onClose }: { pick: { date: string; label: string }; 
 
 // ---- Cellule d'un jour (partagée par 4 semaines) --------------------------
 
+/** Code de la vacation d'un rempla Céleste PROPOSÉ (en attente de ta décision) ce jour-là. */
+function remplaProposeOn(proposals: CelesteProposal[], dayIso: string): string | null {
+  return proposals.find((p) => p.status === 'proposee' && p.date === dayIso)?.shift_code ?? null
+}
+
+/** Marqueur « rempla proposé » : pointillé rouge, mène à la page Remplas pour décider. */
+function RemplaChip({ code }: { code: string }) {
+  return (
+    <Link to="/remplas" onClick={(e) => e.stopPropagation()} title="Rempla proposé par l'agent Céleste — à valider"
+      className="mb-1 flex items-center justify-center gap-1 rounded border border-dashed border-[#ef4444]/80 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#ff6b6b] hover:bg-[#ef4444]/10">
+      Rempla {code} ?
+    </Link>
+  )
+}
+
 export function DayCell({ day, tint, emphasize, fit, massCross, onEdit, onCreate, onStep, onMove }: {
   day: Date; tint?: string; emphasize?: boolean; fit?: boolean
   /** Affiche toujours la croix « trouver une messe » (accueil), même hors fête. */
@@ -333,6 +353,7 @@ export function DayCell({ day, tint, emphasize, fit, massCross, onEdit, onCreate
   const [over, setOver] = useState(false)
   const today = isToday(day)
   const dayIso = iso(day)
+  const rempla = remplaProposeOn(s.celesteProposals, dayIso)
   const all = [...tasksForDay(s.tasks, day)].filter(taskVisible).sort(compareTasksByTitleTime)
   // Évènements multi-jours (vacances…) : bandes continues épinglées en haut ; le reste dans le flux.
   const spans = all.filter((t) => spanPart(t, dayIso) !== 'single')
@@ -365,7 +386,7 @@ export function DayCell({ day, tint, emphasize, fit, massCross, onEdit, onCreate
       onClick={handleVoid}
       style={{ backgroundColor: !today && !over ? tint : undefined }}
       className={`flex min-h-28 cursor-pointer flex-col rounded-lg border p-1.5 transition-colors ${fit ? 'w-max max-w-full' : ''} ${
-        today ? 'border-sun/50 bg-sun/5' : over ? 'border-sun/70 bg-sun/10' : 'border-line-2/60 hover:bg-panel-2/40'
+        rempla ? 'border-dashed border-[#ef4444]/80' : today ? 'border-sun/50 bg-sun/5' : over ? 'border-sun/70 bg-sun/10' : 'border-line-2/60 hover:bg-panel-2/40'
       }`}>
       <header className="mb-1 flex items-center justify-between gap-1" onClick={(e) => e.stopPropagation()}>
         <p className={`text-xs font-medium capitalize ${today ? 'text-sun-soft' : emphasize ? 'text-white/85' : 'text-ink-3'}`}>
@@ -471,6 +492,7 @@ export function DayCell({ day, tint, emphasize, fit, massCross, onEdit, onCreate
           })}
         </div>
       )}
+      {rempla && <RemplaChip code={rempla} />}
       {isMarketParkingDay(s.tasks, day) && (
         <div onClick={(e) => e.stopPropagation()}
           title="Dimanche travaillé (début < 15h) — marché dominical & stationnement compliqués"
@@ -593,6 +615,7 @@ const ROW_H = 44
 function WeekHours({ anchor, onEdit, onCreate, onStep, onMove }: {
   anchor: Date; onEdit: (t: Task) => void; onCreate: (d: string) => void; onStep: (st: Step) => void; onMove: MoveFn
 }) {
+  const s = useHorizon()
   const days = useMemo(() => {
     const start = startOfWeek(anchor, { weekStartsOn: 1 })
     return eachDayOfInterval({ start, end: endOfWeek(start, { weekStartsOn: 1 }) })
@@ -605,7 +628,9 @@ function WeekHours({ anchor, onEdit, onCreate, onStep, onMove }: {
         <div className="grid min-w-[720px]" style={{ gridTemplateColumns: `44px repeat(7, 1fr)` }}>
           <div />
           {days.map((day) => (
-            <div key={day.toISOString()} className={`px-1 pb-1 text-center text-xs font-medium ${isToday(day) ? 'text-sun-soft' : 'text-ink-3'}`}>
+            <div key={day.toISOString()} className={`px-1 pb-1 text-center text-xs font-medium ${
+              remplaProposeOn(s.celesteProposals, iso(day)) ? 'rounded border border-dashed border-[#ef4444]/80 text-[#ff6b6b]'
+                : isToday(day) ? 'text-sun-soft' : 'text-ink-3'}`}>
               {format(day, 'EEE d', { locale: fr })}
             </div>
           ))}
@@ -648,6 +673,7 @@ function AllDayBand({ day, onEdit, onStep, onMove, onCreate }: {
   // Évènements multi-jours d'abord : leurs barres fines s'alignent d'un jour à l'autre (continuité).
   const spanEvents = untimed.filter((t) => spanPart(t, iso(day)) !== 'single')
   const singleEvents = untimed.filter((t) => spanPart(t, iso(day)) === 'single')
+  const rempla = remplaProposeOn(s.celesteProposals, iso(day))
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault(); setOver(false)
     const d = readDrag(e); if (d) onMove(d.kind, d.id, iso(day))
@@ -684,6 +710,7 @@ function AllDayBand({ day, onEdit, onStep, onMove, onCreate }: {
     <div onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={onDrop}
       onClick={(e) => { if (e.target === e.currentTarget) onCreate(iso(day)) }}
       className={`min-h-8 space-y-0.5 border-b border-line-2/60 p-0.5 ${over ? 'bg-sun/10' : ''} ${isToday(day) ? 'bg-sun/5' : ''}`}>
+      {rempla && <RemplaChip code={rempla} />}
       {spanEvents.map(renderUntimed)}
       {feast && (
         <button onClick={(e) => { e.stopPropagation(); openMassPicker(iso(day), feast) }}

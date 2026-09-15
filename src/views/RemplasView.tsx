@@ -196,8 +196,9 @@ function Ligne({ p, children }: { p: CelesteProposal; children?: ReactNode }) {
  *  changement part tout de suite (l'agent le lit à son prochain passage). */
 function Regles({ regles, onSave }: { regles: CelesteRules | null; onSave: (v: Partial<CelesteRules>) => Promise<void> }) {
   const r: CelesteRules = regles ?? {
-    user_id: '', enabled: true, mode: 'auto_premiere', delay_seconds: 10, no_weekdays: [7], no_shifts: [],
-    no_teams: ['10'], refuse_reserved: true, no_keywords: [], min_notice_days: 0, max_per_week: null,
+    user_id: '', enabled: true, mode: 'auto_premiere', delay_seconds: 10, no_weekdays: [4, 7],
+    weekday_exceptions: { '4': ['N'] }, no_shifts: [], no_teams: ['10'], refuse_reserved: true, no_keywords: [],
+    min_notice_days: 0, max_per_week: null,
     ntfy_topic: null, last_scan_at: null, last_error: null, updated_at: '',
   }
   // Champs texte : édités localement, envoyés à la sortie du champ.
@@ -211,6 +212,16 @@ function Regles({ regles, onSave }: { regles: CelesteRules | null; onSave: (v: P
     const set = new Set(r.no_weekdays)
     if (set.has(iso)) set.delete(iso); else set.add(iso)
     void onSave({ no_weekdays: [...set].sort() })
+  }
+  // « Sauf N » : vacations qui restent acceptables un jour refusé.
+  const [sauf, setSauf] = useState<Record<string, string>>(
+    Object.fromEntries(Object.entries(r.weekday_exceptions ?? {}).map(([k, v]) => [k, v.join(', ')])),
+  )
+  const saveSauf = (iso: number) => {
+    const codes = liste(sauf[String(iso)] ?? '')
+    const next = { ...(r.weekday_exceptions ?? {}) }
+    if (codes.length) next[String(iso)] = codes; else delete next[String(iso)]
+    void onSave({ weekday_exceptions: next })
   }
 
   return (
@@ -241,6 +252,18 @@ function Regles({ regles, onSave }: { regles: CelesteRules | null; onSave: (v: P
               </button>
             ))}
           </div>
+          {r.no_weekdays.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {r.no_weekdays.map((iso) => (
+                <label key={iso} className="flex items-center gap-1.5 text-xs text-ink-3">
+                  <span className="capitalize">{JOURS.find((j) => j.iso === iso)?.label}</span> sauf
+                  <input value={sauf[String(iso)] ?? ''} placeholder="N" title="Codes de vacation acceptés malgré tout ce jour-là"
+                    onChange={(e) => setSauf({ ...sauf, [String(iso)]: e.target.value })} onBlur={() => saveSauf(iso)}
+                    className="field w-20 !py-0.5 text-xs" />
+                </label>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
