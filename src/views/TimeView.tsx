@@ -54,10 +54,10 @@ function useLayerFilter() {
 export function TimeView() {
   const s = useHorizon()
   // « /temps?date=2026-10-23 » (lien d'une notification de rempla) : on ouvre
-  // directement la semaine de ce jour.
+  // la vue mois sur le mois de ce jour, où il est encadré en pointillé rouge.
   const [params] = useSearchParams()
   const dateDemandee = params.get('date')
-  const [view, setView] = useState<View>(dateDemandee ? 'semaine' : '4sem')
+  const [view, setView] = useState<View>('4sem')
   const [anchor, setAnchor] = useState(() => (dateDemandee ? parseISO(dateDemandee) : new Date()))
   const [editing, setEditing] = useState<Task | null>(null)
   const [createDate, setCreateDate] = useState<string | null>(null)
@@ -326,18 +326,47 @@ function MassPicker({ pick, onClose }: { pick: { date: string; label: string }; 
 
 // ---- Cellule d'un jour (partagée par 4 semaines) --------------------------
 
-/** Code de la vacation d'un rempla Céleste PROPOSÉ (en attente de ta décision) ce jour-là. */
-function remplaProposeOn(proposals: CelesteProposal[], dayIso: string): string | null {
-  return proposals.find((p) => p.status === 'proposee' && p.date === dayIso)?.shift_code ?? null
+/** Rempla Céleste PROPOSÉ (en attente de ta décision) ce jour-là. */
+function remplaProposeOn(proposals: CelesteProposal[], dayIso: string): CelesteProposal | null {
+  return proposals.find((p) => p.status === 'proposee' && p.date === dayIso) ?? null
 }
 
-/** Marqueur « rempla proposé » : pointillé rouge, mène à la page Remplas pour décider. */
-function RemplaChip({ code }: { code: string }) {
+/** Marqueur « rempla proposé » : pointillé rouge + décision sur place.
+ *  « Accepter » valide sur Céleste (fonction Edge) ; « Ignorer » écarte la
+ *  proposition. Le libellé mène à la page Remplas pour le détail. */
+function RemplaChip({ p }: { p: CelesteProposal }) {
+  const celesteAction = useHorizon((st) => st.celesteAction)
+  const update = useHorizon((st) => st.update)
+  const [busy, setBusy] = useState(false)
+  const accepter = async (e: React.MouseEvent) => {
+    e.stopPropagation(); setBusy(true)
+    const r = await celesteAction('accept', p.id)
+    if (!r.ok) useHorizon.setState({ error: `Rempla non accepté : ${r.error ?? 'échec'}` })
+    setBusy(false)
+  }
+  const ignorer = async (e: React.MouseEvent) => {
+    e.stopPropagation(); setBusy(true)
+    await update('celeste_proposals', p.id, { status: 'ignoree', decided_at: new Date().toISOString() })
+    setBusy(false)
+  }
   return (
-    <Link to="/remplas" onClick={(e) => e.stopPropagation()} title="Rempla proposé par l'agent Céleste — à valider"
-      className="mb-1 flex items-center justify-center gap-1 rounded border border-dashed border-[#ef4444]/80 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#ff6b6b] hover:bg-[#ef4444]/10">
-      Rempla {code} ?
-    </Link>
+    <div onClick={(e) => e.stopPropagation()}
+      className="mb-1 rounded border border-dashed border-[#ef4444]/80 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#ff6b6b]">
+      <Link to="/remplas" title={`Rempla ${p.shift_code} ${p.start_time}–${p.end_time}${p.team ? ` · équipe ${p.team}` : ''} — détail`}
+        className="block text-center hover:underline">
+        Rempla {p.shift_code} ?
+      </Link>
+      <div className="mt-0.5 flex gap-0.5">
+        <button onClick={(e) => void accepter(e)} disabled={busy} title="Accepter sur Céleste"
+          className="flex flex-1 items-center justify-center gap-0.5 rounded bg-[#4cc79a]/20 py-0.5 text-[#4cc79a] hover:bg-[#4cc79a]/30 disabled:opacity-40">
+          <Check size={9} /> Accepter
+        </button>
+        <button onClick={(e) => void ignorer(e)} disabled={busy} title="Ignorer"
+          className="flex items-center justify-center rounded bg-panel-3 px-1 py-0.5 text-ink-3 hover:text-[#ec7f97] disabled:opacity-40">
+          <X size={9} />
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -492,7 +521,7 @@ export function DayCell({ day, tint, emphasize, fit, massCross, onEdit, onCreate
           })}
         </div>
       )}
-      {rempla && <RemplaChip code={rempla} />}
+      {rempla && <RemplaChip p={rempla} />}
       {isMarketParkingDay(s.tasks, day) && (
         <div onClick={(e) => e.stopPropagation()}
           title="Dimanche travaillé (début < 15h) — marché dominical & stationnement compliqués"
@@ -710,7 +739,7 @@ function AllDayBand({ day, onEdit, onStep, onMove, onCreate }: {
     <div onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={onDrop}
       onClick={(e) => { if (e.target === e.currentTarget) onCreate(iso(day)) }}
       className={`min-h-8 space-y-0.5 border-b border-line-2/60 p-0.5 ${over ? 'bg-sun/10' : ''} ${isToday(day) ? 'bg-sun/5' : ''}`}>
-      {rempla && <RemplaChip code={rempla} />}
+      {rempla && <RemplaChip p={rempla} />}
       {spanEvents.map(renderUntimed)}
       {feast && (
         <button onClick={(e) => { e.stopPropagation(); openMassPicker(iso(day), feast) }}
