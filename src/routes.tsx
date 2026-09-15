@@ -40,6 +40,9 @@ export function AppRoutes() {
       {/* Cible du raccourci « Capturer » et du partage Android (manifest). */}
       <Route path="/capture" element={<CaptureView />} />
       <Route path="/temps" element={<TimeView />} />
+      {/* Lien d'une notification de rempla : la date dans le chemin (le « ?date= »
+          se perd quand Android ouvre le lien dans l'app installée). */}
+      <Route path="/temps/:date" element={<TimeView />} />
       <Route path="/planification" element={<PlanningView />} />
       <Route path="/habitudes" element={<HabitsView />} />
       <Route path="/activites" element={<ActivitesLayout />}>

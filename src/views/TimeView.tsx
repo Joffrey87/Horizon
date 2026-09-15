@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
   addMonths, addWeeks, eachDayOfInterval, endOfMonth, endOfWeek, format, getDate, getDaysInMonth,
   getISODay, isSameMonth, isToday, parseISO, startOfMonth, startOfWeek,
@@ -53,12 +53,19 @@ function useLayerFilter() {
 
 export function TimeView() {
   const s = useHorizon()
-  // « /temps?date=2026-10-23 » (lien d'une notification de rempla) : on ouvre
-  // la vue mois sur le mois de ce jour, où il est encadré en pointillé rouge.
+  // « /temps/2026-10-23 » (lien d'une notification de rempla) : on ouvre la
+  // vue mois sur le mois de ce jour, où il est encadré en pointillé rouge.
+  // La forme « ?date= » reste acceptée, mais Android la perd en ouvrant le
+  // lien dans l'app installée — d'où la date dans le chemin.
+  const { date: dateChemin } = useParams()
   const [params] = useSearchParams()
-  const dateDemandee = params.get('date')
+  const brut = dateChemin ?? params.get('date')
+  const dateDemandee = brut && /^\d{4}-\d{2}-\d{2}$/.test(brut) ? brut : null
   const [view, setView] = useState<View>('4sem')
   const [anchor, setAnchor] = useState(() => (dateDemandee ? parseISO(dateDemandee) : new Date()))
+  // Jour à mettre en haut de la grille (vue mois) : celui de la notification,
+  // tant qu'on n'a pas navigué ailleurs.
+  const [focus, setFocus] = useState<Date | null>(() => (dateDemandee ? parseISO(dateDemandee) : null))
   const [editing, setEditing] = useState<Task | null>(null)
   const [createDate, setCreateDate] = useState<string | null>(null)
   const [overrideScheduled, setOverrideScheduled] = useState<string | undefined>(undefined)
@@ -73,6 +80,7 @@ export function TimeView() {
   })
 
   const shift = (dir: 1 | -1) => {
+    setFocus(null)
     if (view === '4sem') setAnchor(addMonths(anchor, dir))
     else if (view === 'semaine') setAnchor(addWeeks(anchor, dir))
     else if (view === 'trimestre') setAnchor(addMonths(anchor, dir * 3))
@@ -145,7 +153,7 @@ export function TimeView() {
       <LayersCtx.Provider value={{ layers, arilId }}>
         <MassPickCtx.Provider value={(date, label) => setMassPick({ date, label })}>
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-0.5">
-            {view === '4sem' && <FourWeeks anchor={anchor} {...common} />}
+            {view === '4sem' && <FourWeeks anchor={anchor} focus={focus} {...common} />}
             {view === 'semaine' && <WeekHours anchor={anchor} {...common} />}
             {view === 'trimestre' && <MultiMonth anchor={anchor} months={3} {...common} />}
             {view === 'annee' && <MultiMonth anchor={anchor} months={12} yearMode {...common} />}
@@ -588,17 +596,21 @@ export function DayCell({ day, tint, emphasize, fit, massCross, onEdit, onCreate
 
 // ---- Vue 4 semaines (défaut) ---------------------------------------------
 
-function FourWeeks({ anchor, onEdit, onCreate, onStep, onMove }: {
-  anchor: Date; onEdit: (t: Task) => void; onCreate: (d: string) => void; onStep: (st: Step) => void; onMove: MoveFn
+function FourWeeks({ anchor, focus, onEdit, onCreate, onStep, onMove }: {
+  anchor: Date; focus?: Date | null
+  onEdit: (t: Task) => void; onCreate: (d: string) => void; onStep: (st: Step) => void; onMove: MoveFn
 }) {
   // Mois en cours : la grille démarre sur la SEMAINE DU JOUR (pas de semaines déjà
   // passées) et court au moins 4 semaines, plus s'il en faut pour finir le mois.
   // Autre mois : grille complète du mois, à partir de la semaine qui contient le 1er.
+  // Jour demandé (`focus`, lien d'une notification) : sa semaine en haut.
   const weeks = useMemo(() => {
     const today = new Date()
-    const gridStart = isSameMonth(anchor, today)
-      ? startOfWeek(today, { weekStartsOn: 1 })
-      : startOfWeek(startOfMonth(anchor), { weekStartsOn: 1 })
+    const gridStart = focus
+      ? startOfWeek(focus, { weekStartsOn: 1 })
+      : isSameMonth(anchor, today)
+        ? startOfWeek(today, { weekStartsOn: 1 })
+        : startOfWeek(startOfMonth(anchor), { weekStartsOn: 1 })
     const monthEnd = endOfWeek(endOfMonth(anchor), { weekStartsOn: 1 })
     const minEnd = endOfWeek(addWeeks(gridStart, 3), { weekStartsOn: 1 })
     const gridEnd = monthEnd > minEnd ? monthEnd : minEnd
@@ -607,7 +619,7 @@ function FourWeeks({ anchor, onEdit, onCreate, onStep, onMove }: {
       out.push(eachDayOfInterval({ start, end: endOfWeek(start, { weekStartsOn: 1 }) }))
     }
     return out
-  }, [anchor])
+  }, [anchor, focus])
 
   // Jours hors du mois de référence : légèrement atténués pour rester lisibles sans distraire.
   const outsideTint = 'rgba(120,120,140,0.10)'

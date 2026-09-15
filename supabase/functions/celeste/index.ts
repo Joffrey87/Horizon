@@ -267,7 +267,8 @@ function verifier(d: Demande, r: Regles, moi: string, taches: TacheAgenda[], acc
 
 // ---- notifications (ntfy) --------------------------------------------------
 
-/** Push ntfy. Le clic ouvre Temps sur la semaine de la vacation concernee. */
+/** Push ntfy. Le clic ouvre Temps (vue mois) sur la vacation concernee — date dans
+ *  le chemin : Android perd la query string en ouvrant le lien dans la PWA. */
 async function notifier(topic: string | null, titre: string, message: string, tags: string[], date?: string): Promise<void> {
   if (!topic) return
   try {
@@ -276,7 +277,7 @@ async function notifier(topic: string | null, titre: string, message: string, ta
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         topic, title: titre, message, tags, priority: 4,
-        click: date ? `${APP_URL}/temps?date=${date}` : `${APP_URL}/remplas`,
+        click: date ? `${APP_URL}/temps/${date}` : `${APP_URL}/remplas`,
       }),
     })
   } catch (e) {
