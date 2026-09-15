@@ -18,6 +18,9 @@
 //   scan      — cron (clé anon, sans utilisateur) ou bouton de l'app ;
 //   accept    — bouton « Accepter » d'une proposition (JWT utilisateur requis) ;
 //   unaccept  — retire une acceptation (JWT utilisateur requis).
+//   simulate  — demande fictive { date, shift_code, start_time, end_time, team,
+//               comment } passée aux mêmes règles ; si elle passe, proposition
+//               « test-… » + notification (rien côté Céleste).
 //
 // Mono-utilisateur par construction : les identifiants Céleste sont des
 // secrets de la fonction, rattachés à l'utilisateur CELESTE_HORIZON_USER_ID.
@@ -397,9 +400,10 @@ async function scan(db: SupabaseClient, uid: string): Promise<Record<string, unk
     const parId = new Map(props.map((p) => [p.celeste_id, p]))
 
     // Proposition en attente qui n'est plus remplaçable : prise par un autre, retirée…
+    // (les propositions de test « test-… » ne viennent pas de Céleste : on les laisse.)
     const encore = new Set(candidates.map((d) => d._id))
     for (const p of props) {
-      if (p.status === 'proposee' && !encore.has(p.celeste_id)) {
+      if (p.status === 'proposee' && !encore.has(p.celeste_id) && !p.celeste_id.startsWith('test-')) {
         await db.from('celeste_proposals').update({ status: 'expiree', reason: 'plus disponible sur Céleste', decided_at: new Date().toISOString() }).eq('id', p.id)
         compteRendu.expirees++
       }
@@ -466,6 +470,47 @@ async function scan(db: SupabaseClient, uid: string): Promise<Record<string, unk
   }
 }
 
+// ---- simulation ------------------------------------------------------------
+
+interface Simulation { date?: string; shift_code?: string; start_time?: string; end_time?: string; team?: string; comment?: string; points?: number }
+
+/** Passe une demande fictive aux règles réelles (agenda compris). Si elle passe,
+ *  crée une proposition « test-<date>-<code> » et envoie la notification — comme
+ *  en mode confirmation. Rien n'est envoyé à Céleste. */
+async function simuler(db: SupabaseClient, uid: string, sim: Simulation): Promise<Record<string, unknown>> {
+  if (!sim.date || !/^\d{4}-\d{2}-\d{2}$/.test(sim.date) || !sim.shift_code) return { error: 'date (yyyy-mm-dd) et shift_code requis' }
+  const { data: regles } = await db.from('celeste_rules').select('*').eq('user_id', uid).maybeSingle()
+  if (!regles) return { error: 'Pas de règles : lance d’abord un scan' }
+  const r = regles as Regles
+  const { data: session } = await db.from('celeste_session').select('celeste_user_id').eq('user_id', uid).maybeSingle()
+  const moi = (session?.celeste_user_id as string | undefined) ?? 'moi'
+  const d: Demande = {
+    _id: `test-${sim.date}-${sim.shift_code}`, posterId: 'simulation', accepterId: null, type: 'substitution', status: 'open',
+    comment: sim.comment ?? 'TEST — simulation, à ignorer', points: sim.points ?? 10, limit: [],
+    posterShift: {
+      date: `${sim.date}T00:00:00.000Z`,
+      shift: { name: sim.shift_code, default: { startTime: sim.start_time ?? '15:00', endTime: sim.end_time ?? '23:00' } },
+      teamId: { _id: 'sim', name: sim.team ?? '6' },
+    },
+  }
+  const { data: taches } = await db.from('tasks')
+    .select('title, scheduled_date, end_date, is_task, location, notes').eq('user_id', uid).gte('scheduled_date', aujourdhui())
+  const { data: connues } = await db.from('celeste_proposals').select('*').eq('user_id', uid).eq('status', 'acceptee')
+  const acceptees = (connues ?? []) as Proposition[]
+  const semaine = acceptees.filter((p) => lundiDe(p.date) === lundiDe(sim.date as string)).length
+  const raison = verifier(d, r, moi, (taches ?? []) as TacheAgenda[], semaine)
+  const base = { ...versProposition(d, uid), poster: 'Simulation' }
+  const maintenant = new Date().toISOString()
+  if (raison) {
+    await db.from('celeste_proposals').upsert({ ...base, status: 'refusee', reason: raison, decided_at: maintenant }, { onConflict: 'user_id,celeste_id' })
+    return { ok: true, verdict: 'refusee', reason: raison }
+  }
+  await db.from('celeste_proposals').upsert({ ...base, status: 'proposee', reason: null, decided_at: null }, { onConflict: 'user_id,celeste_id' })
+  await notifier(r.ntfy_topic, 'Rempla disponible — à valider', resume(base) + `
+« ${base.comment} »`, ['calendar'], base.date)
+  return { ok: true, verdict: 'proposee', notified: !!r.ntfy_topic }
+}
+
 // ---- serveur ---------------------------------------------------------------
 
 Deno.serve(async (req) => {
@@ -490,6 +535,10 @@ Deno.serve(async (req) => {
     if (action === 'scan') {
       if (uid && uid !== proprietaire) return json({ error: 'L’agent Céleste n’est pas configuré pour ce compte' }, 403)
       return json(await scan(db, proprietaire))
+    }
+    if (action === 'simulate') {
+      if (uid && uid !== proprietaire) return json({ error: 'L’agent Céleste n’est pas configuré pour ce compte' }, 403)
+      return json(await simuler(db, proprietaire, body as Simulation))
     }
 
     if (uid !== proprietaire) return json({ error: 'Appel non authentifié' }, 401)
