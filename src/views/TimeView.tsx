@@ -46,6 +46,16 @@ export function TimeView() {
     return next
   })
 
+  const boutonsCouches = LAYER_DEFS.map(({ key, label }) => (
+    <button key={key} onClick={() => toggleLayer(key)}
+      title={key === 'aril' && !arilId ? 'Crée un domaine nommé « ARIL » pour alimenter ce calendrier' : undefined}
+      className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+        layers[key] ? 'border-sun/50 bg-sun/10 text-sun-soft' : 'border-line-2 text-ink-3 hover:text-ink-2'
+      }`}>
+      {label}
+    </button>
+  ))
+
   const shift = (dir: 1 | -1) => {
     setFocus(null)
     if (view === '4sem') setAnchor(addMonths(anchor, dir))
@@ -100,31 +110,32 @@ export function TimeView() {
         </div>
       </header>
 
-      {/* ---- Calendriers (couches) affichables/masquables ---- */}
-      <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-        <span className="mr-0.5 text-[11px] uppercase tracking-wide text-ink-3">Calendriers</span>
-        {LAYER_DEFS.map(({ key, label }) => (
-          <button key={key} onClick={() => toggleLayer(key)}
-            title={key === 'aril' && !arilId ? 'Crée un domaine nommé « ARIL » pour alimenter ce calendrier' : undefined}
-            className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-              layers[key] ? 'border-sun/50 bg-sun/10 text-sun-soft' : 'border-line-2 text-ink-3 hover:text-ink-2'
-            }`}>
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* ---- Calendriers (couches) affichables/masquables. En vue Semaine ils
+           passent à droite du calendrier, en colonne : la hauteur sert à la grille. ---- */}
+      {view !== 'semaine' && (
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+          <span className="mr-0.5 text-[11px] uppercase tracking-wide text-ink-3">Calendriers</span>
+          {boutonsCouches}
+        </div>
+      )}
 
       {/* Évènements d'agenda externe en attente de tri : rien n'entre sans accord. */}
       <div className="shrink-0"><AgendaPropositions /></div>
 
       <LayersCtx.Provider value={{ layers, arilId }}>
         <MassPickCtx.Provider value={(date, label) => setMassPick({ date, label })}>
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-0.5">
+          <div className={`min-h-0 flex-1 ${view === 'semaine' ? 'overflow-hidden' : 'space-y-2 overflow-y-auto pr-0.5'}`}>
             {view === '4sem' && <FourWeeks anchor={anchor} focus={focus} {...common} />}
             {/* Semaine : la grille prend toute la hauteur (jours entiers), notes dessous. */}
             {view === 'semaine' && (
-              <div className="flex min-h-full flex-col gap-2">
-                <WeekHours anchor={anchor} {...common} />
+              <div className="flex h-full flex-col gap-2">
+                <div className="flex min-h-0 flex-1 gap-2">
+                  <WeekHours anchor={anchor} {...common} />
+                  <aside aria-label="Calendriers" className="flex shrink-0 flex-col items-stretch gap-1.5 pt-1">
+                    <span className="px-1 text-[10px] uppercase tracking-wide text-ink-3">Calendriers</span>
+                    {boutonsCouches}
+                  </aside>
+                </div>
                 <NotesSemaine />
               </div>
             )}

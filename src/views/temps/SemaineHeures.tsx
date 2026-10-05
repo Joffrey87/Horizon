@@ -30,9 +30,9 @@ export function WeekHours({ anchor, onEdit, onCreate, onStep, onMove }: {
   const hours = Array.from({ length: HOUR_END - HOUR_START + 1 }, (_, i) => HOUR_START + i)
 
   return (
-    <Card className="flex min-h-[300px] flex-1 flex-col !p-2">
-      <div className="flex min-h-0 flex-1 flex-col overflow-x-auto">
-        <div className="grid min-h-0 min-w-[720px] flex-1"
+    <Card className="flex min-h-0 min-w-0 flex-1 flex-col !p-2">
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="grid min-h-0 flex-1"
           style={{ gridTemplateColumns: `44px repeat(7, 1fr)`, gridTemplateRows: 'auto auto minmax(0, 1fr)' }}>
           <div />
           {days.map((day) => (
@@ -56,7 +56,7 @@ export function WeekHours({ anchor, onEdit, onCreate, onStep, onMove }: {
             ))}
           </div>
           {days.map((day) => (
-            <HourColumn key={day.toISOString()} day={day} hours={hours} onEdit={onEdit} onCreate={onCreate} onMove={onMove} />
+            <HourColumn key={day.toISOString()} day={day} onEdit={onEdit} onCreate={onCreate} onMove={onMove} />
           ))}
         </div>
       </div>
@@ -155,8 +155,8 @@ function AllDayBand({ day, onEdit, onStep, onMove, onCreate }: {
   )
 }
 
-function HourColumn({ day, hours, onEdit, onCreate, onMove }: {
-  day: Date; hours: number[]
+function HourColumn({ day, onEdit, onCreate, onMove }: {
+  day: Date
   onEdit: (t: Task) => void; onCreate: (d: string) => void; onMove: MoveFn
 }) {
   const s = useHorizon()
@@ -175,7 +175,6 @@ function HourColumn({ day, hours, onEdit, onCreate, onMove }: {
     <div onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={onDrop}
       className={`relative border-l border-line-2/40 ${isToday(day) ? 'bg-sun/5' : ''} ${over ? 'bg-sun/10' : ''}`}
       onClick={() => onCreate(iso(day))}>
-      {hours.map((h) => <div key={h} className="absolute left-0 right-0 border-t border-line-2/30" style={{ top: `${pct(h)}%` }} />)}
       {timed.map(({ t, hm }) => {
         const top = pct(hm.hour + hm.minute / 60)
         const height = ((t.duration_min ?? 30) / 60 / SLOTS) * 100
