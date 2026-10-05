@@ -15,6 +15,8 @@ import { MassPicker } from './temps/MassPicker'
 import { DayCell } from './temps/DayCell'
 import { WeekHours } from './temps/SemaineHeures'
 import { NotesSemaine } from './temps/NotesSemaine'
+import { MoisTelephone } from './temps/MoisTelephone'
+import { useMediaQuery } from '../lib/useMediaQuery'
 import { MultiMonth } from './temps/VuesLongues'
 type View = '4sem' | 'semaine' | 'trimestre' | 'annee'
 
@@ -39,6 +41,9 @@ export function TimeView() {
   const [openStep, setOpenStep] = useState<Step | null>(null)
   const [massPick, setMassPick] = useState<{ date: string; label: string } | null>(null)
   const [layers, setLayers] = useState<CalLayers>(loadLayers)
+  // Téléphone : le mois entier tient sur l'écran (vue agenda de poche).
+  const telephone = useMediaQuery('(max-width: 767px)')
+  const moisTel = telephone && view === '4sem'
   const arilId = useMemo(() => s.domains.find((d) => /aril/i.test(d.name))?.id ?? null, [s.domains])
   const toggleLayer = (k: keyof CalLayers) => setLayers((prev) => {
     const next = { ...prev, [k]: !prev[k] }
@@ -87,11 +92,11 @@ export function TimeView() {
   const timeQuote = timeQuoteOfDay()
 
   return (
-    <div className="rise flex h-[calc(100vh-5.5rem)] flex-col gap-3 pt-4">
+    <div className="rise flex h-[calc(100vh-5.5rem)] flex-col gap-3 pt-4 max-md:h-[calc(100dvh-8.5rem)] max-md:gap-1.5 max-md:pt-1">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
-        <div>
+        <div className="max-md:hidden">
           <h1 className="text-xl font-semibold">Temps</h1>
-          <p className="text-sm italic text-ink-3">
+          <p className="text-sm italic text-ink-3 max-md:hidden">
             « {timeQuote.text} »{timeQuote.source && <span className="not-italic"> — {timeQuote.source}</span>}
           </p>
         </div>
@@ -112,7 +117,7 @@ export function TimeView() {
 
       {/* ---- Calendriers (couches) affichables/masquables. En vue Semaine ils
            passent à droite du calendrier, en colonne : la hauteur sert à la grille. ---- */}
-      {view !== 'semaine' && (
+      {view !== 'semaine' && !moisTel && (
         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
           <span className="mr-0.5 text-[11px] uppercase tracking-wide text-ink-3">Calendriers</span>
           {boutonsCouches}
@@ -124,8 +129,9 @@ export function TimeView() {
 
       <LayersCtx.Provider value={{ layers, arilId }}>
         <MassPickCtx.Provider value={(date, label) => setMassPick({ date, label })}>
-          <div className={`min-h-0 flex-1 ${view === 'semaine' ? 'overflow-hidden max-md:overflow-y-auto' : 'space-y-2 overflow-y-auto pr-0.5'}`}>
-            {view === '4sem' && <FourWeeks anchor={anchor} focus={focus} {...common} />}
+          <div className={`min-h-0 flex-1 ${moisTel ? 'overflow-hidden' : view === 'semaine' ? 'overflow-hidden max-md:overflow-y-auto' : 'space-y-2 overflow-y-auto pr-0.5'}`}>
+            {view === '4sem' && !moisTel && <FourWeeks anchor={anchor} focus={focus} {...common} />}
+            {moisTel && <MoisTelephone anchor={anchor} onShift={shift} {...common} />}
             {/* Semaine : la grille prend toute la hauteur (jours entiers), notes dessous. */}
             {view === 'semaine' && (
               <div className="flex h-full flex-col gap-2">
