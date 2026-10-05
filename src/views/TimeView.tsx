@@ -184,12 +184,10 @@ function FourWeeks({ anchor, focus, onEdit, onCreate, onStep, onMove }: {
   }, [anchor, focus])
 
   // Jours hors du mois de référence : légèrement atténués pour rester lisibles sans distraire.
-  const outsideTint = 'rgba(120,120,140,0.10)'
-  const first = weeks[0]?.[0] ?? anchor
-  const last = weeks[weeks.length - 1]?.[6] ?? anchor
-  const title = isSameMonth(first, last)
-    ? format(first, 'MMMM yyyy', { locale: fr })
-    : `${format(first, 'MMMM', { locale: fr })} — ${format(last, 'MMMM yyyy', { locale: fr })}`
+  const outsideTint = 'rgba(120,120,140,0.14)'
+  // Un seul nom de mois : celui qu'on regarde. Les jours des mois voisins que la
+  // grille affiche pour compléter les semaines sont grisés (voir `dim`).
+  const title = format(anchor, 'MMMM yyyy', { locale: fr })
 
   return (
     <>
@@ -200,6 +198,7 @@ function FourWeeks({ anchor, focus, onEdit, onCreate, onStep, onMove }: {
             {days.map((day) => (
               <DayCell key={day.toISOString()} day={day}
                 tint={isSameMonth(day, anchor) ? undefined : outsideTint}
+                dim={!isSameMonth(day, anchor)}
                 onEdit={onEdit} onCreate={onCreate} onStep={onStep} onMove={onMove} />
             ))}
           </div>

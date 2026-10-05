@@ -50,8 +50,10 @@ export function RemplaChip({ p }: { p: CelesteProposal }) {
   )
 }
 
-export function DayCell({ day, tint, emphasize, fit, massCross, onEdit, onCreate, onStep, onMove }: {
+export function DayCell({ day, tint, dim, emphasize, fit, massCross, onEdit, onCreate, onStep, onMove }: {
   day: Date; tint?: string; emphasize?: boolean; fit?: boolean
+  /** Jour d'un autre mois que celui affiché : grisé (reprend toute sa force au survol). */
+  dim?: boolean
   /** Affiche toujours la croix « trouver une messe » (accueil), même hors fête. */
   massCross?: boolean
   onEdit: (t: Task) => void; onCreate: (d: string) => void; onStep: (st: Step) => void; onMove: MoveFn
@@ -94,7 +96,7 @@ export function DayCell({ day, tint, emphasize, fit, massCross, onEdit, onCreate
       onDrop={onDrop}
       onClick={handleVoid}
       style={{ backgroundColor: !today && !over ? tint : undefined }}
-      className={`flex min-h-28 cursor-pointer flex-col rounded-lg border p-1.5 transition-colors ${fit ? 'w-max max-w-full' : ''} ${
+      className={`flex min-h-28 cursor-pointer flex-col rounded-lg border p-1.5 transition-[colors,opacity] ${fit ? 'w-max max-w-full' : ''} ${dim && !today ? 'opacity-50 hover:opacity-100' : ''} ${
         rempla ? 'border-dashed border-[#ef4444]/80' : today ? 'border-sun/50 bg-sun/5' : over ? 'border-sun/70 bg-sun/10' : 'border-line-2/60 hover:bg-panel-2/40'
       }`}>
       <header className="mb-1 flex items-center justify-between gap-1" onClick={(e) => e.stopPropagation()}>

@@ -12,16 +12,18 @@ export const EVENT_DEFAULT_COLOR = '#46b3a9'
 // ---- Couches du calendrier (affichables/masquables), mémorisées par appareil ----
 export type CalLayers = { taches: boolean; fetes: boolean; messes: boolean; anniversaires: boolean; aril: boolean }
 export const DEFAULT_LAYERS: CalLayers = { taches: true, fetes: true, messes: true, anniversaires: true, aril: true }
+// Tâches, Fêtes et Messes ne sont plus filtrables (toujours affichées) : seuls
+// les deux boutons ci-dessous restent proposés.
 export const LAYER_DEFS: { key: keyof CalLayers; label: string }[] = [
-  { key: 'taches', label: 'Tâches' },
-  { key: 'fetes', label: 'Fêtes' },
-  { key: 'messes', label: 'Messes' },
   { key: 'anniversaires', label: 'Anniversaires' },
   { key: 'aril', label: 'ARIL' },
 ]
 export const LAYERS_KEY = 'horizon.temps.layers'
 export function loadLayers(): CalLayers {
-  try { return { ...DEFAULT_LAYERS, ...(JSON.parse(localStorage.getItem(LAYERS_KEY) ?? '{}') as Partial<CalLayers>) } }
+  // Les couches retirées de l'interface sont FORCÉES à vrai : un ancien réglage
+  // mémorisé (ex. « Messes » masqué) ne doit plus pouvoir cacher quoi que ce soit.
+  const toujours = { taches: true, fetes: true, messes: true }
+  try { return { ...DEFAULT_LAYERS, ...(JSON.parse(localStorage.getItem(LAYERS_KEY) ?? '{}') as Partial<CalLayers>), ...toujours } }
   catch { return DEFAULT_LAYERS }
 }
 export const LayersCtx = createContext<{ layers: CalLayers; arilId: string | null }>({ layers: DEFAULT_LAYERS, arilId: null })
