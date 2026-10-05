@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { GripVertical, Circle, FolderKanban, PinOff } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import type { Task } from '../lib/types'
+import { useMediaQuery } from '../lib/useMediaQuery'
 import { borner, chevauche, degager, placeLibre, ECART, type Pos, type Rect, type Taille } from '../lib/board'
 
 const CARD_W = 224 // largeur des cartes projet (w-56)
@@ -43,6 +44,8 @@ export function HomeBoard({ panneaux = [], onOuvrirProjet }: {
 }) {
   const s = useHorizon()
   const navigate = useNavigate()
+  // Téléphone : pas de tuiles posées à la souris, une liste horizontale « magnétique ».
+  const etroit = useMediaQuery('(max-width: 767px)')
   const containerRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ id: string; sx: number; sy: number; ox: number; oy: number; w: number; h: number } | null>(null)
   const redimRef = useRef<{ id: string; sx: number; sy: number; w0: number; h0: number } | null>(null)
@@ -131,7 +134,7 @@ export function HomeBoard({ panneaux = [], onOuvrirProjet }: {
   // fenêtre rétrécie, contenu qui grandit… Purement visuel, comme `recadrer` —
   // la position enregistrée n'est réécrite qu'au prochain déplacement voulu.
   useEffect(() => {
-    if (dragRef.current || redimRef.current) return
+    if (etroit || dragRef.current || redimRef.current) return
     const box = containerRef.current?.getBoundingClientRect()
     const items = ordre.flatMap((id) => {
       const r = rectDe(id)
@@ -139,7 +142,7 @@ export function HomeBoard({ panneaux = [], onOuvrirProjet }: {
     })
     const corrige = degager(items, box)
     if (corrige) setPositions((p) => ({ ...p, ...corrige }))
-  }, [positions, sizes, mesure, ordre]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [positions, sizes, mesure, ordre, etroit]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const savePositions = async (pos: Record<string, Pos>, tailles: Record<string, Taille> = sizes) => {
     const data = { positions: pos, sizes: tailles }
@@ -215,6 +218,47 @@ export function HomeBoard({ panneaux = [], onOuvrirProjet }: {
     redimRef.current = null
     ;(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId)
     void savePositions(positions, sizes)
+  }
+
+  if (etroit) {
+    return (
+      <div ref={containerRef} aria-label="Accueil" className="flex h-full snap-x snap-mandatory items-start gap-3 overflow-x-auto overflow-y-hidden pb-2 [scrollbar-width:none]">
+        {panneaux.map((pan) => (
+          <div key={pan.id} data-carte={pan.id}
+            className="flex max-h-full w-[86%] shrink-0 snap-center flex-col overflow-hidden rounded-2xl border border-white/15 bg-gradient-to-br from-white/8 to-black/25 text-white shadow-lg shadow-black/25 backdrop-blur-[3px]">
+            <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-2" style={{ background: `${pan.accent}22` }}>
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg" style={{ background: `${pan.accent}33`, color: pan.accent }}>
+                {pan.icone}
+              </span>
+              <p className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-white/75">{pan.titre}</p>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-3">{pan.contenu}</div>
+          </div>
+        ))}
+        {actifs.map((p) => {
+          const color = s.domains.find((d) => d.id === p.domain_id)?.color ?? '#f59e0b'
+          const epinglees = ordreManuel(s.tasks.filter((t) => t.project_id === p.id && !t.is_recurring
+            && t.home_pinned && (t.status === 'a_faire' || t.status === 'en_cours')))
+          return (
+            <div key={p.id} data-carte={`pro-${p.id}`}
+              className="max-h-full w-[78%] shrink-0 snap-center overflow-y-auto rounded-xl border border-white/15 bg-black/45 text-white shadow-lg shadow-black/30 backdrop-blur-md">
+              <div className="flex items-center gap-1.5 border-b border-white/10 px-3 py-2" style={{ background: `${color}22` }}>
+                <FolderKanban size={13} className="shrink-0" style={{ color }} />
+                <button type="button" onClick={() => onOuvrirProjet ? onOuvrirProjet(p.id) : navigate('/projets', { state: { openProjectId: p.id } })}
+                  className="min-w-0 flex-1 truncate text-left text-sm font-semibold">{p.title}</button>
+                <span className="shrink-0 text-[11px] tabular-nums text-white/55">{p.progress}%</span>
+              </div>
+              <div className="space-y-1.5 p-2.5">
+                {epinglees.length === 0 && (
+                  <p className="px-1 py-0.5 text-xs text-white/45">Rien d’épinglé. Ouvre le projet pour choisir ce qui compte.</p>
+                )}
+                {epinglees.map((t) => <TaskLine key={t.id} task={t} color={color} />)}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
   }
 
   return (

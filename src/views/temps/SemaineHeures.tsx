@@ -1,8 +1,9 @@
-import { useContext, useMemo, useState } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { addMonths, eachDayOfInterval, endOfWeek, format, isToday, startOfWeek } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Layers, Church, AlertTriangle } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
+import { useMediaQuery } from '../../lib/useMediaQuery'
 import { extractHourMinute, iso, tasksForDay, spanPart, isMarketParkingDay, feastOnDay, extractEmojis, firstFridayOrSaturday, chosenMassForDay, todayIso } from '../../lib/logic'
 import { Card, ProjectTag } from '../../components/ui'
 import type { Step, Task } from '../../lib/types'
@@ -29,26 +30,46 @@ export function WeekHours({ anchor, onEdit, onCreate, onStep, onMove }: {
   }, [anchor])
   const hours = Array.from({ length: HOUR_END - HOUR_START + 1 }, (_, i) => HOUR_START + i)
 
+  // Téléphone : 3 jours à la fois. Les 7 colonnes restent dans la grille, plus
+  // larges que l'écran (un tiers de la place chacune) ; on les fait défiler en
+  // « aimantant » sur le début d'un jour, la colonne des heures restant collée à gauche.
+  const etroit = useMediaQuery('(max-width: 767px)')
+  const defilRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = defilRef.current
+    if (!etroit || !el) return
+    // Ouvre sur aujourd'hui (ou lundi hors de la semaine en cours), sans dépasser la fin.
+    const i = Math.max(0, days.findIndex((d) => isToday(d)))
+    const colW = (el.clientWidth - 44) / 3
+    el.scrollLeft = Math.min(i, 4) * colW
+  }, [etroit, days])
+  const ancre = 'snap-start scroll-ml-[44px]'
+  const colHeures = 'sticky left-0 z-10 bg-panel'
+
   return (
     <Card className="flex min-h-0 min-w-0 flex-1 flex-col !p-2">
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div ref={defilRef}
+        className="flex min-h-0 flex-1 flex-col max-md:snap-x max-md:snap-mandatory max-md:overflow-x-auto max-md:[container-type:inline-size] max-md:[scrollbar-width:none]">
         <div className="grid min-h-0 flex-1"
-          style={{ gridTemplateColumns: `44px repeat(7, 1fr)`, gridTemplateRows: 'auto auto minmax(0, 1fr)' }}>
-          <div />
+          style={{
+            gridTemplateColumns: `44px repeat(7, 1fr)`, gridTemplateRows: 'auto auto minmax(0, 1fr)',
+            ...(etroit ? { width: 'calc(44px + (100cqw - 44px) * 7 / 3)' } : {}),
+          }}>
+          <div className={colHeures} />
           {days.map((day) => (
-            <div key={day.toISOString()} className={`px-1 pb-1 text-center text-xs font-medium ${
+            <div key={day.toISOString()} className={`${ancre} px-1 pb-1 text-center text-xs font-medium ${
               remplaProposeOn(s.celesteProposals, iso(day)) ? 'rounded border border-dashed border-[#ef4444]/80 text-[#ff6b6b]'
                 : isToday(day) ? 'text-sun-soft' : 'text-ink-3'}`}>
               {format(day, 'EEE d', { locale: fr })}
             </div>
           ))}
 
-          <div className="pr-1 text-right text-[9px] uppercase tracking-wider text-ink-3">jour</div>
+          <div className={`${colHeures} pr-1 text-right text-[9px] uppercase tracking-wider text-ink-3`}>jour</div>
           {days.map((day) => (
             <AllDayBand key={day.toISOString()} day={day} onEdit={onEdit} onStep={onStep} onMove={onMove} onCreate={onCreate} />
           ))}
 
-          <div className="relative">
+          <div className={`relative ${colHeures}`}>
             {hours.map((h) => (
               <div key={h} className="absolute right-1 text-[10px] leading-none text-ink-3" style={{ top: `calc(${pct(h)}% - 4px)` }}>
                 {h}h

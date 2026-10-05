@@ -124,14 +124,15 @@ export function TimeView() {
 
       <LayersCtx.Provider value={{ layers, arilId }}>
         <MassPickCtx.Provider value={(date, label) => setMassPick({ date, label })}>
-          <div className={`min-h-0 flex-1 ${view === 'semaine' ? 'overflow-hidden' : 'space-y-2 overflow-y-auto pr-0.5'}`}>
+          <div className={`min-h-0 flex-1 ${view === 'semaine' ? 'overflow-hidden max-md:overflow-y-auto' : 'space-y-2 overflow-y-auto pr-0.5'}`}>
             {view === '4sem' && <FourWeeks anchor={anchor} focus={focus} {...common} />}
             {/* Semaine : la grille prend toute la hauteur (jours entiers), notes dessous. */}
             {view === 'semaine' && (
               <div className="flex h-full flex-col gap-2">
-                <div className="flex min-h-0 flex-1 gap-2">
+                <div className="flex min-h-[340px] flex-1 flex-col gap-2 md:min-h-0 md:flex-row">
                   <WeekHours anchor={anchor} {...common} />
-                  <aside aria-label="Calendriers" className="flex shrink-0 flex-col items-stretch gap-1.5 pt-1">
+                  {/* Téléphone : les boutons passent AU-DESSUS du calendrier. */}
+                  <aside aria-label="Calendriers" className="order-first flex shrink-0 flex-row flex-wrap items-center gap-1.5 md:order-none md:flex-col md:items-stretch md:pt-1">
                     <span className="px-1 text-[10px] uppercase tracking-wide text-ink-3">Calendriers</span>
                     {boutonsCouches}
                   </aside>
