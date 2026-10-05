@@ -140,7 +140,7 @@ function ProjectDetail({ project, onEdit, onNote, onClose }: {
             Glisse pour fixer l’ordre. L’épingle choisit ce qui remonte sur l’accueil.
           </p>
           <TaskList tasks={directTasks} onToggle={(t) => toggle(s, t)} onOpen={setTaskEdit}
-            onDelete={(t) => void s.remove('tasks', t.id)}
+            onDelete={(t) => { if (confirm(`Supprimer « ${t.title} » ?`)) void s.remove('tasks', t.id) }}
             onTogglePin={(t) => void s.update('tasks', t.id, { home_pinned: !t.home_pinned })}
             onReorder={reorder} />
           <QuickAdd placeholder="Ajouter une tâche…" onAdd={(v) => addTask(v, null)} />
@@ -247,7 +247,8 @@ function StepBlock({ step, onOpenTask }: { step: Step; onOpenTask: (t: Task) => 
         </button>
       </div>
       <div className="mt-2 space-y-1">
-        <TaskList tasks={tasks} onToggle={(t) => toggle(s, t)} onOpen={onOpenTask} onDelete={(t) => void s.remove('tasks', t.id)} />
+        <TaskList tasks={tasks} onToggle={(t) => toggle(s, t)} onOpen={onOpenTask}
+          onDelete={(t) => { if (confirm(`Supprimer « ${t.title} » ?`)) void s.remove('tasks', t.id) }} />
         <QuickAdd placeholder="Ajouter une tâche à l'étape…" onAdd={addTask} small />
       </div>
     </div>

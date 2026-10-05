@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import {
   Home, FolderKanban, ListTodo, Compass, CalendarDays, CalendarRange,
@@ -6,7 +6,7 @@ import {
   AlertTriangle, X, RotateCw, ArrowLeftRight,
 } from 'lucide-react'
 import { useHorizon } from '../lib/store'
-import { wallpaperOfDay } from '../lib/logic'
+import { todayIso, wallpaperOfDay } from '../lib/logic'
 import { QuickCapture } from './QuickCapture'
 
 // Agendas externes : on resynchronise au plus une fois par demi-heure. Inutile
@@ -30,7 +30,35 @@ const NAV = [
   { to: '/espace', label: 'Espace visuel', icon: Network },
 ]
 
+/** Date du jour, remise à jour à minuit et au retour sur l'onglet : sans ça, un
+ *  onglet laissé ouvert la nuit continue d'afficher la veille (les vues lisent
+ *  `new Date()` au rendu, qui n'a pas lieu tant que rien ne bouge). */
+function useDayKey(): string {
+  const [day, setDay] = useState(todayIso)
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+    const check = () => {
+      setDay(todayIso())
+      const now = new Date()
+      const minuit = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1)
+      clearTimeout(timer)
+      timer = setTimeout(check, minuit.getTime() - now.getTime())
+    }
+    const onVisible = () => { if (document.visibilityState === 'visible') check() }
+    check()
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', check)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', check)
+    }
+  }, [])
+  return day
+}
+
 export function Shell({ children }: { children: ReactNode }) {
+  const dayKey = useDayKey()
   const [capture, setCapture] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const signOut = useHorizon((s) => s.signOut)
@@ -154,7 +182,8 @@ export function Shell({ children }: { children: ReactNode }) {
               </button>
             </div>
           )}
-          {children}
+          {/* Nouvelle clé à minuit : les vues se remontent et relisent la date. */}
+          <Fragment key={dayKey}>{children}</Fragment>
         </div>
       </div>
 

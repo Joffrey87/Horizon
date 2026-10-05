@@ -226,7 +226,10 @@ export function TaskForm({ open, task, defaultDate, overrideScheduled, defaultIs
 
         <div className="flex justify-between gap-2 pt-1">
           {task ? (
-            <button type="button" onClick={() => { void s.remove('tasks', task.id); close() }}
+            <button type="button" onClick={() => {
+              if (!confirm(`Supprimer « ${task.title} » ?`)) return
+              void s.remove('tasks', task.id); close()
+            }}
               className="btn-ghost px-3 py-2 text-sm text-[#ec7f97]">Supprimer</button>
           ) : <span />}
           <button type="submit" disabled={incoherent}
