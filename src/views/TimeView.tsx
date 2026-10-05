@@ -14,6 +14,7 @@ import { LAYER_DEFS, LAYERS_KEY, LayersCtx, MassPickCtx, loadLayers, type CalLay
 import { MassPicker } from './temps/MassPicker'
 import { DayCell } from './temps/DayCell'
 import { WeekHours } from './temps/SemaineHeures'
+import { NotesSemaine } from './temps/NotesSemaine'
 import { MultiMonth } from './temps/VuesLongues'
 type View = '4sem' | 'semaine' | 'trimestre' | 'annee'
 
@@ -120,7 +121,13 @@ export function TimeView() {
         <MassPickCtx.Provider value={(date, label) => setMassPick({ date, label })}>
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-0.5">
             {view === '4sem' && <FourWeeks anchor={anchor} focus={focus} {...common} />}
-            {view === 'semaine' && <WeekHours anchor={anchor} {...common} />}
+            {/* Semaine : la grille prend toute la hauteur (jours entiers), notes dessous. */}
+            {view === 'semaine' && (
+              <div className="flex min-h-full flex-col gap-2">
+                <WeekHours anchor={anchor} {...common} />
+                <NotesSemaine />
+              </div>
+            )}
             {view === 'trimestre' && <MultiMonth anchor={anchor} months={3} {...common} />}
             {view === 'annee' && <MultiMonth anchor={anchor} months={12} yearMode {...common} />}
           </div>

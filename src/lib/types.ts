@@ -172,6 +172,8 @@ export interface Layout {
     positions?: Record<string, { x: number; y: number }>
     /** Tailles choisies à la main (panneaux redimensionnés de l'accueil). */
     sizes?: Record<string, { w: number; h: number }>
+    /** Bloc-notes de la vue Semaine (4 colonnes). */
+    notes?: string[]
     filters?: Record<string, unknown>
   }
   created_at: string

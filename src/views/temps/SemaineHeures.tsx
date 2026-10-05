@@ -13,7 +13,11 @@ import { RemplaChip } from './DayCell'
 
 const HOUR_START = 6
 const HOUR_END = 22
-const ROW_H = 44
+// Créneaux d'une heure affichés (6 h → 23 h). La grille épouse la hauteur
+// disponible : les positions sont en POURCENTAGE de la colonne, pas en pixels,
+// pour que chaque journée tienne entièrement à l'écran, sans défiler.
+const SLOTS = HOUR_END - HOUR_START + 1
+const pct = (hour: number) => ((hour - HOUR_START) / SLOTS) * 100
 
 export function WeekHours({ anchor, onEdit, onCreate, onStep, onMove }: {
   anchor: Date; onEdit: (t: Task) => void; onCreate: (d: string) => void; onStep: (st: Step) => void; onMove: MoveFn
@@ -26,9 +30,10 @@ export function WeekHours({ anchor, onEdit, onCreate, onStep, onMove }: {
   const hours = Array.from({ length: HOUR_END - HOUR_START + 1 }, (_, i) => HOUR_START + i)
 
   return (
-    <Card className="!p-2">
-      <div className="overflow-x-auto">
-        <div className="grid min-w-[720px]" style={{ gridTemplateColumns: `44px repeat(7, 1fr)` }}>
+    <Card className="flex min-h-[300px] flex-1 flex-col !p-2">
+      <div className="flex min-h-0 flex-1 flex-col overflow-x-auto">
+        <div className="grid min-h-0 min-w-[720px] flex-1"
+          style={{ gridTemplateColumns: `44px repeat(7, 1fr)`, gridTemplateRows: 'auto auto minmax(0, 1fr)' }}>
           <div />
           {days.map((day) => (
             <div key={day.toISOString()} className={`px-1 pb-1 text-center text-xs font-medium ${
@@ -43,9 +48,9 @@ export function WeekHours({ anchor, onEdit, onCreate, onStep, onMove }: {
             <AllDayBand key={day.toISOString()} day={day} onEdit={onEdit} onStep={onStep} onMove={onMove} onCreate={onCreate} />
           ))}
 
-          <div className="relative" style={{ height: hours.length * ROW_H }}>
+          <div className="relative">
             {hours.map((h) => (
-              <div key={h} className="absolute right-1 text-[10px] text-ink-3" style={{ top: (h - HOUR_START) * ROW_H - 5 }}>
+              <div key={h} className="absolute right-1 text-[10px] leading-none text-ink-3" style={{ top: `calc(${pct(h)}% - 4px)` }}>
                 {h}h
               </div>
             ))}
@@ -169,12 +174,11 @@ function HourColumn({ day, hours, onEdit, onCreate, onMove }: {
   return (
     <div onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={onDrop}
       className={`relative border-l border-line-2/40 ${isToday(day) ? 'bg-sun/5' : ''} ${over ? 'bg-sun/10' : ''}`}
-      style={{ height: hours.length * ROW_H }}
       onClick={() => onCreate(iso(day))}>
-      {hours.map((h) => <div key={h} className="absolute left-0 right-0 border-t border-line-2/30" style={{ top: (h - HOUR_START) * ROW_H }} />)}
+      {hours.map((h) => <div key={h} className="absolute left-0 right-0 border-t border-line-2/30" style={{ top: `${pct(h)}%` }} />)}
       {timed.map(({ t, hm }) => {
-        const top = (hm.hour - HOUR_START + hm.minute / 60) * ROW_H
-        const height = Math.max(20, (t.duration_min ?? 30) / 60 * ROW_H)
+        const top = pct(hm.hour + hm.minute / 60)
+        const height = ((t.duration_min ?? 30) / 60 / SLOTS) * 100
         const done = !t.is_recurring && t.status === 'fait'
         const checkMass = t.notes?.startsWith('source:check') ?? false
         const project = t.project_id ? s.projects.find((p) => p.id === t.project_id) : undefined
@@ -185,12 +189,12 @@ function HourColumn({ day, hours, onEdit, onCreate, onMove }: {
             className={`absolute left-0.5 right-0.5 overflow-hidden rounded-md px-1 py-0.5 text-left ${
               checkMass ? 'bg-[#a78bfa]/15' : 'border border-sun/30 bg-panel-2'}`}
             style={checkMass
-              ? { top, height, outline: '1.5px dashed #a78bfa', outlineOffset: '-1px' }
-              : { top, height, borderLeftColor: domain?.color, borderLeftWidth: 3 }}>
+              ? { top: `${top}%`, height: `${height}%`, minHeight: 16, outline: '1.5px dashed #a78bfa', outlineOffset: '-1px' }
+              : { top: `${top}%`, height: `${height}%`, minHeight: 16, borderLeftColor: domain?.color, borderLeftWidth: 3 }}>
             <span className={`block truncate text-[10px] leading-tight ${done ? 'text-ink-3 line-through' : 'text-ink'}`}>
               {checkMass && <Church size={9} className="mr-0.5 inline text-[#a78bfa]" />}{t.title}
             </span>
-            {project && height >= 34 && <span className="mt-0.5 flex"><ProjectTag name={project.title} color={domain?.color} size="xs" /></span>}
+            {project && height >= 4.5 && <span className="mt-0.5 flex"><ProjectTag name={project.title} color={domain?.color} size="xs" /></span>}
           </button>
         )
       })}
