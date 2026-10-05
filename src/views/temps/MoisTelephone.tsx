@@ -96,9 +96,6 @@ export function MoisTelephone({ anchor, onShift, onEdit, onCreate, onStep, onMov
 
   return (
     <div className="flex h-full flex-col" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <p className="shrink-0 pb-1 text-center text-base font-semibold capitalize">
-        {format(anchor, 'MMMM yyyy', { locale: fr })}
-      </p>
       <div className="grid shrink-0 grid-cols-7 border-b border-line-2/40 text-center text-[10px] uppercase tracking-wide text-ink-3">
         {['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'].map((j) => <span key={j} className="py-0.5">{j}</span>)}
       </div>

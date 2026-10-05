@@ -16,6 +16,7 @@ import { DayCell } from './temps/DayCell'
 import { WeekHours } from './temps/SemaineHeures'
 import { NotesSemaine } from './temps/NotesSemaine'
 import { MoisTelephone } from './temps/MoisTelephone'
+import { NavMois } from './temps/NavMois'
 import { useMediaQuery } from '../lib/useMediaQuery'
 import { MultiMonth } from './temps/VuesLongues'
 type View = '4sem' | 'semaine' | 'trimestre' | 'annee'
@@ -107,11 +108,16 @@ export function TimeView() {
             { value: 'trimestre', label: 'Trimestre' },
             { value: 'annee', label: 'Année' },
           ]} />
-          <button onClick={() => shift(-1)} className="btn-ghost p-2" aria-label="Précédent"><ChevronLeft size={15} /></button>
-          <button onClick={() => setAnchor(new Date())} className="btn-ghost px-3 py-2 text-xs">
-            {view === 'semaine' ? 'Cette semaine' : view === '4sem' ? 'Ce mois-ci' : view === 'trimestre' ? 'Ce trimestre' : 'Cette année'}
-          </button>
-          <button onClick={() => shift(1)} className="btn-ghost p-2" aria-label="Suivant"><ChevronRight size={15} /></button>
+          {/* Vue Mois : la navigation est fusionnée avec le nom du mois (NavMois, dessous). */}
+          {view !== '4sem' && (
+            <>
+              <button onClick={() => shift(-1)} className="btn-ghost p-2" aria-label="Précédent"><ChevronLeft size={15} /></button>
+              <button onClick={() => setAnchor(new Date())} className="btn-ghost px-3 py-2 text-xs">
+                {view === 'semaine' ? 'Cette semaine' : view === 'trimestre' ? 'Ce trimestre' : 'Cette année'}
+              </button>
+              <button onClick={() => shift(1)} className="btn-ghost p-2" aria-label="Suivant"><ChevronRight size={15} /></button>
+            </>
+          )}
         </div>
       </header>
 
@@ -126,6 +132,8 @@ export function TimeView() {
 
       {/* Évènements d'agenda externe en attente de tri : rien n'entre sans accord. */}
       <div className="shrink-0"><AgendaPropositions /></div>
+
+      {view === '4sem' && <NavMois anchor={anchor} onShift={shift} onGoto={(d) => { setFocus(null); setAnchor(d) }} />}
 
       <LayersCtx.Provider value={{ layers, arilId }}>
         <MassPickCtx.Provider value={(date, label) => setMassPick({ date, label })}>
@@ -192,13 +200,11 @@ function FourWeeks({ anchor, focus, onEdit, onCreate, onStep, onMove }: {
 
   // Jours hors du mois de référence : légèrement atténués pour rester lisibles sans distraire.
   const outsideTint = 'rgba(120,120,140,0.14)'
-  // Un seul nom de mois : celui qu'on regarde. Les jours des mois voisins que la
-  // grille affiche pour compléter les semaines sont grisés (voir `dim`).
-  const title = format(anchor, 'MMMM yyyy', { locale: fr })
+  // Les jours des mois voisins que la grille affiche pour compléter les semaines
+  // sont grisés (voir `dim`) ; le nom du mois est dans NavMois.
 
   return (
     <>
-      <p className="text-center text-sm font-medium capitalize">{title}</p>
       <div className="space-y-2">
         {weeks.map((days, i) => (
           <div key={i} className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 md:grid-cols-7">
