@@ -239,7 +239,12 @@ Deno.serve(async (req) => {
 
   const url = Deno.env.get('SUPABASE_URL')!
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  const uid = await callerId(req, url, key)
+  // Appel d'un utilisateur connecté (bouton de l'app) ou du cron mensuel, qui
+  // n'a pas de session et passe la clé anon : comme pour la fonction `celeste`,
+  // on le rattache alors au propriétaire (secret CELESTE_HORIZON_USER_ID,
+  // app mono-utilisateur). Les horaires écrits sont publics : le pire qu'un
+  // appelant anonyme puisse faire est de relancer une mise à jour.
+  const uid = (await callerId(req, url, key)) ?? Deno.env.get('CELESTE_HORIZON_USER_ID') ?? null
   if (!uid) return json({ ok: false, error: 'Appel non authentifié' }, 401)
   // `check_id` optionnel : ne rafraîchir qu'une vérification précise.
   let onlyId: string | null = null
