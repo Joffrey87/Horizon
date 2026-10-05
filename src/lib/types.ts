@@ -170,6 +170,8 @@ export interface Layout {
   is_default: boolean
   data: {
     positions?: Record<string, { x: number; y: number }>
+    /** Tailles choisies à la main (panneaux redimensionnés de l'accueil). */
+    sizes?: Record<string, { w: number; h: number }>
     filters?: Record<string, unknown>
   }
   created_at: string

@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { GripVertical, Circle, FolderKanban, PinOff } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import type { Task } from '../lib/types'
-import { borner, type Pos } from '../lib/board'
+import { borner, chevauche, degager, placeLibre, ECART, type Pos, type Rect, type Taille } from '../lib/board'
 
 const CARD_W = 224 // largeur des cartes projet (w-56)
+const MIN_W = 240 // plus petit qu'un panneau redimensionné
+const MIN_H = 120
 
 /** Un panneau déplaçable qui n'est pas un projet (Aujourd'hui, Habitudes…).
  *  Il partage la mécanique et la mémoire de position des cartes projet. */
@@ -43,10 +45,31 @@ export function HomeBoard({ panneaux = [], onOuvrirProjet }: {
   const navigate = useNavigate()
   const containerRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ id: string; sx: number; sy: number; ox: number; oy: number; w: number; h: number } | null>(null)
+  const redimRef = useRef<{ id: string; sx: number; sy: number; w0: number; h0: number } | null>(null)
 
   const actifs = useMemo(() => s.projects.filter((p) => p.status === 'actif'), [s.projects])
   const layout = useMemo(() => s.layouts.find((l) => l.projection === 'accueil'), [s.layouts])
   const [positions, setPositions] = useState<Record<string, Pos>>({})
+  // Tailles choisies à la main (poignée en bas à droite des panneaux).
+  const [sizes, setSizes] = useState<Record<string, Taille>>({})
+  // Incrémenté quand une tuile change de taille toute seule (contenu qui
+  // grandit) : relance le contrôle de superposition.
+  const [mesure, setMesure] = useState(0)
+  // Ordre de priorité : panneaux d'abord, puis projets. Une tuile déjà posée
+  // ne bouge pas, c'est la suivante qui se range.
+  const ordre = useMemo(
+    () => [...panneaux.map((p) => p.id), ...actifs.map((p) => `pro-${p.id}`)],
+    [panneaux, actifs])
+
+  /** Rectangle réel d'une tuile : position connue + taille mesurée dans le DOM. */
+  const rectDe = (id: string, pos: Record<string, Pos> = positions): Rect | null => {
+    const el = containerRef.current?.querySelector<HTMLElement>(`[data-carte="${CSS.escape(id)}"]`)
+    const p = pos[id]
+    if (!el || !p) return null
+    return { x: p.x, y: p.y, w: el.offsetWidth, h: el.offsetHeight }
+  }
+  const autresRects = (sauf: string, pos: Record<string, Pos> = positions): Rect[] =>
+    ordre.filter((id) => id !== sauf).flatMap((id) => rectDe(id, pos) ?? [])
 
   // Positions initiales : mémorisées, sinon disposition par défaut. Les clés
   // sont celles du stockage (`pro-<id>` pour un projet, `panneau:*` sinon) :
@@ -64,6 +87,7 @@ export function HomeBoard({ panneaux = [], onOuvrirProjet }: {
         ?? { x: (i % 4) * (CARD_W + 16), y: decalage + Math.floor(i / 4) * 168 }
     })
     setPositions(next)
+    setSizes(layout?.data.sizes ?? {})
     // `panneaux` est reconstruit à chaque rendu du parent : on ne s'y fie pas
     // pour déclencher l'effet, seules les clés comptent.
   }, [layout, actifs, panneaux.map((p) => p.id).join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -93,8 +117,32 @@ export function HomeBoard({ panneaux = [], onOuvrirProjet }: {
     return () => ro.disconnect()
   }, [])
 
-  const savePositions = async (pos: Record<string, Pos>) => {
-    const data = { positions: pos }
+  // Une tuile dont le contenu grandit (tâche épinglée, jour chargé…) change de
+  // taille sans qu'on y touche : on le sait pour re-vérifier les superpositions.
+  useEffect(() => {
+    const cadre = containerRef.current
+    if (!cadre) return
+    const ro = new ResizeObserver(() => setMesure((m) => m + 1))
+    cadre.querySelectorAll('[data-carte]').forEach((el) => ro.observe(el))
+    return () => ro.disconnect()
+  }, [ordre])
+
+  // Aucune tuile ne doit en recouvrir une autre : disposition par défaut,
+  // fenêtre rétrécie, contenu qui grandit… Purement visuel, comme `recadrer` —
+  // la position enregistrée n'est réécrite qu'au prochain déplacement voulu.
+  useEffect(() => {
+    if (dragRef.current || redimRef.current) return
+    const box = containerRef.current?.getBoundingClientRect()
+    const items = ordre.flatMap((id) => {
+      const r = rectDe(id)
+      return r ? [{ id, ...r }] : []
+    })
+    const corrige = degager(items, box)
+    if (corrige) setPositions((p) => ({ ...p, ...corrige }))
+  }, [positions, sizes, mesure, ordre]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const savePositions = async (pos: Record<string, Pos>, tailles: Record<string, Taille> = sizes) => {
+    const data = { positions: pos, sizes: tailles }
     if (layout) await s.update('layouts', layout.id, { data, updated_at: new Date().toISOString() })
     else await s.insert('layouts', { name: 'Accueil', projection: 'accueil', is_default: false, data })
   }
@@ -120,10 +168,53 @@ export function HomeBoard({ panneaux = [], onOuvrirProjet }: {
     }))
   }
   const onHandleUp = (e: React.PointerEvent) => {
-    if (!dragRef.current) return
+    const d = dragRef.current
+    if (!d) return
     dragRef.current = null
     ;(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId)
-    void savePositions(positions)
+    // Lâchée sur une autre tuile : elle va à la place libre la plus proche, ou
+    // revient d'où elle est partie s'il n'y en a pas.
+    let final = positions
+    const moi = rectDe(d.id)
+    if (moi && autresRects(d.id).some((o) => chevauche(moi, o, ECART))) {
+      const box = containerRef.current?.getBoundingClientRect()
+      const libre = placeLibre(moi, autresRects(d.id), box) ?? { x: d.ox, y: d.oy }
+      final = { ...positions, [d.id]: libre }
+      setPositions(final)
+    }
+    void savePositions(final)
+  }
+
+  // ---- Redimensionnement (poignée en bas à droite d'un panneau) ----
+  const onResizeDown = (e: React.PointerEvent, id: string) => {
+    e.preventDefault(); e.stopPropagation()
+    const carte = (e.currentTarget as HTMLElement).parentElement
+    redimRef.current = {
+      id, sx: e.clientX, sy: e.clientY, w0: carte?.offsetWidth ?? MIN_W, h0: carte?.offsetHeight ?? MIN_H,
+    }
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  }
+  const onResizeMove = (e: React.PointerEvent) => {
+    const r = redimRef.current; if (!r) return
+    const box = containerRef.current?.getBoundingClientRect()
+    const moi = rectDe(r.id); if (!moi || !box) return
+    const autres = autresRects(r.id)
+    const veut = {
+      w: Math.max(MIN_W, Math.min(box.width - moi.x, r.w0 + (e.clientX - r.sx))),
+      h: Math.max(MIN_H, Math.min(box.height - moi.y, r.h0 + (e.clientY - r.sy))),
+    }
+    // On grandit jusqu'à toucher une autre tuile, pas au-delà : on essaie la
+    // taille voulue, puis chaque axe seul, pour glisser le long d'un obstacle.
+    const libre = (t: Taille) => !autres.some((o) => chevauche({ x: moi.x, y: moi.y, ...t }, o, ECART))
+    const essais: Taille[] = [veut, { w: veut.w, h: moi.h }, { w: moi.w, h: veut.h }]
+    const ok = essais.find(libre)
+    if (ok) setSizes((p) => ({ ...p, [r.id]: ok }))
+  }
+  const onResizeUp = (e: React.PointerEvent) => {
+    if (!redimRef.current) return
+    redimRef.current = null
+    ;(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId)
+    void savePositions(positions, sizes)
   }
 
   return (
@@ -131,11 +222,17 @@ export function HomeBoard({ panneaux = [], onOuvrirProjet }: {
       {/* Panneaux déplaçables (Aujourd'hui, Habitudes…) : même mécanique que les projets. */}
       {panneaux.map((pan) => {
         const pos = positions[pan.id] ?? pan.defaut ?? { x: 0, y: 0 }
+        const taille = sizes[pan.id]
         return (
           <div key={pan.id}
             data-carte={pan.id}
             className="absolute flex flex-col overflow-hidden rounded-2xl border border-white/15 bg-gradient-to-br from-white/8 to-black/25 text-white shadow-lg shadow-black/25 backdrop-blur-[3px]"
-            style={{ left: pos.x, top: pos.y, width: pan.largeur ?? 300, maxHeight: pan.hauteurMax }}>
+            // Taille choisie à la main : elle remplace la largeur par défaut et le
+            // plafond de hauteur (le contenu défile alors dans le cadre).
+            style={{
+              left: pos.x, top: pos.y, width: taille?.w ?? pan.largeur ?? 300,
+              ...(taille ? { height: taille.h } : { maxHeight: pan.hauteurMax }),
+            }}>
             <div onPointerDown={(e) => onHandleDown(e, pan.id)} onPointerMove={onHandleMove} onPointerUp={onHandleUp}
               className="flex shrink-0 touch-none cursor-grab items-center gap-2 border-b border-white/10 px-3 py-2 active:cursor-grabbing"
               style={{ background: `${pan.accent}22` }}>
@@ -149,6 +246,14 @@ export function HomeBoard({ panneaux = [], onOuvrirProjet }: {
               </p>
             </div>
             <div className="min-h-0 flex-1 overflow-auto p-3">{pan.contenu}</div>
+            {/* Poignée de redimensionnement : coin bas droit. */}
+            <div onPointerDown={(e) => onResizeDown(e, pan.id)} onPointerMove={onResizeMove} onPointerUp={onResizeUp}
+              role="separator" aria-label={`Redimensionner « ${pan.titre} »`} title="Redimensionner"
+              className="absolute bottom-0 right-0 flex h-5 w-5 touch-none cursor-nwse-resize items-end justify-end p-1 text-white/40 hover:text-white/80">
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+                <path d="M9 2 2 9M9 6 6 9" />
+              </svg>
+            </div>
           </div>
         )
       })}
