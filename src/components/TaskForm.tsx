@@ -83,12 +83,14 @@ export function TaskForm({ open, task, defaultDate, overrideScheduled, defaultIs
   const selectedDays = String(current.recur_days).split(',').filter(Boolean)
 
   return (
-    <Modal open onClose={close} title={task ? 'Modifier la tâche' : 'Nouvelle tâche'} wide>
-      <form onSubmit={save} className="space-y-3">
+    // Compact : le bouton « Créer » doit rester visible sans défiler. D'où les
+    // champs en rangées (3 dates, durée + importance + urgence) et les cases côte à côte.
+    <Modal open onClose={close} title={task ? 'Modifier la tâche' : 'Nouvelle tâche'} wide compact>
+      <form onSubmit={save} className="space-y-2">
         <input required value={current.title as string} onChange={(e) => setF('title', e.target.value)}
           placeholder="Action concrète, idéalement courte" className="field" autoFocus />
 
-        <label className="block space-y-1 text-xs text-ink-3">
+        <label className="block space-y-0.5 text-xs text-ink-3">
           Rattachée à
           <select value={current.anchor as string} onChange={(e) => setF('anchor', e.target.value)} className="field">
             <optgroup label="Projets actifs">
@@ -102,82 +104,79 @@ export function TaskForm({ open, task, defaultDate, overrideScheduled, defaultIs
           </select>
         </label>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="space-y-1 text-xs text-ink-3">
+        <div className="grid gap-2 sm:grid-cols-3">
+          <label className="space-y-0.5 text-xs text-ink-3">
             Planifiée le
             <input type="date" value={current.scheduled_date as string}
               onChange={(e) => setF('scheduled_date', e.target.value)} className="field" />
           </label>
-          <label className="space-y-1 text-xs text-ink-3">
+          <label className="space-y-0.5 text-xs text-ink-3">
             Échéance
             <input type="date" value={current.due_date as string}
               onChange={(e) => setF('due_date', e.target.value)} className="field" />
           </label>
+          <label className="space-y-0.5 text-xs text-ink-3">
+            Jusqu'au (multi-jours)
+            <input type="date" value={current.end_date as string}
+              onChange={(e) => setF('end_date', e.target.value)} className="field" />
+          </label>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1 text-xs text-ink-3">
+        <div className="grid gap-2 sm:grid-cols-3">
+          <div className="space-y-0.5 text-xs text-ink-3">
             Durée
-            <div className="flex gap-2">
+            <div className="flex gap-1.5">
               <input type="number" min={1} step={1} value={current.dur_value as string}
-                onChange={(e) => setF('dur_value', e.target.value)} className="field w-20"
+                onChange={(e) => setF('dur_value', e.target.value)} className="field w-16"
                 placeholder="—" disabled={!!current.end_date} />
               <select value={current.dur_unit as string} onChange={(e) => setF('dur_unit', e.target.value)}
-                className="field flex-1" disabled={!!current.end_date}>
+                className="field min-w-0 flex-1" disabled={!!current.end_date}>
                 <option value="min">minutes</option>
                 <option value="heure">heures</option>
                 <option value="jour">jours</option>
               </select>
             </div>
           </div>
-          <label className="space-y-1 text-xs text-ink-3">
-            … ou jusqu'à une date
-            <input type="date" value={current.end_date as string}
-              onChange={(e) => setF('end_date', e.target.value)} className="field" />
-          </label>
-        </div>
-
-        <label className="flex items-center gap-2 text-sm text-ink-2">
-          <input type="checkbox" checked={current.is_task as boolean}
-            onChange={(e) => setF('is_task', e.target.checked)} className="accent-[#f59e0b]" />
-          C'est une tâche (apparaît dans Priorités)
-        </label>
-
-        {!(current.is_task as boolean) && (
-          <label className="block space-y-1 text-xs text-ink-3">
-            Lieu (ex. vacances) — change où chercher les messes ces jours-là
-            <input value={current.location as string} onChange={(e) => setF('location', e.target.value)}
-              placeholder="Ville du séjour (laisser vide si domicile)" className="field" />
-          </label>
-        )}
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             <p className="text-xs text-ink-3">Importance</p>
             <Scale3 value={current.importance as number | null} onChange={(v) => setF('importance', v)}
               labels={['Basse', 'Moyenne', 'Haute']} />
           </div>
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             <p className="text-xs text-ink-3">Urgence</p>
             <Scale3 value={current.urgence as number | null} onChange={(v) => setF('urgence', v)}
               labels={['Basse', 'Moyenne', 'Haute']} />
           </div>
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-ink-2">
-          <input type="checkbox" checked={current.is_recurring as boolean}
-            onChange={(e) => setF('is_recurring', e.target.checked)} className="accent-[#f59e0b]" />
-          Responsabilité récurrente (poubelles, factures…)
-        </label>
+        <div className="flex flex-wrap gap-x-5 gap-y-1">
+          <label className="flex items-center gap-2 text-sm text-ink-2">
+            <input type="checkbox" checked={current.is_task as boolean}
+              onChange={(e) => setF('is_task', e.target.checked)} className="accent-[#f59e0b]" />
+            C'est une tâche <span className="text-xs text-ink-3">(dans Priorités)</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm text-ink-2">
+            <input type="checkbox" checked={current.is_recurring as boolean}
+              onChange={(e) => setF('is_recurring', e.target.checked)} className="accent-[#f59e0b]" />
+            Récurrente <span className="text-xs text-ink-3">(poubelles, factures…)</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm text-ink-2">
+            <input type="checkbox" checked={current.notable as boolean}
+              onChange={(e) => setF('notable', e.target.checked)} className="accent-[#f59e0b]" />
+            Notable
+          </label>
+        </div>
 
-        <label className="flex items-center gap-2 text-sm text-ink-2">
-          <input type="checkbox" checked={current.notable as boolean}
-            onChange={(e) => setF('notable', e.target.checked)} className="accent-[#f59e0b]" />
-          Notable
-        </label>
+        {!(current.is_task as boolean) && (
+          <label className="block space-y-0.5 text-xs text-ink-3">
+            Lieu (ex. vacances) — change où chercher les messes ces jours-là
+            <input value={current.location as string} onChange={(e) => setF('location', e.target.value)}
+              placeholder="Ville du séjour (laisser vide si domicile)" className="field" />
+          </label>
+        )}
 
         {(current.is_recurring as boolean) && (
-          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line p-3">
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line px-3 py-2">
             <select value={current.recur_kind as string} onChange={(e) => setF('recur_kind', e.target.value)}
               className="field w-auto">
               <option value="daily">Chaque jour</option>
@@ -212,10 +211,10 @@ export function TaskForm({ open, task, defaultDate, overrideScheduled, defaultIs
           </div>
         )}
 
-        <div className="space-y-1 text-xs text-ink-3">
+        <div className="space-y-0.5 text-xs text-ink-3">
           Note
           <NoteArea value={current.notes as string} onChange={(v) => setF('notes', v)}
-            placeholder="Idées, détails, points à suivre… (Entrée continue la puce)" rows={4} />
+            placeholder="Idées, détails, points à suivre… (Entrée continue la puce)" rows={2} />
         </div>
 
         {incoherent && (
@@ -224,7 +223,7 @@ export function TaskForm({ open, task, defaultDate, overrideScheduled, defaultIs
           </p>
         )}
 
-        <div className="flex justify-between gap-2 pt-1">
+        <div className="flex justify-between gap-2">
           {task ? (
             <button type="button" onClick={() => {
               if (!confirm(`Supprimer « ${task.title} » ?`)) return

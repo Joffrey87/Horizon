@@ -124,16 +124,20 @@ export function ProjectTag({ name, color, size = 'sm' }: { name: string; color?:
   )
 }
 
-export function Modal({ open, onClose, title, children, wide = false }: {
+export function Modal({ open, onClose, title, children, wide = false, compact = false }: {
   open: boolean; onClose: () => void; title: string; children: ReactNode; wide?: boolean
+  /** Marges réduites : pour un formulaire dont le bouton de validation doit
+   *  rester visible sans défiler. */
+  compact?: boolean
 }) {
   if (!open) return null
   return createPortal(
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 p-4 backdrop-blur-sm"
+    <div className={`fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm ${compact ? 'p-2 sm:p-3' : 'p-4'}`}
       onClick={onClose}>
-      <div className={`card rise mx-auto my-6 w-full ${wide ? 'max-w-2xl' : 'max-w-md'} p-5 sm:my-10`}
+      <div className={`card rise mx-auto w-full ${wide ? 'max-w-2xl' : 'max-w-md'} ${
+        compact ? 'my-1 p-4 sm:my-3' : 'my-6 p-5 sm:my-10'}`}
         onClick={(e) => e.stopPropagation()}>
-        <header className="mb-4 flex items-center justify-between">
+        <header className={`${compact ? 'mb-2' : 'mb-4'} flex items-center justify-between`}>
           <h2 className="text-lg font-semibold">{title}</h2>
           <button onClick={onClose} className="btn-ghost p-1.5" aria-label="Fermer"><X size={16} /></button>
         </header>
