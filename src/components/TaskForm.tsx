@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useHorizon } from '../lib/store'
-import { Modal, Scale3, NoteArea } from './ui'
+import { Modal, Scale3, NoteArea, DomainDot } from './ui'
 import type { Task } from '../lib/types'
 
 /** Une tâche est ancrée à un projet OU librement à un domaine (jamais nulle part). */
@@ -47,11 +47,13 @@ export function TaskForm({ open, task, defaultDate, overrideScheduled, defaultIs
   const sched = current.scheduled_date as string
   const due = current.due_date as string
   const incoherent = !!sched && !!due && sched > due
+  // Rattachement : `p:<projet>` ou `d:<domaine>`.
+  const anchor = current.anchor as string
+  const anchorProject = anchor.startsWith('p:') ? s.projects.find((p) => p.id === anchor.slice(2)) : undefined
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
     if (incoherent) return
-    const anchor = current.anchor as string
     const rule = current.is_recurring
       ? (current.recur_kind === 'daily' ? 'daily'
         : current.recur_kind === 'weekly' ? `weekly:${current.recur_days || '1'}`
@@ -90,19 +92,43 @@ export function TaskForm({ open, task, defaultDate, overrideScheduled, defaultIs
         <input required value={current.title as string} onChange={(e) => setF('title', e.target.value)}
           placeholder="Action concrète, idéalement courte" className="field" autoFocus />
 
-        <label className="block space-y-0.5 text-xs text-ink-3">
-          Rattachée à
-          <select value={current.anchor as string} onChange={(e) => setF('anchor', e.target.value)} className="field">
-            <optgroup label="Projets actifs">
-              {s.projects.filter((p) => p.status === 'actif').map((p) => (
-                <option key={p.id} value={`p:${p.id}`}>{p.title}</option>
+        {/* Domaine en boutons (un clic) ; le projet, facultatif, en liste à côté.
+            Choisir un domaine = tâche libre de ce domaine ; choisir un projet la
+            rattache à lui (son domaine s'allume alors en pointillé). */}
+        <div className="grid gap-2 sm:grid-cols-[1fr_13rem]">
+          <div className="space-y-0.5">
+            <p className="text-xs text-ink-3">Domaine de vie</p>
+            <div className="flex flex-wrap gap-1.5">
+              {s.domains.map((d) => {
+                const direct = anchor === `d:${d.id}`
+                const viaProjet = !direct && anchorProject?.domain_id === d.id
+                return (
+                  <button key={d.id} type="button" onClick={() => setF('anchor', `d:${d.id}`)}
+                    aria-pressed={direct}
+                    className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                      direct ? 'border-sun bg-sun/15 text-sun-soft'
+                        : viaProjet ? 'border-dashed border-sun/60 text-ink-2'
+                          : 'border-line-2 text-ink-3 hover:text-ink-2'}`}>
+                    <DomainDot color={d.color} /> {d.name}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <label className="block space-y-0.5 text-xs text-ink-3">
+            Projet (facultatif)
+            <select value={anchorProject?.id ?? ''} className="field"
+              onChange={(e) => setF('anchor', e.target.value
+                ? `p:${e.target.value}`
+                // Retour à la tâche libre : on garde le domaine du projet quitté.
+                : `d:${anchorProject?.domain_id ?? s.domains[0]?.id ?? ''}`)}>
+              <option value="">— Aucun —</option>
+              {s.projects.filter((p) => p.status === 'actif' || p.id === anchorProject?.id).map((p) => (
+                <option key={p.id} value={p.id}>{p.title}</option>
               ))}
-            </optgroup>
-            <optgroup label="Tâche libre d'un domaine">
-              {s.domains.map((d) => <option key={d.id} value={`d:${d.id}`}>{d.name}</option>)}
-            </optgroup>
-          </select>
-        </label>
+            </select>
+          </label>
+        </div>
 
         <div className="grid gap-2 sm:grid-cols-3">
           <label className="space-y-0.5 text-xs text-ink-3">
