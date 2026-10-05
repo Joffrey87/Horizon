@@ -369,6 +369,23 @@ export interface GospelQuiz {
   questions: GospelQuestion[]
 }
 
+/** Un appel au modèle Anthropic, consigné par les fonctions Edge (lecture seule côté app).
+ *  Le coût n'est pas stocké : il se calcule (`coutUsd`, aiUsage.ts). */
+export interface AiUsage {
+  id: UUID
+  user_id: UUID
+  /** Fonction à l'origine de l'appel. */
+  fn: 'gospel' | 'news' | 'assistant'
+  /** Précision : « jour niv. 2 », « revision », « jour · Sujet »… */
+  detail: string | null
+  model: string
+  input_tokens: number
+  output_tokens: number
+  /** Recherches web, facturées à part. */
+  web_searches: number
+  created_at: string
+}
+
 /** Alerte calculée pour le cockpit — jamais culpabilisante */
 export interface Alert {
   id: string

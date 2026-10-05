@@ -3,9 +3,33 @@
 // Copilote IA : analyse le système et PROPOSE. Ne modifie jamais
 // les données (garde-fou produit : l'utilisateur garde la main).
 // Secret requis : ANTHROPIC_API_KEY (dashboard Supabase → Edge Functions → Secrets)
+// Chaque appel est consigné dans `ai_usage` (suivi de la consommation).
 // ================================================================
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
+import { createClient } from 'jsr:@supabase/supabase-js@2'
+
+const MODEL = 'claude-sonnet-4-5'
+
+/** Consigne la consommation d'un appel. Ne doit JAMAIS faire échouer la requête :
+ *  le suivi est secondaire. L'appelant est déduit du JWT ; inconnu, rien n'est consigné. */
+async function logUsage(req: Request, usage: { input_tokens?: number; output_tokens?: number } | undefined): Promise<void> {
+  if (!usage) return
+  try {
+    const url = Deno.env.get('SUPABASE_URL')
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
+    if (!url || !serviceKey || !jwt) return
+    const supabase = createClient(url, serviceKey)
+    const { data } = await supabase.auth.getUser(jwt)
+    if (!data.user) return
+    const { error } = await supabase.from('ai_usage').insert({
+      user_id: data.user.id, fn: 'assistant', detail: null, model: MODEL,
+      input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0,
+    })
+    if (error) console.error('ai_usage :', error.message)
+  } catch (e) { console.error('ai_usage :', e) }
+}
 
 const SYSTEM = `Tu es l'assistant du POS « Horizon », le système d'exploitation personnel de l'utilisateur.
 
@@ -79,7 +103,7 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
+        model: MODEL,
         max_tokens: 1200,
         system: SYSTEM,
         messages,
@@ -93,6 +117,7 @@ Deno.serve(async (req) => {
     }
 
     const data = await res.json()
+    await logUsage(req, data.usage)
     const text = (data.content ?? [])
       .filter((b: { type: string }) => b.type === 'text')
       .map((b: { text: string }) => b.text)

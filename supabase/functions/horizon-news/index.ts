@@ -85,6 +85,25 @@ async function callerId(req: Request, url: string, serviceKey: string): Promise<
 
 type Source = { title: string; url: string }
 type Mode = 'jour' | 'important'
+type Usage = { input_tokens?: number; output_tokens?: number; server_tool_use?: { web_search_requests?: number } }
+
+const MODEL = 'claude-sonnet-4-5'
+
+/** Consigne la consommation d'un appel (table `ai_usage`, affichée dans Paramètres).
+ *  Ne doit JAMAIS faire échouer la requête : le suivi est secondaire. */
+async function logUsage(
+  supabase: ReturnType<typeof createClient>, uid: string, detail: string, usage: Usage | undefined,
+): Promise<void> {
+  if (!usage) return
+  try {
+    const { error } = await supabase.from('ai_usage').insert({
+      user_id: uid, fn: 'news', detail, model: MODEL,
+      input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0,
+      web_searches: usage.server_tool_use?.web_search_requests ?? 0,
+    })
+    if (error) console.error('ai_usage :', error.message)
+  } catch (e) { console.error('ai_usage :', e) }
+}
 
 /** Date ISO décalée de n jours (fenêtres passées au modèle). */
 function shiftDays(today: string, days: number): string {
@@ -94,7 +113,7 @@ function shiftDays(today: string, days: number): string {
 }
 
 async function synthByTopic(apiKey: string, label: string, prompt: string | null, today: string, mode: Mode):
-  Promise<{ content: string; sources: Source[] }> {
+  Promise<{ content: string; sources: Source[]; usage?: Usage }> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -103,7 +122,7 @@ async function synthByTopic(apiKey: string, label: string, prompt: string | null
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-5',
+      model: MODEL,
       max_tokens: 1000,
       system: mode === 'important' ? SYSTEM_IMPORTANT : SYSTEM_JOUR,
       // max_uses volontairement bas : borne le coût (chaque recherche web ≈ 1 ¢).
@@ -151,7 +170,11 @@ async function synthByTopic(apiKey: string, label: string, prompt: string | null
     }
   }
 
-  return { content: content || 'Pas de nouvelle récente marquante trouvée sur ce sujet.', sources }
+  return {
+    content: content || 'Pas de nouvelle récente marquante trouvée sur ce sujet.',
+    sources,
+    usage: data.usage as Usage | undefined,
+  }
 }
 
 Deno.serve(async (req) => {
@@ -191,7 +214,8 @@ Deno.serve(async (req) => {
 
     for (const t of topics ?? []) {
       try {
-        const { content, sources } = await synthByTopic(apiKey, t.label, t.prompt, today, mode)
+        const { content, sources, usage } = await synthByTopic(apiKey, t.label, t.prompt, today, mode)
+        await logUsage(supabase, uid, `${mode} · ${t.label}`, usage)
         // remplace la synthèse précédente du sujet pour ce mode (l'autre est conservée)
         await supabase.from('news_digests').delete().eq('topic_id', t.id).eq('kind', mode)
         const { error: iErr } = await supabase.from('news_digests').insert({

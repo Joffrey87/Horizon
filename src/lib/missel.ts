@@ -92,13 +92,33 @@ export function misselReading(jour: MisselDay | null, kind: 'evangile' | 'lectur
   }
 }
 
-/** Charge le propre du jour (avec cache localStorage). */
-export function useMisselOfDay(date: string) {
+/** Forme de la messe suivie par la page Écritures : le missel de 1962
+ *  (« extraordinaire », propres de missalemeum) ou la messe actuelle
+ *  (« ordinaire », lectionnaire AELF). */
+export type FormeMesse = 'extraordinaire' | 'ordinaire'
+const FORME_KEY = 'horizon.messe.forme'
+
+/** Forme choisie, mémorisée sur l'appareil. Le missel de 1962 reste le défaut. */
+export function useFormeMesse(): [FormeMesse, (f: FormeMesse) => void] {
+  const [forme, setForme] = useState<FormeMesse>(() => {
+    try { return localStorage.getItem(FORME_KEY) === 'ordinaire' ? 'ordinaire' : 'extraordinaire' } catch { return 'extraordinaire' }
+  })
+  const choisir = (f: FormeMesse) => {
+    setForme(f)
+    try { localStorage.setItem(FORME_KEY, f) } catch { /* stockage indisponible */ }
+  }
+  return [forme, choisir]
+}
+
+/** Charge le propre du jour (avec cache localStorage). `enabled: false` : rien
+ *  n'est appelé (messe actuelle choisie — le propre de 1962 est inutile). */
+export function useMisselOfDay(date: string, enabled = true) {
   const [jour, setJour] = useState<MisselDay | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!enabled) { setLoading(false); setError(null); return }
     let vivant = true
     setLoading(true); setError(null)
     fetchMissel(date)
@@ -106,7 +126,7 @@ export function useMisselOfDay(date: string) {
       .catch((e) => { if (vivant) setError(e instanceof Error ? e.message : String(e)) })
       .finally(() => { if (vivant) setLoading(false) })
     return () => { vivant = false }
-  }, [date])
+  }, [date, enabled])
 
   return { jour, loading, error }
 }

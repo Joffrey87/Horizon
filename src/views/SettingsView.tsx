@@ -1,9 +1,12 @@
-import { useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { CalendarSync, Download, Plus, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import { supabase } from '../lib/supabase'
+import { bilanUsage, fmtUsd } from '../lib/aiUsage'
+import { todayIso } from '../lib/logic'
+import type { AiUsage } from '../lib/types'
 import { Card, DomainDot } from '../components/ui'
 
 export function SettingsView() {
@@ -142,6 +145,8 @@ export function SettingsView() {
 
       <AgendasCard />
 
+      <AiUsageCard />
+
       <Card title="Assistant IA (mis de côté)">
         <p className="text-sm leading-relaxed text-ink-2">
           L'assistant n'est pas accessible dans l'app pour le moment : il reste dans le code
@@ -156,6 +161,88 @@ export function SettingsView() {
         </p>
       </Card>
     </div>
+  )
+}
+
+const FONCTIONS: Record<string, string> = {
+  gospel: 'Quiz Écritures', news: 'Actualités', assistant: 'Assistant',
+}
+
+/** Consommation de l'API Anthropic, relevée à chaque appel par les fonctions Edge
+ *  (table `ai_usage`). Le coût est une ESTIMATION au tarif public : la facture
+ *  de référence reste la console Anthropic. */
+function AiUsageCard() {
+  const [lignes, setLignes] = useState<AiUsage[] | null>(null)
+  const [erreur, setErreur] = useState<string | null>(null)
+
+  useEffect(() => {
+    let vivant = true
+    void (async () => {
+      // 1 000 lignes = plusieurs mois à ce rythme ; les plus récentes d'abord.
+      const { data, error } = await supabase.from('ai_usage').select('*')
+        .order('created_at', { ascending: false }).limit(1000)
+      if (!vivant) return
+      if (error) setErreur(error.message); else setLignes((data ?? []) as AiUsage[])
+    })()
+    return () => { vivant = false }
+  }, [])
+
+  const bilan = useMemo(() => (lignes ? bilanUsage(lignes, todayIso()) : null), [lignes])
+  const maxJour = Math.max(0.0001, ...(bilan?.parJour.slice(0, 14).map((j) => j.cumul.usd) ?? []))
+
+  return (
+    <Card title="Consommation de l'IA">
+      {erreur && <p className="text-xs text-[#ec7f97]">Suivi indisponible : {erreur}</p>}
+      {!erreur && !bilan && <p className="text-xs text-ink-3">Chargement…</p>}
+      {bilan && bilan.total.appels === 0 && (
+        <p className="text-sm text-ink-2">
+          Rien d'enregistré pour l'instant. Le suivi commence au prochain quiz, à la prochaine
+          synthèse d'actualités ou au prochain appel de l'assistant.
+        </p>
+      )}
+      {bilan && bilan.total.appels > 0 && (
+        <>
+          <p className="text-sm text-ink-2">
+            <span className="text-lg font-semibold text-ink">{fmtUsd(bilan.total.usd)}</span>
+            {' '}depuis le {bilan.depuis ? format(parseISO(bilan.depuis), 'd MMMM', { locale: fr }) : '—'}
+            {' · '}{bilan.total.appels} appel{bilan.total.appels > 1 ? 's' : ''}
+          </p>
+          <p className="mt-1 text-xs text-ink-3">
+            Moyenne {fmtUsd(bilan.moyenneJourUsd)} par jour, soit environ {fmtUsd(bilan.moyenneJourUsd * 30)} par mois.
+          </p>
+
+          <ul className="mt-3 space-y-1 text-sm text-ink-2">
+            {Object.entries(bilan.parFonction).sort((a, b) => b[1].usd - a[1].usd).map(([fn, c]) => (
+              <li key={fn} className="flex items-baseline justify-between gap-2">
+                <span>{FONCTIONS[fn] ?? fn}</span>
+                <span className="text-xs text-ink-3">
+                  {c.appels} appel{c.appels > 1 ? 's' : ''} · {fmtUsd(c.usd)}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <p className="mb-1 mt-4 text-xs text-ink-3">14 derniers jours avec activité</p>
+          <ul className="space-y-1">
+            {bilan.parJour.slice(0, 14).map(({ jour, cumul }) => (
+              <li key={jour} className="flex items-center gap-2 text-xs">
+                <span className="w-16 shrink-0 text-ink-3">{format(parseISO(jour), 'EEE d MMM', { locale: fr })}</span>
+                <span className="h-2 flex-1 overflow-hidden rounded-full bg-panel-2">
+                  <span className="block h-full rounded-full bg-sun/70" style={{ width: `${Math.max(2, (cumul.usd / maxJour) * 100)}%` }} />
+                </span>
+                <span className="w-28 shrink-0 text-right text-ink-2">
+                  {fmtUsd(cumul.usd)} · {cumul.appels} appel{cumul.appels > 1 ? 's' : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <p className="mt-3 text-[11px] text-ink-3">
+        Estimation au tarif public (Sonnet 4.5 : 3 $ / 15 $ le million de tokens ; recherche web : 0,01 $).
+        La facture exacte est sur console.anthropic.com.
+      </p>
+    </Card>
   )
 }
 

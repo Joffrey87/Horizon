@@ -7,6 +7,7 @@ import { create } from 'zustand'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import { capturesEnAttente, depiler } from './capture'
+import { messageFonction } from './functionError'
 import type {
   Birthday, CalendarFeed, CelesteProposal, CelesteRules, Check, Domain, GospelQuiz, Habit, HabitLog, Idea, Layout,
   NewsDigest, NewsKind, NewsTopic, Objective, OlafatcoJob, Project, PropositionAgenda, Review, Settings, ShoppingItem,
@@ -315,7 +316,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   refreshNews: async (mode = 'jour') => {
     try {
       const { data, error } = await supabase.functions.invoke('horizon-news', { body: { source: 'app', mode } })
-      if (error) throw error
+      if (error) throw new Error(await messageFonction(error))
       const { data: digs } = await supabase.from('news_digests').select('*')
       set({ newsDigests: digs ?? [] })
       return { ok: true, updated: data?.updated as number | undefined }
@@ -374,7 +375,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
           format: opts?.format ?? 'jour',
         },
       })
-      if (error) throw error
+      if (error) throw new Error(await messageFonction(error))
       if (data?.error) throw new Error(data.error)
       return { ok: true, quiz: data?.quiz as GospelQuiz }
     } catch (e) {

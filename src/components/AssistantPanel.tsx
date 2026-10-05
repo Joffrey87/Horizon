@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Sparkles, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { messageFonction } from '../lib/functionError'
 import { useHorizon } from '../lib/store'
 
 const PRESETS: { label: string; prompt: string }[] = [
@@ -62,7 +63,7 @@ export function AssistantPanel({ open, onClose }: { open: boolean; onClose: () =
           history: messages.slice(-6),
         },
       })
-      if (error) throw error
+      if (error) throw new Error(await messageFonction(error))
       const text: string = data?.text ?? 'Réponse vide.'
       setMessages((m) => [...m, { role: 'assistant', text }])
     } catch (e) {

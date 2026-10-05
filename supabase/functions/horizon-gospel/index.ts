@@ -6,17 +6,24 @@
 //  - 'revision' : 4 questions (2 sens + 2 trous) à profondeur STABLE et profonde,
 //                 pour revoir en fin de semaine un évangile déjà travaillé.
 // Le passage vient de getbible.net côté app (gratuit) — voir src/lib/bible.ts.
-// Secret requis : ANTHROPIC_API_KEY
+// Chaque appel au modèle est consigné dans `ai_usage` (suivi de la consommation).
+// Secrets requis : ANTHROPIC_API_KEY (SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY : fournis par Supabase)
 // ================================================================
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
+import { createClient } from 'jsr:@supabase/supabase-js@2'
 
-async function callClaude(apiKey: string, system: string, user: string, maxTokens: number): Promise<string> {
+const MODEL = 'claude-sonnet-4-5'
+
+type Usage = { input_tokens?: number; output_tokens?: number; server_tool_use?: { web_search_requests?: number } }
+
+async function callClaude(apiKey: string, system: string, user: string, maxTokens: number):
+  Promise<{ text: string; usage?: Usage }> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-5',
+      model: MODEL,
       max_tokens: maxTokens,
       system,
       messages: [{ role: 'user', content: user }],
@@ -24,8 +31,36 @@ async function callClaude(apiKey: string, system: string, user: string, maxToken
   })
   if (!res.ok) throw new Error(`Anthropic ${res.status} ${(await res.text()).slice(0, 300)}`)
   const data = await res.json()
-  return (data.content ?? []).filter((b: { type: string }) => b.type === 'text')
+  const text = (data.content ?? []).filter((b: { type: string }) => b.type === 'text')
     .map((b: { text: string }) => b.text).join('\n').trim()
+  return { text, usage: data.usage as Usage | undefined }
+}
+
+/** Utilisateur appelant, déduit du JWT — null si inconnu (rien n'est alors consigné). */
+async function callerId(req: Request): Promise<string | null> {
+  const url = Deno.env.get('SUPABASE_URL')
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
+  if (!url || !serviceKey || !jwt) return null
+  const { data, error } = await createClient(url, serviceKey).auth.getUser(jwt)
+  return error || !data.user ? null : data.user.id
+}
+
+/** Consigne la consommation d'un appel. Ne doit JAMAIS faire échouer la requête :
+ *  le suivi est secondaire, le quiz passe avant. */
+async function logUsage(uid: string | null, detail: string, usage: Usage | undefined): Promise<void> {
+  if (!uid || !usage) return
+  try {
+    const url = Deno.env.get('SUPABASE_URL')
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    if (!url || !serviceKey) return
+    const { error } = await createClient(url, serviceKey).from('ai_usage').insert({
+      user_id: uid, fn: 'gospel', detail, model: MODEL,
+      input_tokens: usage.input_tokens ?? 0, output_tokens: usage.output_tokens ?? 0,
+      web_searches: usage.server_tool_use?.web_search_requests ?? 0,
+    })
+    if (error) console.error('ai_usage :', error.message)
+  } catch (e) { console.error('ai_usage :', e) }
 }
 
 type Format = 'jour' | 'revision'
@@ -144,7 +179,8 @@ Deno.serve(async (req) => {
     const systeme = format === 'revision'
       ? quizSystem(COMPOSITION_REVISION, PROFONDEUR_REVISION)
       : quizSystem(COMPOSITION_JOUR, PROFONDEUR_JOUR)
-    const raw = await callClaude(apiKey, systeme, user, 1500)
+    const { text: raw, usage } = await callClaude(apiKey, systeme, user, 1500)
+    await logUsage(await callerId(req), format === 'revision' ? 'revision' : `jour niv. ${lvl}`, usage)
     let quiz: unknown
     try {
       quiz = JSON.parse(raw)

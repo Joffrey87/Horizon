@@ -5,7 +5,7 @@ import { BookOpen, Brain, RefreshCw, RotateCcw, ChevronRight, ChevronLeft, Calen
 import { useHorizon } from '../lib/store'
 import { iso, revisionWeek, todayIso } from '../lib/logic'
 import { fetchMass, readingOfDay, readingQuote, useMassOfDay, type MassReading } from '../lib/aelf'
-import { fetchMissel, misselReading, misselTitre, useMisselOfDay } from '../lib/missel'
+import { fetchMissel, misselReading, misselTitre, useFormeMesse, useMisselOfDay, type FormeMesse } from '../lib/missel'
 import type { GospelQuiz } from '../lib/types'
 import { Card, Badge } from '../components/ui'
 
@@ -17,22 +17,34 @@ const RESET_MS = 3_600_000 // 1 h : au-delà, on repart au niveau 1 (quiz régé
 const MAX_LEVEL = 4        // au-delà, on tourne en rond : le quizz s'arrête là
 const BACK_DAYS = 7        // on peut revenir sur les jours précédents (quiz compris)
 // Révision de la semaine : un niveau par évangile du lundi au samedi précédents.
-const WEEK_KEY = (sunday: string, i: number) => `horizon.gospel.semaine.${sunday}.${i}`
+// Les quizz du missel de 1962 gardent leur clé d'origine ; ceux de la messe
+// actuelle ont la leur (les évangiles de la semaine y sont différents).
+const WEEK_KEY = (forme: FormeMesse, sunday: string, i: number) =>
+  `horizon.gospel.semaine.${forme === 'ordinaire' ? 'ordinaire.' : ''}${sunday}.${i}`
 
 export function EvangileView() {
   const today = todayIso()
   // On peut revenir sur les jours précédents : le quiz suit la date choisie.
   const [date, setDate] = useState(today)
   const [semaineOuverte, setSemaineOuverte] = useState(false)
-  // Les lectures suivent le MISSEL DE 1962 : c'est le jour liturgique (fête,
-  // dimanche après la Pentecôte…) qui commande, pas la date du calendrier.
-  const { jour, loading, error } = useMisselOfDay(date)
-  // AELF sert de repli si le propre est injoignable — et en mode démo, qui n'a
-  // pas de session Supabase.
-  const { mass } = useMassOfDay(date)
+  // Deux formes au choix. Missel de 1962 (défaut) : c'est le jour liturgique
+  // (fête, dimanche après la Pentecôte…) qui commande, pas la date du calendrier.
+  // Messe actuelle : lectionnaire AELF du jour.
+  const [forme, setForme] = useFormeMesse()
+  const ordinaire = forme === 'ordinaire'
+  const { jour: jourBrut, loading: misselLoading, error: misselError } = useMisselOfDay(date, !ordinaire)
+  // AELF sert de repli au missel de 1962 s'il est injoignable — et en mode démo,
+  // qui n'a pas de session Supabase. C'est la source de la messe actuelle.
+  const { mass: massBrute, loading: massLoading, error: massError } = useMassOfDay(date)
+  // Un jour déjà affiché reste en place le temps que le suivant se charge : on
+  // l'écarte, sinon le quiz porterait sur le passage de la veille.
+  const jour = jourBrut?.date === date ? jourBrut : null
+  const mass = massBrute?.date === date ? massBrute : null
   // TOUJOURS l'évangile : c'est lui qu'on lit et sur lequel porte le quiz.
-  const duMissel = misselReading(jour, 'evangile')
+  const duMissel = ordinaire ? undefined : misselReading(jour, 'evangile')
   const reading = duMissel ?? readingOfDay(mass, 'evangile')
+  const loading = ordinaire ? massLoading : misselLoading
+  const error = ordinaire ? massError : misselError
   const plusAncien = iso(addDays(parseISO(today), -BACK_DAYS))
   const decaler = (n: number) => setDate((d) => {
     const cible = iso(addDays(parseISO(d), n))
@@ -50,6 +62,17 @@ export function EvangileView() {
           <p className="text-xs text-ink-3">
             L’évangile du jour, puis un quiz pour en saisir le sens.
           </p>
+          {/* Forme de la messe : mémorisée sur l'appareil. */}
+          <div className="mt-1.5 inline-flex rounded-lg border border-line p-0.5 text-xs" role="group" aria-label="Forme de la messe">
+            {([['extraordinaire', 'Missel de 1962'], ['ordinaire', 'Messe actuelle']] as const).map(([f, label]) => (
+              <button key={f} onClick={() => setForme(f)} aria-pressed={forme === f}
+                className={`rounded-md px-2.5 py-1 transition-colors ${
+                  forme === f ? 'bg-sun/15 text-sun-soft' : 'text-ink-3 hover:text-ink'
+                }`}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         {/* Revenir sur un jour précédent : la lecture ET son quiz suivent. */}
         <div className="flex shrink-0 items-center gap-1">
@@ -72,7 +95,7 @@ export function EvangileView() {
           <p className="text-sm text-ink-3">Chargement du propre du jour…</p>
         ) : !reading ? (
           <p className="text-sm text-ink-3">
-            Propre du jour indisponible pour l’instant{error ? ` (${error})` : ''}.
+            {ordinaire ? 'Lectures de la messe du jour' : 'Propre du jour'} indisponible{ordinaire ? 's' : ''} pour l’instant{error ? ` (${error})` : ''}.
           </p>
         ) : (
           <>
@@ -80,8 +103,7 @@ export function EvangileView() {
               <Badge tone="sun">Évangile</Badge>
               <h2 className="font-semibold">{reading.ref}</h2>
               {duMissel && <span className="text-sm capitalize text-ink-3">— {misselTitre(jour)}</span>}
-              {!duMissel && mass?.name && <span className="text-sm text-ink-3">— {mass.name}</span>}
-            </div>
+              {!duMissel && mass?.name && <span className="text-sm text-ink-3">— {mass.name}</span>}            </div>
 
             {/* Citation courte — c'est celle qui s'affiche sur l'accueil. */}
             <blockquote className="border-l-2 border-sun/50 pl-3 text-[15px] italic leading-relaxed text-ink">
@@ -100,6 +122,8 @@ export function EvangileView() {
                     Propre du jour selon le missel de 1962{jour?.titreLatin ? ` — ${jour.titreLatin}` : ''}.
                     {jour?.langue === 'la' && ' Traduction française indisponible pour ce jour : texte latin.'}
                   </>
+                ) : ordinaire ? (
+                  <>Lectures de la messe du jour (lectionnaire actuel, AELF).</>
                 ) : (
                   <>Propre du missel injoignable{error ? ` (${error})` : ''} : lectures AELF affichées à la place.</>
                 )}
@@ -109,12 +133,14 @@ export function EvangileView() {
         )}
       </Card>
 
-      {reading && <SenseQuizCard reading={reading} />}
+      {/* La clé remet le quiz à zéro dès que le passage change (autre jour, autre
+          forme de messe) : sans elle, il resterait celui du passage précédent. */}
+      {reading && <SenseQuizCard key={reading.ref} reading={reading} />}
 
       {/* Révision de la semaine écoulée : ouverte le dimanche, disponible
           jusqu'au samedi suivant. */}
       {semaineOuverte
-        ? <SemaineQuizCard onClose={() => setSemaineOuverte(false)} />
+        ? <SemaineQuizCard key={forme} forme={forme} onClose={() => setSemaineOuverte(false)} />
         : (
           <button onClick={() => setSemaineOuverte(true)}
             className="btn-ghost flex w-full items-center justify-center gap-2 rounded-xl border border-line py-2.5 text-sm">
@@ -140,7 +166,7 @@ function SenseQuizCard({ reading }: { reading: MassReading }) {
   const [quizBusy, setQuizBusy] = useState(false)
   const [quizError, setQuizError] = useState<string | null>(null)
   const inflight = useRef<Set<number>>(new Set())
-  const autoStarted = useRef(false)
+  const initialise = useRef(false)
   const maxLevelRef = useRef(maxLevel)
   useEffect(() => { maxLevelRef.current = maxLevel }, [maxLevel])
 
@@ -186,6 +212,7 @@ function SenseQuizCard({ reading }: { reading: MassReading }) {
   }
 
   // Prépare un niveau en arrière-plan sans l'ouvrir (pré-génération silencieuse).
+  // Seul « Lancer le quizz » (ou l'ouverture d'un niveau) y mène : jamais l'arrivée sur la page.
   const prefetchLevel = (level: number) => { if (level <= MAX_LEVEL) void generateLevel(level, true) }
 
   // Ouvre un niveau (depuis le cache = gratuit, sinon 1 génération). Le niveau
@@ -200,11 +227,12 @@ function SenseQuizCard({ reading }: { reading: MassReading }) {
     }
   }
 
-  // À l'ouverture : on repart TOUJOURS au niveau 1. Si la dernière session date
-  // de ≥ 1 h (ou passage différent), on purge le cache pour régénérer un quiz frais.
+  // À l'ouverture : RIEN n'est généré (chaque génération coûte de l'API). Si la
+  // dernière session date de ≥ 1 h (ou passage différent), on purge le cache :
+  // le prochain « Lancer le quizz » repart au niveau 1 avec un quiz frais.
   useEffect(() => {
-    if (autoStarted.current) return
-    autoStarted.current = true
+    if (initialise.current) return
+    initialise.current = true
     const ts = Number(localStorage.getItem(GENTS_KEY(ref)) || 0)
     if (!ts || Date.now() - ts >= RESET_MS) {
       for (let l = 1; l <= maxLevelRef.current; l++) localStorage.removeItem(QUIZ_KEY(ref, l))
@@ -212,7 +240,6 @@ function SenseQuizCard({ reading }: { reading: MassReading }) {
       maxLevelRef.current = 0; setMaxLevel(0)
       localStorage.setItem(GENTS_KEY(ref), String(Date.now()))
     }
-    void startLevel(1)
   }, [ref]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -221,7 +248,8 @@ function SenseQuizCard({ reading }: { reading: MassReading }) {
       <p className="mt-0.5 text-xs text-ink-3">
         5 questions par niveau : 3 sur le sens et la leçon du passage, 2 textes à trous sur le verset
         clé. Chaque niveau creuse davantage,
-        jusqu’au niveau {MAX_LEVEL}. Les niveaux déjà joués se rejouent sans coût.
+        jusqu’au niveau {MAX_LEVEL}. Rien n’est généré avant ton clic ; une fois un niveau ouvert,
+        le suivant se prépare en avance. Les niveaux déjà joués se rejouent sans coût.
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -360,7 +388,7 @@ function Quiz({ quiz, level, onReplay }: {
  *  il s'agit de revoir ce qui a été travaillé, pas de recommencer une montée.
  *  Numérotés 5 à 10 — ils prolongent les 4 niveaux de l'évangile du jour.
  *  Ouverte le dimanche, elle reste disponible jusqu'au samedi suivant. */
-function SemaineQuizCard({ onClose }: { onClose: () => void }) {
+function SemaineQuizCard({ forme, onClose }: { forme: FormeMesse; onClose: () => void }) {
   const s = useHorizon()
   const semaine = useMemo(() => revisionWeek(new Date()), [])
   type JourEvangile = { date: string; ref: string; texte: string }
@@ -372,14 +400,17 @@ function SemaineQuizCard({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
 
-  // Les six évangiles (fetchMissel garde chaque jour en cache local).
+  // Les six évangiles (fetchMissel et fetchMass gardent chaque jour en cache local).
   useEffect(() => {
     let vivant = true
     setChargement(true)
     void Promise.all(semaine.days.map(async (d): Promise<JourEvangile | null> => {
-      // Même repli que pour la lecture du jour : AELF si le propre est injoignable.
+      // Messe actuelle : AELF directement. Missel de 1962 : son propre, avec le
+      // même repli que la lecture du jour (AELF si le propre est injoignable).
       let ev: MassReading | undefined
-      try { ev = misselReading(await fetchMissel(d), 'evangile') } catch { /* repli */ }
+      if (forme === 'extraordinaire') {
+        try { ev = misselReading(await fetchMissel(d), 'evangile') } catch { /* repli */ }
+      }
       if (!ev) {
         try { ev = readingOfDay(await fetchMass(d), 'evangile') } catch { /* jour sans lecture */ }
       }
@@ -392,7 +423,7 @@ function SemaineQuizCard({ onClose }: { onClose: () => void }) {
     const j = jours[i]
     if (!j) return
     setErreur(null)
-    const cle = WEEK_KEY(semaine.sunday, i)
+    const cle = WEEK_KEY(forme, semaine.sunday, i)
     const cache = localStorage.getItem(cle)
     if (cache) {
       try {
