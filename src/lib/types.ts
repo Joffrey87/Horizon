@@ -514,7 +514,10 @@ export interface FinAccount {
   subtype: string | null
   owner: FinOwner
   in_budget: boolean          // ses opérations comptent dans le budget
-  balance: number             // négatif pour un prêt
+  balance: number             // valeur retenue (saisie ou source) ; négatif pour un prêt
+  balance_source: number | null      // dernière valeur reçue de la source (Finary)
+  balance_manual_at: string | null   // non nul : valeur saisie dans Horizon, l'import n'y touche plus
+  acquired_on: string | null         // date d'achat d'un bien immobilier
   balance_at: string | null
   archived: boolean
   sort_order: number

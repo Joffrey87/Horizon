@@ -438,21 +438,44 @@ export interface PointComposition {
 }
 
 /**
+ * Historique réécrit d'après les valeurs retenues dans Horizon :
+ * - immobilier : chaque bien compte sa valeur d'aujourd'hui (saisie ou Finary) depuis sa
+ *   date d'achat — une réévaluation ne crée plus de marche dans le passé ;
+ * - prêt saisi : l'écart avec Finary s'applique à partir du jour de la saisie.
+ */
+export function reecriturePatrimoine(accounts: FinAccount[]) {
+  const biens = accounts.filter((a) => !a.archived && a.kind === 'immobilier')
+  const pretsSaisis = accounts.filter((a) => !a.archived && a.kind === 'pret' && a.balance_manual_at && a.balance_source !== null)
+  return {
+    /** Valeur des biens détenus à cette date ; null sans bien (on garde la série Finary). */
+    immobilier: (date: string) => biens.length
+      ? biens.reduce((s, a) => s + (!a.acquired_on || a.acquired_on <= date ? Number(a.balance) : 0), 0)
+      : null,
+    /** À ajouter au capital restant dû de Finary (prêts en positif). */
+    ecartPrets: (date: string) => pretsSaisis.reduce((s, a) =>
+      s + (a.balance_manual_at!.slice(0, 10) <= date ? Number(a.balance_source) - Number(a.balance) : 0), 0),
+  }
+}
+
+/**
  * Patrimoine dans le temps, par composante. Sans la crypto (trop variable), le
- * total l'exclut aussi. L'immobilier est compté net des prêts.
+ * total l'exclut aussi. L'immobilier est compté net des prêts. Avec les comptes,
+ * l'immobilier et les prêts saisis sont réécrits (`reecriturePatrimoine`).
  */
 export function compositionPatrimoine(
   points: { date: string; net: number; immobilier: number | null; prets: number | null; investissements: number | null;
     metaux: number | null; liquidites: number | null; crypto: number | null }[],
   avecCrypto: boolean,
+  accounts: FinAccount[] = [],
 ): PointComposition[] {
+  const r = reecriturePatrimoine(accounts)
   return points.map((p) => {
     if (p.immobilier === null || p.investissements === null) {
       // Ancien point sans composition : le total seul (sans crypto, on ne peut pas la retirer).
       return { date: p.date, parts: null, total: Number(p.net) }
     }
     const parts = {
-      immobilier: Number(p.immobilier) - Number(p.prets ?? 0),
+      immobilier: (r.immobilier(p.date) ?? Number(p.immobilier)) - (Number(p.prets ?? 0) + r.ecartPrets(p.date)),
       investissements: Number(p.investissements),
       metaux: Number(p.metaux ?? 0),
       liquidites: Number(p.liquidites ?? 0),

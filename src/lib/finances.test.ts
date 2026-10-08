@@ -13,7 +13,7 @@ const id = () => `x${++seq}`
 
 const compte = (over: Partial<FinAccount> = {}): FinAccount => ({
   id: id(), user_id: 'u', name: 'Compte', institution: null, kind: 'courant', subtype: null, owner: 'joffrey',
-  in_budget: true, balance: 0, balance_at: null, archived: false, sort_order: 0, source: 'test', external_id: null,
+  in_budget: true, balance: 0, balance_source: null, balance_manual_at: null, acquired_on: null, balance_at: null, archived: false, sort_order: 0, source: 'test', external_id: null,
   created_at: '', ...over,
 })
 const ligne = (name: string, over: Partial<FinLine> = {}): FinLine => ({
@@ -236,6 +236,7 @@ describe('opérations semblables', () => {
 })
 
 describe('composition du patrimoine', () => {
+  // Montants fictifs (dépôt public).
   const point = { date: '2026-10-08', net: 150000, immobilier: 300000, prets: 200000, investissements: 30000, metaux: 10000, liquidites: 2000, crypto: 8000 }
   it('compte l’immobilier net des prêts et retrouve le net Finary avec la crypto', () => {
     const [p] = compositionPatrimoine([point], true)
@@ -248,6 +249,22 @@ describe('composition du patrimoine', () => {
   it('un point sans composition garde son total', () => {
     const [p] = compositionPatrimoine([{ ...point, immobilier: null, investissements: null }], false)
     expect(p).toEqual({ date: '2026-10-08', parts: null, total: 150000 })
+  })
+  it('réécrit l’immobilier : la valeur retenue de chaque bien vaut depuis sa date d’achat', () => {
+    const biens = [
+      compte({ kind: 'immobilier', balance: 120000, acquired_on: '2018-01-01' }),
+      compte({ kind: 'immobilier', balance: 250000, acquired_on: '2023-01-01' }),
+    ]
+    const avant = { ...point, date: '2020-06-01', immobilier: 90000 }    // ancienne estimation Finary
+    const [a, b] = compositionPatrimoine([avant, point], true, biens)
+    expect(a!.parts!.immobilier).toBe(120000 - 200000)
+    expect(b!.parts!.immobilier).toBe(370000 - 200000)
+  })
+  it('un prêt saisi corrige le capital restant dû à partir du jour de la saisie', () => {
+    const pret = compte({ kind: 'pret', balance: -150000, balance_source: -200000, balance_manual_at: '2026-10-01T10:00:00Z' })
+    const [a, b] = compositionPatrimoine([{ ...point, date: '2026-09-30' }, point], true, [pret])
+    expect(a!.parts!.immobilier).toBe(300000 - 200000)
+    expect(b!.parts!.immobilier).toBe(300000 - 150000)
   })
   it('le patrimoine des comptes peut écarter la crypto', () => {
     const p = patrimoine([compte({ balance: 1000 }), compte({ kind: 'crypto', balance: 500 })], false)

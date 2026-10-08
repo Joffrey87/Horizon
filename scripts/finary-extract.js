@@ -54,6 +54,8 @@ await (async () => {
       owner: /\bOU\b/.test(a.name) ? 'commun' : 'joffrey',
       in_budget: comptesBudget.has(a.id),
       balance: kind === 'pret' ? -Math.abs(valeur) : valeur,
+      // Date d'achat d'un bien : l'historique du patrimoine y compte sa valeur depuis cette date.
+      acquired_on: a.real_estates?.[0]?.bought_at ? String(a.real_estates[0].bought_at).slice(0, 10) : null,
     }
   })
 
