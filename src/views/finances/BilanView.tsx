@@ -81,7 +81,7 @@ export function BilanView() {
           </thead>
           <tbody>
             {b.lignes.map((l) => (
-              <tr key={l.cle} className="border-t border-line/60">
+              <tr key={l.cle} className="border-t border-line/60" style={l.ligne?.color ? { background: l.ligne.color } : undefined}>
                 <td className={`py-1.5 pr-2 ${l.ligne ? '' : 'italic text-ink-2'}`}>{l.ligne?.name ?? 'Non classé'}</td>
                 {l.cellules.map((c) => {
                   const depasse = c.budget !== null && c.budget > 0 && c.reel > c.budget + 0.5

@@ -500,6 +500,7 @@ export interface FinLine {
   user_id: UUID
   name: string
   kind: 'depense' | 'epargne'
+  color: string | null        // fond translucide de la ligne (ex. rgba(245, 158, 11, 0.18))
   sort_order: number
   created_at: string
 }

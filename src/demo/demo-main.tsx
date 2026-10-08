@@ -57,7 +57,7 @@ const keyFor = (table: string): keyof ReturnType<typeof useHorizon.getState> => 
 
 /** Valeurs par défaut des tables fin_* (celles de la migration « finances »). */
 const FIN_DEFAUTS: Record<string, Record<string, unknown>> = {
-  fin_lines: { kind: 'depense', sort_order: 0 },
+  fin_lines: { kind: 'depense', sort_order: 0, color: null },
   fin_accounts: { kind: 'autre', owner: 'joffrey', in_budget: false, balance: 0, archived: false, sort_order: 0, source: 'manuel' },
   fin_categories: { parent_id: null, line_id: null, role: 'depense', hidden: false, merged_into: null, manual: false, source: 'manuel' },
   fin_transactions: { label_local: null, category_manual: false, owner: null, internal: false, excluded: false, source: 'manuel' },

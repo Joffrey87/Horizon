@@ -8,6 +8,15 @@ import type { FinCategory, FinLine, FinOwner } from '../../lib/types'
 import { Card } from '../../components/ui'
 import { useArbreCategories, useIndex } from './contexte'
 
+/** Fonds translucides des lignes de budget (variantes « A » choisies sur la page d'aperçu). */
+const COULEURS = [
+  { nom: 'Orange', valeur: 'rgba(245, 158, 11, 0.18)' },
+  { nom: 'Rose', valeur: 'rgba(236, 72, 153, 0.18)' },
+  { nom: 'Violet', valeur: 'rgba(139, 92, 246, 0.20)' },
+  { nom: 'Bleu roi', valeur: 'rgba(65, 105, 225, 0.26)' },
+  { nom: 'Vert', valeur: 'rgba(22, 163, 74, 0.20)' },
+]
+
 const ROLES: { value: FinCategory['role']; label: string }[] = [
   { value: 'depense', label: 'Dépense' }, { value: 'revenu', label: 'Entrée' }, { value: 'hors_budget', label: 'Hors budget' },
 ]
@@ -52,11 +61,19 @@ function Lignes() {
         {triees.map((l) => (
           <li key={l.id} className="flex items-center gap-2 py-1.5 text-sm">
             <input defaultValue={l.name} aria-label="Nom de la ligne" className="field flex-1 !py-1"
+              style={l.color ? { background: l.color } : undefined}
               onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== l.name) void update('fin_lines', l.id, { name: v }) }} />
             <select value={l.kind} onChange={(e) => void update('fin_lines', l.id, { kind: e.target.value })}
               className="field !w-auto !py-1 text-xs" aria-label="Nature">
               <option value="depense">Dépense</option>
               <option value="epargne">Épargne</option>
+            </select>
+            <select value={COULEURS.some((c) => c.valeur === l.color) ? l.color ?? '' : l.color ? 'autre' : ''}
+              onChange={(e) => { if (e.target.value !== 'autre') void update('fin_lines', l.id, { color: e.target.value || null }) }}
+              className="field !w-auto !py-1 text-xs" aria-label="Couleur de la ligne">
+              <option value="">Sans couleur</option>
+              {COULEURS.map((c) => <option key={c.valeur} value={c.valeur}>{c.nom}</option>)}
+              {l.color && !COULEURS.some((c) => c.valeur === l.color) && <option value="autre">Autre</option>}
             </select>
             <button onClick={() => deplacer(l, -1)} className="btn-ghost p-1" aria-label="Monter"><ArrowUp size={12} /></button>
             <button onClick={() => deplacer(l, 1)} className="btn-ghost p-1" aria-label="Descendre"><ArrowDown size={12} /></button>

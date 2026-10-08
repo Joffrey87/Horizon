@@ -41,7 +41,7 @@ export function BudgetView() {
     const ouvert = ouverte === l.cle
     return (
       <Fragment key={l.cle}>
-        <tr className="border-t border-line/60 hover:bg-panel-2/50">
+        <tr className="border-t border-line/60 hover:bg-panel-2/50" style={l.ligne?.color ? { background: l.ligne.color } : undefined}>
           <td className="py-2 pr-2">
             <button onClick={() => setOuverte(ouvert ? null : l.cle)} className="flex items-center gap-1.5 text-left">
               {ouvert ? <ChevronDown size={14} className="text-ink-3" /> : <ChevronRight size={14} className="text-ink-3" />}
