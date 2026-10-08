@@ -3,7 +3,8 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { Wallet, BarChart3, ListOrdered, Landmark, PieChart, CalendarClock, Settings2 } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import type { FiltreTitulaire } from '../../lib/finances'
-import { moisCourant, type FinContexte } from './contexte'
+import { FINANCES_PARTAGEES } from '../../lib/partage'
+import { moisCourant, useVue, type FinContexte } from './contexte'
 
 const TABS = [
   { to: '/finances', label: 'Budget', icon: Wallet, end: true },
@@ -27,11 +28,14 @@ export function FinancesLayout() {
   useEffect(() => { void loadFinances().finally(() => setEssaye(true)) }, [loadFinances])
   const charge = dejaCharge || essaye
   const contexte: FinContexte = { mois, setMois, filtre, setFiltre }
+  // Vue partagée : budget, bilan et patrimoine seulement.
+  const vue = useVue()
+  const onglets = vue ? TABS.filter((t) => FINANCES_PARTAGEES.includes(t.to)) : TABS
 
   return (
     <div className="fin-voile pt-4">
       <nav className="mb-3 flex flex-wrap gap-1.5 border-b border-line pb-3">
-        {TABS.map(({ to, label, icon: Icon, end }) => (
+        {onglets.map(({ to, label, icon: Icon, end }) => (
           <NavLink key={to} to={to} end={end}
             className={({ isActive }) =>
               `flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${

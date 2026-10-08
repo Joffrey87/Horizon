@@ -6,7 +6,7 @@ import {
 } from '../../lib/finances'
 import { EmptyState, ProgressBar } from '../../components/ui'
 import { FiltreSeg, LigneOperation, MontantEditable, NavMois, Tuile } from './partage'
-import { useFin, useIndex } from './contexte'
+import { useFin, useIndex, useVue } from './contexte'
 
 /** Le tableau de bord du mois : budget, réel, reste, M-1, moyenne 6 mois, prévisionnel M+1. */
 export function BudgetView() {
@@ -17,6 +17,8 @@ export function BudgetView() {
   const setFinBudget = useHorizon((s) => s.setFinBudget)
   const idx = useIndex()
   const [ouverte, setOuverte] = useState<string | null>(null)
+  // Vue partagée : les budgets et le prévisionnel restent ceux du propriétaire.
+  const modifiable = !useVue()
 
   const agregat = useMemo(() => agreger(transactions, idx, filtre), [transactions, idx, filtre])
   const s = useMemo(() => syntheseMois({ mois, lines, budgets, agregat, filtre }), [mois, lines, budgets, agregat, filtre])
@@ -49,7 +51,9 @@ export function BudgetView() {
             </button>
           </td>
           <td className="px-2 text-right">
-            {l.ligne && foyer
+            {l.ligne && foyer && !modifiable
+              ? <span className="tabular-nums">{l.budget === null ? '—' : euros(l.budget)}</span>
+              : l.ligne && foyer
               ? <MontantEditable valeur={l.budget} titre={`Budget à partir de ${libelleMois(mois)} (les mois passés gardent le leur)`}
                   onSave={(v) => void setFinBudget(l.ligne!.id, 'budget', `${mois}-01`, v)} />
               : <span className="text-ink-3">—</span>}
@@ -65,7 +69,9 @@ export function BudgetView() {
           <td className="px-2 text-right tabular-nums text-ink-2">{euros(l.precedent)}</td>
           <td className="px-2 text-right tabular-nums text-ink-2">{euros(l.moyenne6)}</td>
           <td className="pl-2 text-right">
-            {l.ligne && foyer
+            {l.ligne && foyer && !modifiable
+              ? <span className="tabular-nums text-ink-2">{l.prevision === null ? '—' : euros(l.prevision)}</span>
+              : l.ligne && foyer
               ? <MontantEditable valeur={l.prevision} discret={!l.previsionSaisie}
                   titre={l.previsionSaisie ? `Prévu pour ${libelleMois(suivant)}` : `Reprend le budget — clique pour prévoir ${libelleMois(suivant)}`}
                   onSave={(v) => void setFinBudget(l.ligne!.id, 'prevision', `${suivant}-01`, v)} />

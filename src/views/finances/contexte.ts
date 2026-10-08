@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { useHorizon } from '../../lib/store'
+import { useHorizon, vueCourante } from '../../lib/store'
 import { creerReconnaissance, indexer, moisDe, type FiltreTitulaire, type IndexFinances } from '../../lib/finances'
 import type { FinCategory } from '../../lib/types'
 import { todayIso } from '../../lib/logic'
@@ -18,6 +18,9 @@ export interface FinContexte {
 export const useFin = () => useOutletContext<FinContexte>()
 
 export const moisCourant = () => moisDe(todayIso())
+
+/** Vue partagée en cours (compte invité ou aperçu), sinon null. */
+export const useVue = () => useHorizon((s) => vueCourante(s))
 
 /** Index comptes / catégories / lignes, recalculé seulement quand ils changent. */
 export function useIndex(): IndexFinances {

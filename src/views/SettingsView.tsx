@@ -8,6 +8,7 @@ import { bilanUsage, fmtUsd } from '../lib/aiUsage'
 import { todayIso } from '../lib/logic'
 import type { AiUsage } from '../lib/types'
 import { Card, DomainDot } from '../components/ui'
+import { PartageCard } from '../components/PartageCard'
 
 export function SettingsView() {
   const s = useHorizon()
@@ -115,6 +116,8 @@ export function SettingsView() {
           Marque les 15 grandes fêtes (✝) dans le calendrier « Temps ». Les jours de fête travaillés ou en séjour rejoignent aussi la recherche de messe.
         </p>
       </Card>
+
+      <PartageCard />
 
       <Card title="Limitation du travail en cours">
         <label className="block space-y-1 text-xs text-ink-3">

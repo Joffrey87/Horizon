@@ -150,3 +150,10 @@ input::placeholder, textarea::placeholder { color: var(--color-ink-3); }
   background: color-mix(in srgb, var(--color-panel) 55%, transparent);
   border-color: color-mix(in srgb, var(--color-line-2) 60%, transparent);
 }
+
+/* « Temps » en vue partagée (lecture seule) : pas de bouton d'ajout ni de case
+   « fait », rien ne se déplace. */
+.temps-lecture [aria-label="Ajouter une tâche"],
+.temps-lecture [aria-label="Marquer fait"],
+.temps-lecture [aria-label="Marquer à faire"] { display: none; }
+.temps-lecture [draggable="true"] { cursor: default; }

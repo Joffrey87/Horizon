@@ -47,6 +47,7 @@ const KEY: Record<string, keyof ReturnType<typeof useHorizon.getState>> = {
   fin_lines: 'finLines', fin_accounts: 'finAccounts', fin_categories: 'finCategories',
   fin_transactions: 'finTransactions', fin_budgets: 'finBudgets', fin_networth: 'finNetworth',
   fin_holdings: 'finHoldings', fin_targets: 'finTargets', fin_dca: 'finDca', fin_planned: 'finPlanned', fin_labels: 'finLabels',
+  partages: 'partages',
 }
 /** Clé du store pour une table Supabase — lève si la table n'est pas gérée en démo. */
 const keyFor = (table: string): keyof ReturnType<typeof useHorizon.getState> => {

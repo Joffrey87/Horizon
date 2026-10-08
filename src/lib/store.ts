@@ -8,10 +8,11 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import { capturesEnAttente, depiler } from './capture'
 import { messageFonction } from './functionError'
+import { ecriturePermise, projetsVisibles, tachesVisibles, vueActive } from './partage'
 import type {
   Birthday, CalendarFeed, CelesteProposal, CelesteRules, Check, Domain, FinAccount, FinBudget, FinCategory, FinDca,
   FinHolding, FinLabel, FinLine, FinNetworth, FinPlanned, FinTarget, FinTransaction, GospelQuiz, Habit, HabitLog, Idea, Layout,
-  NewsDigest, NewsKind, NewsTopic, Objective, OlafatcoJob, Project, PropositionAgenda, Review, Settings, ShoppingItem,
+  NewsDigest, NewsKind, NewsTopic, Objective, OlafatcoJob, Partage, Project, PropositionAgenda, Review, Settings, ShoppingItem,
   ShoppingList, Step, Task,
 } from './types'
 
@@ -22,6 +23,7 @@ type Table =
   | 'celeste_proposals'
   | 'fin_lines' | 'fin_accounts' | 'fin_categories' | 'fin_transactions' | 'fin_budgets' | 'fin_networth'
   | 'fin_holdings' | 'fin_targets' | 'fin_dca' | 'fin_planned' | 'fin_labels'
+  | 'partages'
 
 interface HorizonState {
   session: Session | null
@@ -74,6 +76,10 @@ interface HorizonState {
   finPlanned: FinPlanned[]
   /** Règles d'intitulés locaux (motif → intitulé affiché). */
   finLabels: FinLabel[]
+  /** Partages d'onglets : ceux que je donne et celui que je reçois (RLS). */
+  partages: Partage[]
+  /** Aperçu « Voir comme… » du propriétaire : id du partage regardé, ou null. */
+  apercu: string | null
 
   init: () => Promise<void>
   loadAll: () => Promise<void>
@@ -87,6 +93,8 @@ interface HorizonState {
   cycleHabitDay: (habitId: string, date: string) => Promise<void>
   refreshNews: (mode?: NewsKind) => Promise<{ ok: boolean; updated?: number; error?: string }>
   resetShopping: (listId: string) => Promise<void>
+  /** Entre dans l'aperçu d'un partage (ou en sort avec null) et recharge les données. */
+  setApercu: (partageId: string | null) => Promise<void>
   /** Charge (ou recharge) toutes les tables fin_*. Sans `force`, ne relit pas ce qui l'est déjà. */
   loadFinances: (force?: boolean) => Promise<void>
   /** Budget (à partir de ce mois) ou prévisionnel (ce mois seul) d'une ligne ; null efface. */
@@ -123,7 +131,14 @@ const COLLECTION: Record<Table, keyof HorizonState> = {
   fin_lines: 'finLines', fin_accounts: 'finAccounts', fin_categories: 'finCategories',
   fin_transactions: 'finTransactions', fin_budgets: 'finBudgets', fin_networth: 'finNetworth',
   fin_holdings: 'finHoldings', fin_targets: 'finTargets', fin_dca: 'finDca', fin_planned: 'finPlanned', fin_labels: 'finLabels',
+  partages: 'partages',
 }
+
+/** La vue partagée en cours (reçue, ou aperçu du propriétaire), sinon null. */
+export const vueCourante = (s: { partages: Partage[]; session: Session | null; apercu: string | null }) =>
+  vueActive({ partages: s.partages, moi: s.session?.user.id ?? null, apercu: s.apercu })
+
+const LECTURE_SEULE = 'Lecture seule : cette vue partagée ne permet pas de modifier cela.'
 
 /** Les vides de l'onglet Finances (état initial et déconnexion). */
 const FIN_VIDE = {
@@ -149,7 +164,7 @@ const TABLES = [
   'domaines', 'objectifs', 'projets', 'étapes', 'tâches', 'idées', 'habitudes',
   'suivi des habitudes', 'revues', 'dispositions', 'réglages', 'anniversaires',
   'vérifications', 'heures de contrôle', "sujets d'actualité", 'synthèses',
-  'listes de courses', 'articles', 'agendas', 'règles Céleste', 'remplas Céleste',
+  'listes de courses', 'articles', 'agendas', 'règles Céleste', 'remplas Céleste', 'partages',
 ]
 
 export const useHorizon = create<HorizonState>((set, get) => ({
@@ -163,7 +178,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
   newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], calendarFeeds: [],
   propositionsAgenda: [], celesteRules: null, celesteProposals: [], settings: null,
-  ...FIN_VIDE,
+  ...FIN_VIDE, partages: [], apercu: null,
 
   init: async () => {
     const { data } = await supabase.auth.getSession()
@@ -179,7 +194,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
           habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
           newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], calendarFeeds: [],
           celesteRules: null, celesteProposals: [], settings: null,
-          ...FIN_VIDE,
+          ...FIN_VIDE, partages: [], apercu: null,
         })
       }
     })
@@ -192,6 +207,8 @@ export const useHorizon = create<HorizonState>((set, get) => ({
 
   loadAll: async () => {
     set({ loading: true, error: null })
+    // Un compte invité rejoint le partage prévu pour son e-mail (confirmé) ; sans effet sinon.
+    await supabase.rpc('rejoindre_partage')
     // Des fabriques et non des promesses : on doit pouvoir relancer une requête.
     // L'ordre est celui de la déstructuration ci-dessous — ne pas y toucher.
     const requetes = [
@@ -216,6 +233,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       () => supabase.from('calendar_feeds').select('*').order('created_at'),
       () => supabase.from('celeste_rules').select('*').maybeSingle(),
       () => supabase.from('celeste_proposals').select('*').order('date'),
+      () => supabase.from('partages').select('*').order('created_at'),
     ]
     type Reponse = { data: unknown; error: { message?: string } | null }
     const lancer = (i: number) => requetes[i]!() as unknown as Promise<Reponse>
@@ -232,7 +250,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
         responses.map((r, i) => (r.error ? lancer(i) : Promise.resolve(r))),
       )
     }
-    const [dom, obj, pro, stp, tas, ide, hab, log, rev, lay, setg, bd, chk, oja, nto, ndi, shl, shi, cal, cru, cpr] = responses
+    const [dom, obj, pro, stp, tas, ide, hab, log, rev, lay, setg, bd, chk, oja, nto, ndi, shl, shi, cal, cru, cpr, prt] = responses
     // Une table en échec conserve ce qui était déjà chargé : mieux vaut un écran
     // incomplet et signalé qu'un compte qui paraît vide.
     const prev = get()
@@ -258,18 +276,31 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       olafatcoJobs: keep(oja, prev.olafatcoJobs), newsTopics: keep(nto, prev.newsTopics),
       newsDigests: keep(ndi, prev.newsDigests), shoppingLists: keep(shl, prev.shoppingLists),
       shoppingItems: keep(shi, prev.shoppingItems), calendarFeeds: keep(cal, prev.calendarFeeds),
-      celesteProposals: keep(cpr, prev.celesteProposals),
+      celesteProposals: keep(cpr, prev.celesteProposals), partages: keep(prt, prev.partages),
       celesteRules: !cru || cru.error ? prev.celesteRules : ((cru.data as CelesteRules | null) ?? null),
       settings: !setg || setg.error ? prev.settings : ((setg.data as Settings | null) ?? null),
       loading: false,
       error: failed.length === 0 ? null : message,
     })
-    if (failed.length === 0) void get().flushCaptures()
+    // Vue partagée : on n'affiche que ce que le partage ouvre (la base l'applique déjà
+    // pour le membre ; l'aperçu du propriétaire, lui, a tout chargé).
+    const vue = vueCourante(get())
+    if (vue) {
+      set({
+        tasks: tachesVisibles(get().tasks, vue), projects: projetsVisibles(get().projects, vue),
+        layouts: [], checks: [], celesteProposals: [], propositionsAgenda: [],
+      })
+    }
+    if (failed.length === 0 && !vue) void get().flushCaptures()
   },
 
   insert: async (table, values) => {
-    const user_id = get().session?.user.id
-    if (!user_id) return null
+    const moi = get().session?.user.id
+    if (!moi) return null
+    const vue = vueCourante(get())
+    if (!ecriturePermise(table, vue)) { set({ error: LECTURE_SEULE }); return null }
+    // Un membre écrit dans les données du propriétaire (ex. une règle d'intitulé).
+    const user_id = vue && vue.member_id === moi ? vue.owner_id : moi
     const { data, error } = await supabase.from(table).insert({ ...values, user_id }).select().single()
     if (error || !data) { set({ error: `Création impossible : ${error?.message ?? 'réponse vide'}` }); return null }
     const key = COLLECTION[table]
@@ -278,6 +309,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   },
 
   update: async (table, id, values) => {
+    if (!ecriturePermise(table, vueCourante(get()))) { set({ error: LECTURE_SEULE }); return null }
     const { data, error } = await supabase.from(table).update(values).eq('id', id).select().single()
     if (error || !data) { set({ error: `Enregistrement impossible : ${error?.message ?? 'réponse vide'}` }); return null }
     const key = COLLECTION[table]
@@ -289,6 +321,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
 
   updateMany: async (table, ids, values) => {
     if (!ids.length) return true
+    if (!ecriturePermise(table, vueCourante(get()))) { set({ error: LECTURE_SEULE }); return false }
     const { data, error } = await supabase.from(table).update(values).in('id', ids).select()
     if (error || !data) { set({ error: `Enregistrement impossible : ${error?.message ?? 'réponse vide'}` }); return false }
     const key = COLLECTION[table]
@@ -298,6 +331,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   },
 
   remove: async (table, id) => {
+    if (!ecriturePermise(table, vueCourante(get()))) { set({ error: LECTURE_SEULE }); return }
     const { error } = await supabase.from(table).delete().eq('id', id)
     if (error) { set({ error: `Suppression impossible : ${error.message}` }); return }
     const key = COLLECTION[table]
@@ -501,6 +535,15 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       else (maj as Record<string, unknown>)[cle] = r.data
     })
     set({ ...maj, finLoaded: echecs.length === 0 || get().finLoaded })
+    // Vue partagée : budget, bilan et patrimoine seulement (opérations des comptes du budget).
+    const vue = vueCourante(get())
+    if (vue) {
+      const budget = new Set(get().finAccounts.filter((a) => a.in_budget).map((a) => a.id))
+      set({
+        finTransactions: get().finTransactions.filter((t) => budget.has(t.account_id)),
+        finHoldings: [], finTargets: [], finDca: [], finPlanned: [],
+      })
+    }
     if (echecs.length) set({ error: `Finances : chargement incomplet — ${echecs.join(', ')}.` })
   },
 
@@ -520,6 +563,12 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       .select().single()
     if (error || !data) { set({ error: `Budget non enregistré : ${error?.message ?? 'réponse vide'}` }); return }
     set({ finBudgets: [...autres, data as FinBudget] })
+  },
+
+  setApercu: async (partageId) => {
+    set({ apercu: partageId })
+    await get().loadAll()
+    if (get().finLoaded) await get().loadFinances(true)
   },
 
   clearRecovery: () => set({ recovery: false }),

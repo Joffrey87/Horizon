@@ -633,3 +633,18 @@ export interface FinPlanned {
   note: string | null
   created_at: string
 }
+
+/** Partage d'onglets avec un autre compte (table `partages`, appliqué par RLS). */
+export interface Partage {
+  id: UUID
+  owner_id: UUID
+  member_email: string
+  member_name: string | null
+  member_id: UUID | null       // relié quand le membre s'est inscrit (e-mail confirmé)
+  actif: boolean               // validé par le propriétaire : rien n'est lisible avant
+  onglets: ('finances' | 'temps')[]
+  finances_classer: boolean    // ranger les opérations (catégorie, titulaire, intitulé)
+  temps_projets_masques: UUID[]
+  temps_taches_masquees: boolean // Temps : évènements seulement
+  created_at: string
+}
