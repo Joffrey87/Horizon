@@ -174,6 +174,14 @@ function DetailLigne({ cle }: { cle: string }) {
   const [ouverts, setOuverts] = useState<Set<string>>(new Set())
   const groupes = useMemo(() => detailLigne({ cle, mois, transactions, idx, filtre }), [cle, mois, transactions, idx, filtre])
   if (!groupes.length) return <p className="py-2 text-xs text-ink-3">Aucune opération ce mois-ci.</p>
+  // Ligne sans sous-catégorie (Dons, Vacances…) : pas d'étage intermédiaire, les opérations directement.
+  if (groupes.length === 1 && !groupes[0]!.nom.includes(' › ')) {
+    return (
+      <ul className="divide-y divide-line/40">
+        {groupes[0]!.operations.map((tx) => <LigneOperation key={tx.id} tx={tx} idx={idx} />)}
+      </ul>
+    )
+  }
   const total = groupes.reduce((s, g) => s + g.total, 0)
   const nbOperations = groupes.reduce((s, g) => s + g.operations.length, 0)
   const toutOuvert = groupes.every((g) => ouverts.has(g.nom))

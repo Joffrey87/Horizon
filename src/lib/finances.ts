@@ -241,7 +241,8 @@ export function syntheseMois(opts: {
   }
   const lignes = lignesTriees(opts.lines).map((l) => ligne(l.id, l))
   const nc = ligne(NON_CLASSE, null)
-  if (nc.reel || nc.precedent || nc.moyenne6) lignes.push(nc)
+  // « Non classé » n'apparaît que s'il reste des opérations à classer ce mois-ci.
+  if (Math.abs(nc.reel) >= 0.005) lignes.push(nc)
   const somme = (f: (l: LigneBudget) => number | null) => lignes.reduce((s, l) => s + (f(l) ?? 0), 0)
   return {
     mois, lignes,

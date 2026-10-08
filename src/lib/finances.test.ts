@@ -142,6 +142,11 @@ describe('synthèse du mois', () => {
     expect(s.total.budget).toBe(2050)
   })
 
+  it('ne montre « Non classé » que s’il reste des opérations à classer ce mois-ci', () => {
+    const sept = syntheseMois({ mois: '2026-09', lines, budgets, agregat: agreger(tx, idx, 'foyer'), filtre: 'foyer' })
+    expect(sept.lignes.some((l) => l.cle === NON_CLASSE)).toBe(false)
+  })
+
   it('filtre par titulaire (compte, ou correction sur l’opération) sans budget', () => {
     const commun = syntheseMois({ mois: '2026-10', lines, budgets, agregat: agreger(tx, idx, 'commun'), filtre: 'commun' })
     expect(commun.lignes.find((l) => l.cle === courses.id)!.reel).toBe(130)
