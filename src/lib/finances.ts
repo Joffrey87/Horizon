@@ -310,7 +310,8 @@ export function bilan(opts: {
 // ---------- Détail d'une ligne ----------
 
 export interface GroupeCategorie {
-  nom: string
+  nom: string                // « Parent › Sous-catégorie » (clé du groupe)
+  court: string               // la sous-catégorie seule, pour l'affichage
   total: number               // dépensé (sorties positives)
   operations: FinTransaction[]
 }
@@ -326,9 +327,10 @@ export function detailLigne(opts: {
     const c = classer(tx, idx)
     const k = c.type === 'ligne' ? c.ligne : c.type === 'non_classe' ? NON_CLASSE : null
     if (k !== cle) continue
-    const nom = nomCategorie(tx.category_id ? idx.categories.get(tx.category_id) : undefined, idx)
+    const cat = tx.category_id ? idx.categories.get(tx.category_id) : undefined
+    const nom = nomCategorie(cat, idx)
     let g = groupes.get(nom)
-    if (!g) { g = { nom, total: 0, operations: [] }; groupes.set(nom, g) }
+    if (!g) { g = { nom, court: cat?.name ?? 'Sans catégorie', total: 0, operations: [] }; groupes.set(nom, g) }
     g.total -= Number(tx.amount)
     g.operations.push(tx)
   }

@@ -145,6 +145,7 @@ describe('synthèse du mois', () => {
   it('détaille une ligne par catégorie, la plus lourde d’abord', () => {
     const d = detailLigne({ cle: courses.id, mois: '2026-10', transactions: tx, idx, filtre: 'foyer' })
     expect(d.map((g) => [g.nom, g.total])).toEqual([['Alimentation', 220], ['Alimentation › Boulangerie', 30]])
+    expect(d.map((g) => g.court)).toEqual(['Alimentation', 'Boulangerie'])
   })
 
   it('fait le bilan de plusieurs mois avec les dépassements', () => {

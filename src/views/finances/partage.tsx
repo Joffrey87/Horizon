@@ -90,7 +90,7 @@ export function SelectCategorie({ value, onChange, className = '' }: {
       {arbre.map(({ parent, enfants }) => (
         <optgroup key={parent.id} label={parent.name}>
           <option value={parent.id}>{parent.name}</option>
-          {enfants.map((c) => <option key={c.id} value={c.id}>{parent.name} › {c.name}</option>)}
+          {enfants.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </optgroup>
       ))}
     </select>
@@ -104,24 +104,25 @@ export function LigneOperation({ tx, idx, montrerDate = true }: { tx: FinTransac
   const compte = idx.comptes.get(tx.account_id)
   const maj = (values: Record<string, unknown>) => { void update('fin_transactions', tx.id, values) }
   return (
-    <li className={`flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm ${tx.excluded ? 'opacity-50' : ''}`}>
+    <li className={`flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm sm:flex-nowrap ${tx.excluded ? 'opacity-50' : ''}`}>
       {montrerDate && <span className="w-14 shrink-0 text-xs tabular-nums text-ink-3">{dateCourte(tx.date)}</span>}
-      <span className="min-w-0 flex-1">
-        <span className="block truncate" title={tx.label}>{tx.label || '(sans libellé)'}</span>
-        <span className="block truncate text-[11px] text-ink-3">
-          {compte?.name ?? '?'}{tx.internal ? ' · virement interne' : ''}{tx.category_manual ? ' · classée à la main' : ''}
-        </span>
+      {/* Intitulé raccourci : l'intitulé complet (et le compte) au survol. */}
+      <span className="w-40 min-w-0 shrink-0 sm:w-52"
+        title={`${tx.label}
+${compte?.name ?? ''}${tx.internal ? ' · virement interne' : ''}${tx.category_manual ? ' · classée à la main' : ''}`}>
+        <span className="block truncate">{tx.label || '(sans libellé)'}</span>
       </span>
-      <SelectCategorie value={tx.category_id} className="!w-auto max-w-[13rem]"
+      <span className={`w-24 shrink-0 text-right font-medium tabular-nums ${Number(tx.amount) > 0 ? 'text-[#4cc79a]' : ''}`}>
+        {Number(tx.amount) > 0 ? '+' : ''}{euros(Number(tx.amount), true)}
+      </span>
+      <span className="hidden flex-1 sm:block" />
+      <SelectCategorie value={tx.category_id} className="!w-auto max-w-[11rem]"
         onChange={(id) => maj({ category_id: id, category_manual: true })} />
       <select value={tx.owner ?? ''} onChange={(e) => maj({ owner: (e.target.value || null) as FinOwner | null })}
         className="field !w-auto !py-1 text-xs" aria-label="Titulaire">
         <option value="">{compte ? `Compte (${TITULAIRES[compte.owner]})` : 'Compte'}</option>
         {(Object.keys(TITULAIRES) as FinOwner[]).map((o) => <option key={o} value={o}>{TITULAIRES[o]}</option>)}
       </select>
-      <span className={`w-24 shrink-0 text-right tabular-nums ${Number(tx.amount) > 0 ? 'text-[#4cc79a]' : ''}`}>
-        {Number(tx.amount) > 0 ? '+' : ''}{euros(Number(tx.amount), true)}
-      </span>
       <button onClick={() => maj({ excluded: !tx.excluded })} className="btn-ghost p-1"
         title={tx.excluded ? 'Remettre dans le budget' : 'Écarter du budget'}
         aria-label={tx.excluded ? 'Remettre dans le budget' : 'Écarter du budget'}>

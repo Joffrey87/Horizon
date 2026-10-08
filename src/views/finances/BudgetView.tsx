@@ -182,7 +182,7 @@ function DetailLigne({ cle }: { cle: string }) {
       <ul className="divide-y divide-line/40">
         {groupes.map((g) => (
           <li key={g.nom} className="flex items-center gap-3 py-1.5 text-sm">
-            <span className="min-w-0 flex-1 truncate" title={g.nom}>{g.nom}</span>
+            <span className="min-w-0 flex-1 truncate" title={g.nom}>{g.court}</span>
             <span className="hidden w-32 sm:block">
               {total > 0 && g.total > 0 && <ProgressBar value={(g.total / total) * 100} color="var(--color-teal)" />}
             </span>
@@ -204,7 +204,7 @@ function DetailLigne({ cle }: { cle: string }) {
           {groupes.map((g) => (
             <div key={g.nom}>
               <p className="flex justify-between border-b border-line/60 py-1 text-xs text-ink-2">
-                <span>{g.nom}</span><span className="tabular-nums">{euros(g.total)}</span>
+                <span>{g.court}</span><span className="tabular-nums">{euros(g.total)}</span>
               </p>
               <ul className="divide-y divide-line/40">
                 {g.operations.map((tx) => <LigneOperation key={tx.id} tx={tx} idx={idx} />)}
