@@ -9,7 +9,8 @@ import { supabase } from './supabase'
 import { capturesEnAttente, depiler } from './capture'
 import { messageFonction } from './functionError'
 import type {
-  Birthday, CalendarFeed, CelesteProposal, CelesteRules, Check, Domain, GospelQuiz, Habit, HabitLog, Idea, Layout,
+  Birthday, CalendarFeed, CelesteProposal, CelesteRules, Check, Domain, FinAccount, FinBudget, FinCategory, FinDca,
+  FinHolding, FinLine, FinNetworth, FinPlanned, FinTarget, FinTransaction, GospelQuiz, Habit, HabitLog, Idea, Layout,
   NewsDigest, NewsKind, NewsTopic, Objective, OlafatcoJob, Project, PropositionAgenda, Review, Settings, ShoppingItem,
   ShoppingList, Step, Task,
 } from './types'
@@ -19,6 +20,8 @@ type Table =
   | 'habits' | 'habit_logs' | 'reviews' | 'layouts' | 'birthdays' | 'checks' | 'olafatco_jobs'
   | 'news_topics' | 'news_digests' | 'shopping_lists' | 'shopping_items' | 'calendar_feeds'
   | 'celeste_proposals'
+  | 'fin_lines' | 'fin_accounts' | 'fin_categories' | 'fin_transactions' | 'fin_budgets' | 'fin_networth'
+  | 'fin_holdings' | 'fin_targets' | 'fin_dca' | 'fin_planned'
 
 interface HorizonState {
   session: Session | null
@@ -56,6 +59,19 @@ interface HorizonState {
   celesteRules: CelesteRules | null
   celesteProposals: CelesteProposal[]
   settings: Settings | null
+  /** Finances : chargées à la première ouverture de l'onglet, pas au démarrage
+   *  (des milliers d'opérations que les autres pages n'utilisent pas). */
+  finLoaded: boolean
+  finLines: FinLine[]
+  finAccounts: FinAccount[]
+  finCategories: FinCategory[]
+  finTransactions: FinTransaction[]
+  finBudgets: FinBudget[]
+  finNetworth: FinNetworth[]
+  finHoldings: FinHolding[]
+  finTargets: FinTarget[]
+  finDca: FinDca[]
+  finPlanned: FinPlanned[]
 
   init: () => Promise<void>
   loadAll: () => Promise<void>
@@ -67,6 +83,10 @@ interface HorizonState {
   cycleHabitDay: (habitId: string, date: string) => Promise<void>
   refreshNews: (mode?: NewsKind) => Promise<{ ok: boolean; updated?: number; error?: string }>
   resetShopping: (listId: string) => Promise<void>
+  /** Charge (ou recharge) toutes les tables fin_*. Sans `force`, ne relit pas ce qui l'est déjà. */
+  loadFinances: (force?: boolean) => Promise<void>
+  /** Budget (à partir de ce mois) ou prévisionnel (ce mois seul) d'une ligne ; null efface. */
+  setFinBudget: (lineId: string, kind: 'budget' | 'prevision', month: string, amount: number | null) => Promise<void>
   /** Relit les agendas externes : met à jour les évènements déjà acceptés et
    *  remplit `propositionsAgenda` avec les nouveautés — sans rien importer. */
   syncAgenda: () => Promise<{ ok: boolean; propositions?: number; error?: string }>
@@ -96,6 +116,28 @@ const COLLECTION: Record<Table, keyof HorizonState> = {
   shopping_lists: 'shoppingLists', shopping_items: 'shoppingItems',
   calendar_feeds: 'calendarFeeds',
   celeste_proposals: 'celesteProposals',
+  fin_lines: 'finLines', fin_accounts: 'finAccounts', fin_categories: 'finCategories',
+  fin_transactions: 'finTransactions', fin_budgets: 'finBudgets', fin_networth: 'finNetworth',
+  fin_holdings: 'finHoldings', fin_targets: 'finTargets', fin_dca: 'finDca', fin_planned: 'finPlanned',
+}
+
+/** Les vides de l'onglet Finances (état initial et déconnexion). */
+const FIN_VIDE = {
+  finLoaded: false, finLines: [], finAccounts: [], finCategories: [], finTransactions: [], finBudgets: [],
+  finNetworth: [], finHoldings: [], finTargets: [], finDca: [], finPlanned: [],
+}
+
+/** Lit une table en entier : PostgREST plafonne une réponse à 1000 lignes. */
+async function toutLire(table: string, ordre: string, croissant = true): Promise<{ data: unknown[]; error: string | null }> {
+  const PAGE = 1000
+  const data: unknown[] = []
+  for (let de = 0; ; de += PAGE) {
+    const r = await supabase.from(table).select('*').order(ordre, { ascending: croissant }).order('id')
+      .range(de, de + PAGE - 1)
+    if (r.error) return { data, error: r.error.message }
+    data.push(...(r.data ?? []))
+    if ((r.data ?? []).length < PAGE) return { data, error: null }
+  }
 }
 
 /** Noms lisibles des collections, dans l'ordre des requêtes de `loadAll`. */
@@ -117,6 +159,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
   newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], calendarFeeds: [],
   propositionsAgenda: [], celesteRules: null, celesteProposals: [], settings: null,
+  ...FIN_VIDE,
 
   init: async () => {
     const { data } = await supabase.auth.getSession()
@@ -132,6 +175,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
           habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
           newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], calendarFeeds: [],
           celesteRules: null, celesteProposals: [], settings: null,
+          ...FIN_VIDE,
         })
       }
     })
@@ -420,6 +464,47 @@ export const useHorizon = create<HorizonState>((set, get) => ({
     const { error } = await supabase.from('shopping_items').update({ checked: false }).eq('list_id', listId)
     if (error) { set({ error: `Liste non réinitialisée : ${error.message}` }); return }
     set({ shoppingItems: get().shoppingItems.map((it) => (it.list_id === listId ? { ...it, checked: false } : it)) })
+  },
+
+  loadFinances: async (force = false) => {
+    if (get().finLoaded && !force) return
+    const lectures: [keyof HorizonState, string, string, boolean?][] = [
+      ['finLines', 'fin_lines', 'sort_order'], ['finAccounts', 'fin_accounts', 'sort_order'],
+      ['finCategories', 'fin_categories', 'name'], ['finTransactions', 'fin_transactions', 'date', false],
+      ['finBudgets', 'fin_budgets', 'month'], ['finNetworth', 'fin_networth', 'date'],
+      ['finHoldings', 'fin_holdings', 'value', false], ['finTargets', 'fin_targets', 'asset_class'],
+      ['finDca', 'fin_dca', 'sort_order'], ['finPlanned', 'fin_planned', 'due_date'],
+    ]
+    const res = await Promise.all(lectures.map(([, table, ordre, croissant]) => toutLire(table, ordre, croissant)))
+    const maj: Partial<HorizonState> = {}
+    const echecs: string[] = []
+    res.forEach((r, i) => {
+      const [cle, table] = lectures[i]!
+      // Une table en échec garde ce qui était chargé : un écran incomplet et signalé
+      // vaut mieux qu'un budget qui paraît vide.
+      if (r.error) echecs.push(`${table} (${r.error})`)
+      else (maj as Record<string, unknown>)[cle] = r.data
+    })
+    set({ ...maj, finLoaded: echecs.length === 0 || get().finLoaded })
+    if (echecs.length) set({ error: `Finances : chargement incomplet — ${echecs.join(', ')}.` })
+  },
+
+  setFinBudget: async (lineId, kind, month, amount) => {
+    const user_id = get().session?.user.id
+    if (!user_id) return
+    const autres = get().finBudgets.filter((b) => !(b.line_id === lineId && b.kind === kind && b.month === month))
+    if (amount === null) {
+      const { error } = await supabase.from('fin_budgets').delete()
+        .eq('line_id', lineId).eq('kind', kind).eq('month', month)
+      if (error) { set({ error: `Budget non effacé : ${error.message}` }); return }
+      set({ finBudgets: autres })
+      return
+    }
+    const { data, error } = await supabase.from('fin_budgets')
+      .upsert({ user_id, line_id: lineId, kind, month, amount }, { onConflict: 'line_id,kind,month' })
+      .select().single()
+    if (error || !data) { set({ error: `Budget non enregistré : ${error?.message ?? 'réponse vide'}` }); return }
+    set({ finBudgets: [...autres, data as FinBudget] })
   },
 
   clearRecovery: () => set({ recovery: false }),

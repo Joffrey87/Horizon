@@ -485,3 +485,137 @@ export interface CelesteProposal {
   decided_at: string | null
   created_at: string
 }
+
+// ---------------------------------------------------------------
+// Finances (tables fin_*) — voir migration « finances ».
+// ---------------------------------------------------------------
+
+export type FinOwner = 'commun' | 'joffrey' | 'honorine'
+export type FinAccountKind = 'courant' | 'epargne' | 'investissement' | 'crypto' | 'immobilier' | 'metaux' | 'pret' | 'autre'
+export type FinAssetClass = 'actions' | 'obligations' | 'or' | 'argent' | 'energie' | 'crypto' | 'immobilier' | 'liquidites' | 'autre'
+
+/** Ligne du tableau de budget (Frais fixe, Courses…). */
+export interface FinLine {
+  id: UUID
+  user_id: UUID
+  name: string
+  kind: 'depense' | 'epargne'
+  sort_order: number
+  created_at: string
+}
+
+export interface FinAccount {
+  id: UUID
+  user_id: UUID
+  name: string
+  institution: string | null
+  kind: FinAccountKind
+  subtype: string | null
+  owner: FinOwner
+  in_budget: boolean          // ses opérations comptent dans le budget
+  balance: number             // négatif pour un prêt
+  balance_at: string | null
+  archived: boolean
+  sort_order: number
+  source: string
+  external_id: string | null
+  created_at: string
+}
+
+export interface FinCategory {
+  id: UUID
+  user_id: UUID
+  name: string
+  parent_id: UUID | null
+  line_id: UUID | null        // à défaut, celle du parent
+  role: 'depense' | 'revenu' | 'hors_budget'
+  source: string
+  external_id: string | null
+  created_at: string
+}
+
+export interface FinTransaction {
+  id: UUID
+  user_id: UUID
+  account_id: UUID
+  date: string                // 'yyyy-MM-dd'
+  amount: number              // signé : négatif = sortie
+  label: string
+  category_id: UUID | null
+  category_manual: boolean
+  owner: FinOwner | null      // null = titulaire du compte
+  internal: boolean
+  excluded: boolean
+  note: string | null
+  source: string
+  external_id: string | null
+  created_at: string
+}
+
+export interface FinBudget {
+  id: UUID
+  user_id: UUID
+  line_id: UUID
+  kind: 'budget' | 'prevision'
+  month: string               // 1er du mois, 'yyyy-MM-01'
+  amount: number
+  created_at: string
+}
+
+export interface FinNetworth {
+  id: UUID
+  user_id: UUID
+  date: string
+  net: number
+  gross: number | null
+  source: string
+}
+
+export interface FinHolding {
+  id: UUID
+  user_id: UUID
+  account_id: UUID
+  name: string
+  code: string | null
+  quantity: number | null
+  value: number
+  buy_value: number | null
+  asset_class: FinAssetClass
+  class_manual: boolean
+  source: string
+  external_id: string | null
+  updated_at: string
+}
+
+export interface FinTarget {
+  id: UUID
+  user_id: UUID
+  asset_class: FinAssetClass
+  pct: number
+}
+
+export interface FinDca {
+  id: UUID
+  user_id: UUID
+  label: string
+  code: string | null
+  envelope: string | null
+  asset_class: FinAssetClass | null
+  amount: number
+  active: boolean
+  sort_order: number
+  created_at: string
+}
+
+export interface FinPlanned {
+  id: UUID
+  user_id: UUID
+  title: string
+  amount: number
+  due_date: string
+  line_id: UUID | null
+  saved: number
+  done: boolean
+  note: string | null
+  created_at: string
+}

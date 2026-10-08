@@ -30,6 +30,9 @@ useHorizon.setState({
   habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
   newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], settings: null,
   celesteRules: null, celesteProposals: [],
+  // Finances : rien à charger, l'onglet démarre vide comme le reste.
+  finLoaded: true,
+  loadFinances: async () => {},
 })
 
 // Mode démo pleinement interactif : les mutations restent locales (aucun réseau,
@@ -41,12 +44,26 @@ const KEY: Record<string, keyof ReturnType<typeof useHorizon.getState>> = {
   olafatco_jobs: 'olafatcoJobs', news_topics: 'newsTopics', news_digests: 'newsDigests',
   shopping_lists: 'shoppingLists', shopping_items: 'shoppingItems',
   calendar_feeds: 'calendarFeeds', celeste_proposals: 'celesteProposals',
+  fin_lines: 'finLines', fin_accounts: 'finAccounts', fin_categories: 'finCategories',
+  fin_transactions: 'finTransactions', fin_budgets: 'finBudgets', fin_networth: 'finNetworth',
+  fin_holdings: 'finHoldings', fin_targets: 'finTargets', fin_dca: 'finDca', fin_planned: 'finPlanned',
 }
 /** Clé du store pour une table Supabase — lève si la table n'est pas gérée en démo. */
 const keyFor = (table: string): keyof ReturnType<typeof useHorizon.getState> => {
   const k = KEY[table]
   if (!k) throw new Error(`Table inconnue en mode démo : ${table}`)
   return k
+}
+
+/** Valeurs par défaut des tables fin_* (celles de la migration « finances »). */
+const FIN_DEFAUTS: Record<string, Record<string, unknown>> = {
+  fin_lines: { kind: 'depense', sort_order: 0 },
+  fin_accounts: { kind: 'autre', owner: 'joffrey', in_budget: false, balance: 0, archived: false, sort_order: 0, source: 'manuel' },
+  fin_categories: { parent_id: null, line_id: null, role: 'depense', source: 'manuel' },
+  fin_transactions: { category_manual: false, owner: null, internal: false, excluded: false, source: 'manuel' },
+  fin_holdings: { asset_class: 'autre', class_manual: false, source: 'manuel' },
+  fin_dca: { active: true, sort_order: 0 },
+  fin_planned: { saved: 0, done: false, line_id: null },
 }
 
 let seq = 1000
@@ -68,7 +85,7 @@ useHorizon.setState({
           ? { recurrent: false, sort_order: 0 }
           : table === 'shopping_items'
             ? { checked: false, sort_order: 0 }
-            : {}
+            : (FIN_DEFAUTS[table] ?? {})
     const row = { id: genId(), user_id: uid, created_at: new Date().toISOString(), ...defaults, ...values }
     const list = useHorizon.getState()[key] as unknown[]
     useHorizon.setState({ [key]: [...list, row] } as never)
@@ -158,6 +175,16 @@ useHorizon.setState({
       (d.kind ?? 'jour') !== mode || !st.newsTopics.some((t) => t.active && t.id === d.topic_id))
     useHorizon.setState({ newsDigests: [...others, ...digests] })
     return { ok: true, updated: digests.length }
+  },
+
+  setFinBudget: async (lineId, kind, month, amount) => {
+    const st = useHorizon.getState()
+    const autres = st.finBudgets.filter((b) => !(b.line_id === lineId && b.kind === kind && b.month === month))
+    useHorizon.setState({
+      finBudgets: amount === null ? autres : [...autres, {
+        id: genId(), user_id: uid, line_id: lineId, kind, month, amount, created_at: new Date().toISOString(),
+      }],
+    })
   },
 
   resetShopping: async (listId) => {

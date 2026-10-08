@@ -30,3 +30,6 @@ dist-ssr
 
 # artefacts du CLI Supabase
 supabase/.temp/
+
+# Données personnelles (finances, etc.) — dépôt public : ne jamais suivre
+documents Joffrey/

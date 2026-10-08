@@ -1,0 +1,406 @@
+// ================================================================
+// Finances — règles pures (sans réseau) : budget du mois, bilan,
+// patrimoine, allocation, provisions. Testées dans finances.test.ts.
+//
+// Une opération compte dans le budget si son compte est « du budget », si
+// elle n'est pas écartée, et selon le rôle de sa catégorie :
+//   - revenu       → « Entrées » du mois ;
+//   - hors_budget  → ignorée (virements) ;
+//   - dépense      → la ligne de sa catégorie (à défaut celle du parent),
+//                    ou « Non classé » — rien ne disparaît en silence.
+// Un virement interne n'est compté que s'il alimente une ligne d'épargne
+// (ex. virement vers le PEA rangé en « Investissements »).
+// ================================================================
+import type {
+  FinAccount, FinAccountKind, FinAssetClass, FinBudget, FinCategory, FinHolding, FinLine, FinOwner, FinPlanned,
+  FinTarget, FinTransaction,
+} from './types'
+
+export type FiltreTitulaire = 'foyer' | FinOwner
+
+export const TITULAIRES: Record<FinOwner, string> = { commun: 'Commun', joffrey: 'Joffrey', honorine: 'Honorine' }
+
+export const GENRES: Record<FinAccountKind, string> = {
+  courant: 'Comptes courants', epargne: 'Épargne', investissement: 'Investissements', crypto: 'Crypto',
+  immobilier: 'Immobilier', metaux: 'Métaux précieux', pret: 'Prêts', autre: 'Autres',
+}
+
+/** Classes d'actifs : libellé et couleur. Palette des domaines (validée sur le
+ *  fond sombre) + orange pour l'argent ; liquidités et « autre » en neutre.
+ *  La couleur n'est jamais seule : chaque barre porte le nom de sa classe. */
+export const CLASSES: Record<FinAssetClass, { label: string; couleur: string }> = {
+  actions: { label: 'Actions', couleur: 'var(--color-dom-5)' },
+  obligations: { label: 'Obligations', couleur: 'var(--color-dom-2)' },
+  or: { label: 'Or', couleur: 'var(--color-dom-1)' },
+  energie: { label: 'Énergie', couleur: 'var(--color-dom-3)' },
+  crypto: { label: 'Crypto', couleur: 'var(--color-dom-4)' },
+  immobilier: { label: 'Immobilier', couleur: 'var(--color-dom-6)' },
+  argent: { label: 'Argent', couleur: '#d95926' },
+  liquidites: { label: 'Liquidités', couleur: 'var(--color-ink-3)' },
+  autre: { label: 'Autre', couleur: '#5f574b' },
+}
+
+/** Clé de la pseudo-ligne des dépenses sans ligne de budget. */
+export const NON_CLASSE = '__non_classe'
+
+// ---------- Mois ----------
+
+/** 'yyyy-MM' d'une date ISO. */
+export const moisDe = (date: string) => date.slice(0, 7)
+
+/** Décale un mois 'yyyy-MM' de n mois (n peut être négatif). */
+export function decaleMois(mois: string, n: number): string {
+  const [a, m] = mois.split('-').map(Number)
+  const t = (a ?? 0) * 12 + ((m ?? 1) - 1) + n
+  return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, '0')}`
+}
+
+/** Nombre de mois de `de` à `a` (positif si `a` est plus tard). */
+export function ecartMois(de: string, a: string): number {
+  const [a1, m1] = de.split('-').map(Number)
+  const [a2, m2] = a.split('-').map(Number)
+  return ((a2 ?? 0) - (a1 ?? 0)) * 12 + ((m2 ?? 1) - (m1 ?? 1))
+}
+
+const NOMS_MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
+const NOMS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.']
+
+/** « octobre 2026 », ou « oct. 26 » en court. */
+export function libelleMois(mois: string, court = false): string {
+  const [a, m] = mois.split('-').map(Number)
+  const i = (m ?? 1) - 1
+  return court ? `${NOMS_COURTS[i]} ${String(a).slice(2)}` : `${NOMS_MOIS[i]} ${a}`
+}
+
+// ---------- Montants ----------
+
+const FORMAT_0 = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
+const FORMAT_2 = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+/** « 1 234 € » (ou au centime). Les espaces insécables évitent les coupures. */
+export function euros(n: number, centimes = false): string {
+  const v = Object.is(Math.round(n), -0) ? 0 : n
+  return (centimes ? FORMAT_2 : FORMAT_0).format(v)
+}
+
+/** « +12 % » / « −3 % ». */
+export function pourcent(n: number, signe = false): string {
+  const r = Math.round(n)
+  return `${signe && r > 0 ? '+' : ''}${r.toLocaleString('fr-FR')} %`.replace('-', '−')
+}
+
+// ---------- Classement des opérations ----------
+
+export interface IndexFinances {
+  comptes: Map<string, FinAccount>
+  categories: Map<string, FinCategory>
+  lignes: Map<string, FinLine>
+}
+
+export function indexer(accounts: FinAccount[], categories: FinCategory[], lines: FinLine[]): IndexFinances {
+  return {
+    comptes: new Map(accounts.map((a) => [a.id, a])),
+    categories: new Map(categories.map((c) => [c.id, c])),
+    lignes: new Map(lines.map((l) => [l.id, l])),
+  }
+}
+
+/** Ligne de budget d'une catégorie : la sienne, à défaut celle de son parent. */
+export function ligneDeCategorie(cat: FinCategory | undefined, idx: IndexFinances): string | null {
+  if (!cat) return null
+  if (cat.line_id) return cat.line_id
+  const parent = cat.parent_id ? idx.categories.get(cat.parent_id) : undefined
+  return parent?.line_id ?? null
+}
+
+export type Classement =
+  | { type: 'ligne'; ligne: string }
+  | { type: 'non_classe' }
+  | { type: 'revenu' }
+  | { type: 'ignoree'; raison: 'compte' | 'exclue' | 'interne' | 'hors_budget' }
+
+export function classer(tx: FinTransaction, idx: IndexFinances): Classement {
+  const compte = idx.comptes.get(tx.account_id)
+  if (!compte || !compte.in_budget) return { type: 'ignoree', raison: 'compte' }
+  if (tx.excluded) return { type: 'ignoree', raison: 'exclue' }
+  const cat = tx.category_id ? idx.categories.get(tx.category_id) : undefined
+  const ligneId = ligneDeCategorie(cat, idx)
+  const ligne = ligneId ? idx.lignes.get(ligneId) : undefined
+  if (tx.internal && ligne?.kind !== 'epargne') return { type: 'ignoree', raison: 'interne' }
+  // Le rôle se règle sur la catégorie principale : une sous-catégorie le suit.
+  const parent = cat?.parent_id ? idx.categories.get(cat.parent_id) : undefined
+  const role = parent?.role ?? cat?.role ?? 'depense'
+  if (role === 'hors_budget') return { type: 'ignoree', raison: 'hors_budget' }
+  if (role === 'revenu') return { type: 'revenu' }
+  if (!ligne) return { type: 'non_classe' }
+  return { type: 'ligne', ligne: ligne.id }
+}
+
+export function titulaireDe(tx: FinTransaction, idx: IndexFinances): FinOwner {
+  return tx.owner ?? idx.comptes.get(tx.account_id)?.owner ?? 'joffrey'
+}
+
+export const correspond = (filtre: FiltreTitulaire, titulaire: FinOwner) => filtre === 'foyer' || filtre === titulaire
+
+// ---------- Agrégat mensuel ----------
+
+/** Par mois : dépensé par ligne (sorties positives, remboursements déduits) et entrées. */
+export type Agregat = Map<string, { lignes: Map<string, number>; entrees: number }>
+
+export function agreger(transactions: FinTransaction[], idx: IndexFinances, filtre: FiltreTitulaire): Agregat {
+  const agg: Agregat = new Map()
+  for (const tx of transactions) {
+    if (!correspond(filtre, titulaireDe(tx, idx))) continue
+    const c = classer(tx, idx)
+    if (c.type === 'ignoree') continue
+    const m = moisDe(tx.date)
+    let mois = agg.get(m)
+    if (!mois) { mois = { lignes: new Map(), entrees: 0 }; agg.set(m, mois) }
+    const montant = Number(tx.amount)
+    if (c.type === 'revenu') { mois.entrees += montant; continue }
+    const cle = c.type === 'ligne' ? c.ligne : NON_CLASSE
+    mois.lignes.set(cle, (mois.lignes.get(cle) ?? 0) - montant)
+  }
+  return agg
+}
+
+const reelDe = (agg: Agregat, mois: string, cle: string) => agg.get(mois)?.lignes.get(cle) ?? 0
+
+// ---------- Budgets ----------
+
+/** Budget d'une ligne pour un mois : le dernier fixé à ce mois ou avant. */
+export function budgetDe(ligneId: string, mois: string, budgets: FinBudget[]): number | null {
+  let trouve: FinBudget | null = null
+  for (const b of budgets) {
+    if (b.kind !== 'budget' || b.line_id !== ligneId || moisDe(b.month) > mois) continue
+    if (!trouve || b.month > trouve.month) trouve = b
+  }
+  return trouve ? Number(trouve.amount) : null
+}
+
+/** Prévisionnel d'une ligne pour un mois : celui saisi pour ce mois, sinon le budget. */
+export function previsionDe(ligneId: string, mois: string, budgets: FinBudget[]): { montant: number | null; saisi: boolean } {
+  const p = budgets.find((b) => b.kind === 'prevision' && b.line_id === ligneId && moisDe(b.month) === mois)
+  if (p) return { montant: Number(p.amount), saisi: true }
+  return { montant: budgetDe(ligneId, mois, budgets), saisi: false }
+}
+
+/** Lignes dans l'ordre d'affichage : dépenses puis épargne. */
+export function lignesTriees(lines: FinLine[]): FinLine[] {
+  return [...lines].sort((a, b) => (a.kind === b.kind ? a.sort_order - b.sort_order : a.kind === 'depense' ? -1 : 1))
+}
+
+export interface LigneBudget {
+  cle: string                 // id de la ligne, ou NON_CLASSE
+  ligne: FinLine | null
+  budget: number | null       // null hors vue « Foyer » (les budgets sont ceux du foyer)
+  reel: number
+  precedent: number
+  moyenne6: number
+  prevision: number | null
+  previsionSaisie: boolean
+}
+
+export interface SyntheseMois {
+  mois: string
+  lignes: LigneBudget[]
+  entrees: number
+  total: { budget: number | null; reel: number; precedent: number; moyenne6: number; prevision: number | null }
+}
+
+/** Le tableau de bord du mois : une ligne par ligne de budget (+ « Non classé » s'il y a lieu). */
+export function syntheseMois(opts: {
+  mois: string; lines: FinLine[]; budgets: FinBudget[]; agregat: Agregat; filtre: FiltreTitulaire
+}): SyntheseMois {
+  const { mois, budgets, agregat, filtre } = opts
+  const suivant = decaleMois(mois, 1)
+  const precedents = [1, 2, 3, 4, 5, 6].map((n) => decaleMois(mois, -n))
+  const foyer = filtre === 'foyer'
+  const ligne = (cle: string, l: FinLine | null): LigneBudget => {
+    const prev = l && foyer ? previsionDe(l.id, suivant, budgets) : { montant: null, saisi: false }
+    return {
+      cle, ligne: l,
+      budget: l && foyer ? budgetDe(l.id, mois, budgets) : null,
+      reel: reelDe(agregat, mois, cle),
+      precedent: reelDe(agregat, precedents[0]!, cle),
+      moyenne6: precedents.reduce((s, m) => s + reelDe(agregat, m, cle), 0) / 6,
+      prevision: prev.montant,
+      previsionSaisie: prev.saisi,
+    }
+  }
+  const lignes = lignesTriees(opts.lines).map((l) => ligne(l.id, l))
+  const nc = ligne(NON_CLASSE, null)
+  if (nc.reel || nc.precedent || nc.moyenne6) lignes.push(nc)
+  const somme = (f: (l: LigneBudget) => number | null) => lignes.reduce((s, l) => s + (f(l) ?? 0), 0)
+  return {
+    mois, lignes,
+    entrees: agregat.get(mois)?.entrees ?? 0,
+    total: {
+      budget: foyer ? somme((l) => l.budget) : null,
+      reel: somme((l) => l.reel),
+      precedent: somme((l) => l.precedent),
+      moyenne6: somme((l) => l.moyenne6),
+      prevision: foyer ? somme((l) => l.prevision) : null,
+    },
+  }
+}
+
+// ---------- Bilan de plusieurs mois ----------
+
+export interface BilanLigne {
+  cle: string
+  ligne: FinLine | null
+  cellules: { mois: string; reel: number; budget: number | null }[]
+  reel: number                // cumul
+  budget: number | null       // cumul (null hors « Foyer »)
+  moyenne: number
+  depassements: number        // mois au-dessus du budget
+}
+
+export interface Bilan {
+  mois: string[]
+  lignes: BilanLigne[]
+  parMois: { mois: string; reel: number; budget: number | null; entrees: number }[]
+  total: { reel: number; budget: number | null; entrees: number; moyenne: number }
+}
+
+/** Les `n` mois complets qui précèdent `moisCourant`, du plus ancien au plus récent. */
+export const moisEcoules = (moisCourant: string, n = 6) =>
+  Array.from({ length: n }, (_, i) => decaleMois(moisCourant, i - n))
+
+export function bilan(opts: {
+  mois: string[]; lines: FinLine[]; budgets: FinBudget[]; agregat: Agregat; filtre: FiltreTitulaire
+}): Bilan {
+  const { mois, budgets, agregat, filtre } = opts
+  const foyer = filtre === 'foyer'
+  const faire = (cle: string, l: FinLine | null): BilanLigne => {
+    const cellules = mois.map((m) => ({
+      mois: m, reel: reelDe(agregat, m, cle), budget: l && foyer ? budgetDe(l.id, m, budgets) : null,
+    }))
+    const reel = cellules.reduce((s, c) => s + c.reel, 0)
+    return {
+      cle, ligne: l, cellules, reel,
+      budget: l && foyer ? cellules.reduce((s, c) => s + (c.budget ?? 0), 0) : null,
+      moyenne: mois.length ? reel / mois.length : 0,
+      // Un budget à 0 = pas de budget fixé : pas de dépassement à signaler.
+      depassements: cellules.filter((c) => c.budget !== null && c.budget > 0 && c.reel > c.budget + 0.5).length,
+    }
+  }
+  const lignes = lignesTriees(opts.lines).map((l) => faire(l.id, l))
+  const nc = faire(NON_CLASSE, null)
+  if (nc.cellules.some((c) => c.reel)) lignes.push(nc)
+  const parMois = mois.map((m, i) => ({
+    mois: m,
+    reel: lignes.reduce((s, l) => s + l.cellules[i]!.reel, 0),
+    budget: foyer ? lignes.reduce((s, l) => s + (l.cellules[i]!.budget ?? 0), 0) : null,
+    entrees: agregat.get(m)?.entrees ?? 0,
+  }))
+  const reel = parMois.reduce((s, p) => s + p.reel, 0)
+  return {
+    mois, lignes, parMois,
+    total: {
+      reel,
+      budget: foyer ? parMois.reduce((s, p) => s + (p.budget ?? 0), 0) : null,
+      entrees: parMois.reduce((s, p) => s + p.entrees, 0),
+      moyenne: mois.length ? reel / mois.length : 0,
+    },
+  }
+}
+
+// ---------- Détail d'une ligne ----------
+
+export interface GroupeCategorie {
+  nom: string
+  total: number               // dépensé (sorties positives)
+  operations: FinTransaction[]
+}
+
+/** Opérations d'une ligne (ou de « Non classé ») pour un mois, groupées par catégorie. */
+export function detailLigne(opts: {
+  cle: string; mois: string; transactions: FinTransaction[]; idx: IndexFinances; filtre: FiltreTitulaire
+}): GroupeCategorie[] {
+  const { cle, mois, transactions, idx, filtre } = opts
+  const groupes = new Map<string, GroupeCategorie>()
+  for (const tx of transactions) {
+    if (moisDe(tx.date) !== mois || !correspond(filtre, titulaireDe(tx, idx))) continue
+    const c = classer(tx, idx)
+    const k = c.type === 'ligne' ? c.ligne : c.type === 'non_classe' ? NON_CLASSE : null
+    if (k !== cle) continue
+    const nom = nomCategorie(tx.category_id ? idx.categories.get(tx.category_id) : undefined, idx)
+    let g = groupes.get(nom)
+    if (!g) { g = { nom, total: 0, operations: [] }; groupes.set(nom, g) }
+    g.total -= Number(tx.amount)
+    g.operations.push(tx)
+  }
+  for (const g of groupes.values()) g.operations.sort((a, b) => b.date.localeCompare(a.date))
+  return [...groupes.values()].sort((a, b) => b.total - a.total)
+}
+
+/** « Parent › Sous-catégorie », ou « Sans catégorie ». */
+export function nomCategorie(cat: FinCategory | undefined, idx: IndexFinances): string {
+  if (!cat) return 'Sans catégorie'
+  const parent = cat.parent_id ? idx.categories.get(cat.parent_id) : undefined
+  return parent ? `${parent.name} › ${cat.name}` : cat.name
+}
+
+// ---------- Patrimoine ----------
+
+export function patrimoine(accounts: FinAccount[]) {
+  const actifs = accounts.filter((a) => !a.archived)
+  const parGenre = new Map<FinAccountKind, number>()
+  for (const a of actifs) parGenre.set(a.kind, (parGenre.get(a.kind) ?? 0) + Number(a.balance))
+  const brut = actifs.filter((a) => Number(a.balance) > 0).reduce((s, a) => s + Number(a.balance), 0)
+  const dettes = actifs.filter((a) => Number(a.balance) < 0).reduce((s, a) => s - Number(a.balance), 0)
+  return {
+    brut, dettes, net: brut - dettes,
+    parGenre: [...parGenre].map(([kind, valeur]) => ({ kind, valeur })).sort((a, b) => b.valeur - a.valeur),
+  }
+}
+
+// ---------- Allocation ----------
+
+export interface LigneAllocation {
+  classe: FinAssetClass
+  valeur: number
+  pct: number                 // part du portefeuille suivi
+  cible: number | null
+  ecart: number | null        // en points de %
+  aAjuster: number | null     // montant pour atteindre la cible (positif = à renforcer)
+}
+
+/**
+ * Allocation réelle face à la cible. Le « portefeuille suivi » = les classes
+ * qui ont une cible ; les autres sont montrées à part, sans jugement.
+ */
+export function allocation(holdings: FinHolding[], targets: FinTarget[], accounts: FinAccount[]) {
+  const archives = new Set(accounts.filter((a) => a.archived).map((a) => a.id))
+  const parClasse = new Map<FinAssetClass, number>()
+  for (const h of holdings) {
+    if (archives.has(h.account_id)) continue
+    parClasse.set(h.asset_class, (parClasse.get(h.asset_class) ?? 0) + Number(h.value))
+  }
+  const cibles = new Map(targets.map((t) => [t.asset_class, Number(t.pct)]))
+  const suivi = [...cibles.keys()].reduce((s, c) => s + (parClasse.get(c) ?? 0), 0)
+  const suivies: LigneAllocation[] = [...cibles].map(([classe, cible]) => {
+    const valeur = parClasse.get(classe) ?? 0
+    const pct = suivi ? (valeur / suivi) * 100 : 0
+    return { classe, valeur, pct, cible, ecart: pct - cible, aAjuster: (cible / 100) * suivi - valeur }
+  }).sort((a, b) => (b.cible ?? 0) - (a.cible ?? 0) || b.valeur - a.valeur)
+  const horsCible = [...parClasse].filter(([c, v]) => !cibles.has(c) && v)
+    .map(([classe, valeur]) => ({ classe, valeur })).sort((a, b) => b.valeur - a.valeur)
+  return { suivi, suivies, horsCible, totalCibles: [...cibles.values()].reduce((s, v) => s + v, 0) }
+}
+
+// ---------- Dépenses à venir ----------
+
+/**
+ * Ce qu'il reste à mettre de côté pour une dépense prévue, et combien par mois
+ * d'ici là (du mois courant au mois qui précède l'échéance ; tout de suite si
+ * l'échéance est ce mois-ci ou passée).
+ */
+export function provision(p: FinPlanned, aujourdhui: string): { restant: number; mois: number; parMois: number } {
+  const restant = Math.max(0, Number(p.amount) - Number(p.saved))
+  if (p.done) return { restant: 0, mois: 0, parMois: 0 }
+  const mois = Math.max(0, ecartMois(moisDe(aujourdhui), moisDe(p.due_date)))
+  return { restant, mois, parMois: mois > 0 ? restant / mois : restant }
+}

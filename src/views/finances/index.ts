@@ -1,0 +1,9 @@
+// Point d'entrée de l'onglet Finances, chargé à la demande (voir routes.tsx).
+export { FinancesLayout } from './FinancesLayout'
+export { BudgetView } from './BudgetView'
+export { BilanView } from './BilanView'
+export { OperationsView } from './OperationsView'
+export { PatrimoineView } from './PatrimoineView'
+export { InvestissementsView } from './InvestissementsView'
+export { AVenirView } from './AVenirView'
+export { ReglagesView } from './ReglagesView'

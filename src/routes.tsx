@@ -28,6 +28,17 @@ import { CaptureView } from './views/CaptureView'
 // chargé qu'à l'ouverture de /espace, plus au premier écran.
 const WorkspaceView = lazy(() => import('./views/WorkspaceView').then((m) => ({ default: m.WorkspaceView })))
 
+// Finances : tout l'onglet (vues + graphiques) n'est chargé qu'à sa première ouverture.
+const fin = () => import('./views/finances')
+const FinancesLayout = lazy(() => fin().then((m) => ({ default: m.FinancesLayout })))
+const BudgetView = lazy(() => fin().then((m) => ({ default: m.BudgetView })))
+const BilanView = lazy(() => fin().then((m) => ({ default: m.BilanView })))
+const OperationsView = lazy(() => fin().then((m) => ({ default: m.OperationsView })))
+const PatrimoineView = lazy(() => fin().then((m) => ({ default: m.PatrimoineView })))
+const InvestissementsView = lazy(() => fin().then((m) => ({ default: m.InvestissementsView })))
+const AVenirView = lazy(() => fin().then((m) => ({ default: m.AVenirView })))
+const ReglagesFinancesView = lazy(() => fin().then((m) => ({ default: m.ReglagesView })))
+
 const Chargement = () => <p className="pt-8 text-center text-sm text-ink-3">Chargement…</p>
 
 export function AppRoutes() {
@@ -45,6 +56,15 @@ export function AppRoutes() {
       <Route path="/temps/:date" element={<TimeView />} />
       <Route path="/planification" element={<PlanningView />} />
       <Route path="/habitudes" element={<HabitsView />} />
+      <Route path="/finances" element={<Suspense fallback={<Chargement />}><FinancesLayout /></Suspense>}>
+        <Route index element={<BudgetView />} />
+        <Route path="bilan" element={<BilanView />} />
+        <Route path="operations" element={<OperationsView />} />
+        <Route path="patrimoine" element={<PatrimoineView />} />
+        <Route path="investissements" element={<InvestissementsView />} />
+        <Route path="a-venir" element={<AVenirView />} />
+        <Route path="reglages" element={<ReglagesFinancesView />} />
+      </Route>
       <Route path="/activites" element={<ActivitesLayout />}>
         <Route index element={<Navigate to="actualites" replace />} />
         <Route path="actualites" element={<ActualitesView />} />
