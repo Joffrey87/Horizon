@@ -143,3 +143,10 @@ input::placeholder, textarea::placeholder { color: var(--color-ink-3); }
 /* Animation douce d'apparition */
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .rise { animation: rise .35s ease both; }
+
+/* Onglet Finances : cartes translucides comme dans « Temps » (le paysage
+   reste visible derrière), même voile que le bloc-notes de Temps. */
+.fin-voile .card {
+  background: color-mix(in srgb, var(--color-panel) 55%, transparent);
+  border-color: color-mix(in srgb, var(--color-line-2) 60%, transparent);
+}

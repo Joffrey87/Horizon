@@ -29,7 +29,7 @@ export function FinancesLayout() {
   const contexte: FinContexte = { mois, setMois, filtre, setFiltre }
 
   return (
-    <div className="pt-4">
+    <div className="fin-voile pt-4">
       <nav className="mb-3 flex flex-wrap gap-1.5 border-b border-line pb-3">
         {TABS.map(({ to, label, icon: Icon, end }) => (
           <NavLink key={to} to={to} end={end}
