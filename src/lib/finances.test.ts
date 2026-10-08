@@ -20,7 +20,7 @@ const ligne = (name: string, over: Partial<FinLine> = {}): FinLine => ({
   id: id(), user_id: 'u', name, kind: 'depense', sort_order: 0, created_at: '', ...over,
 })
 const categorie = (name: string, over: Partial<FinCategory> = {}): FinCategory => ({
-  id: id(), user_id: 'u', name, parent_id: null, line_id: null, role: 'depense', source: 'test', external_id: null,
+  id: id(), user_id: 'u', name, parent_id: null, line_id: null, role: 'depense', hidden: false, source: 'test', external_id: null,
   created_at: '', ...over,
 })
 const op = (account_id: string, date: string, amount: number, over: Partial<FinTransaction> = {}): FinTransaction => ({

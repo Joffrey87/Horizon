@@ -529,6 +529,7 @@ export interface FinCategory {
   parent_id: UUID | null
   line_id: UUID | null        // à défaut, celle du parent
   role: 'depense' | 'revenu' | 'hors_budget'
+  hidden: boolean             // masquée des listes de choix (ses opérations restent comptées)
   source: string
   external_id: string | null
   created_at: string

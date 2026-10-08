@@ -82,7 +82,7 @@ export function MontantEditable({ valeur, onSave, discret = false, titre, vide =
 export function SelectCategorie({ value, onChange, className = '' }: {
   value: string | null; onChange: (id: string | null) => void; className?: string
 }) {
-  const arbre = useArbreCategories()
+  const arbre = useArbreCategories(value)
   return (
     <select value={value ?? ''} onChange={(e) => onChange(e.target.value || null)}
       className={`field !py-1 text-xs ${className}`} aria-label="Catégorie">

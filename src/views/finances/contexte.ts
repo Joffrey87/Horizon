@@ -27,10 +27,13 @@ export function useIndex(): IndexFinances {
   return useMemo(() => indexer(accounts, categories, lines), [accounts, categories, lines])
 }
 
-/** Catégories en groupes : chaque catégorie principale, puis ses sous-catégories. */
-export function useArbreCategories() {
-  const categories = useHorizon((s) => s.finCategories)
+/** Catégories en groupes : chaque catégorie principale, puis ses sous-catégories.
+ *  Les catégories masquées sont écartées, sauf `garder` (la catégorie en cours d'une opération). */
+export function useArbreCategories(garder: string | null = null) {
+  const toutes = useHorizon((s) => s.finCategories)
   return useMemo(() => {
+    const categories = toutes.filter((c) => !c.hidden || c.id === garder
+      || toutes.some((e) => e.parent_id === c.id && e.id === garder))
     const enfants = new Map<string, FinCategory[]>()
     for (const c of categories) {
       if (!c.parent_id) continue
@@ -39,7 +42,7 @@ export function useArbreCategories() {
     return categories.filter((c) => !c.parent_id)
       .sort((a, b) => a.name.localeCompare(b.name, 'fr'))
       .map((p) => ({ parent: p, enfants: (enfants.get(p.id) ?? []).sort((a, b) => a.name.localeCompare(b.name, 'fr')) }))
-  }, [categories])
+  }, [toutes, garder])
 }
 
 export const dateCourte = (d: string) => format(parseISO(d), 'd MMM', { locale: fr })
