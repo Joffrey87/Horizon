@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import type { FinAccount, FinBudget, FinCategory, FinHolding, FinLine, FinPlanned, FinTarget, FinTransaction } from './types'
 import {
-  NON_CLASSE, agreger, allocation, bilan, budgetDe, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
+  NON_CLASSE, agreger, allocation, bilan, creerReconnaissance, normaliserLibelle, operationsSemblables, budgetDe, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
   libelleMois, moisEcoules, patrimoine, previsionDe, provision, syntheseMois,
 } from './finances'
 
@@ -25,7 +25,8 @@ const categorie = (name: string, over: Partial<FinCategory> = {}): FinCategory =
 })
 const op = (account_id: string, date: string, amount: number, over: Partial<FinTransaction> = {}): FinTransaction => ({
   id: id(), user_id: 'u', account_id, date, amount, label: 'op', category_id: null, category_manual: false,
-  owner: null, internal: false, excluded: false, note: null, source: 'test', external_id: null, created_at: '', ...over,
+  owner: null, internal: false, excluded: false, note: null, source: 'test', external_id: null, created_at: '',
+  label_local: null, ...over,
 })
 const budget = (line_id: string, month: string, amount: number, kind: FinBudget['kind'] = 'budget'): FinBudget => ({
   id: id(), user_id: 'u', line_id, kind, month, amount, created_at: '',
@@ -187,6 +188,40 @@ describe('patrimoine et allocation', () => {
     expect(or.ecart).toBe(-20)
     expect(or.aAjuster).toBe(200)
     expect(r.horsCible).toEqual([{ classe: 'crypto', valeur: 5000 }])
+  })
+})
+
+describe('intitulés locaux', () => {
+  const regle = (pattern: string, label: string) => ({ id: id(), user_id: 'u', pattern, label, created_at: '' })
+  it('nettoie l’intitulé bancaire : casse, accents, numéro de carte', () => {
+    expect(normaliserLibelle('LA BOULANGERIE 2 CB*1111')).toBe('la boulangerie 2')
+    expect(normaliserLibelle('Pharmacie ÉTÉ  CB*2222')).toBe('pharmacie ete')
+    expect(normaliserLibelle('PRLV SEPA EDF CLIENTS')).toBe('edf clients')
+  })
+  it('affiche l’intitulé propre, sinon la règle au motif le plus long, sinon l’original', () => {
+    const r = creerReconnaissance([regle('carrefour', 'Carrefour'), regle('carrefour city', 'Carrefour City (rue)')])
+    expect(r.libelle(op('a', '2026-10-01', -5, { label: 'CARREFOUR CITY 2 CB*3333' }))).toBe('Carrefour City (rue)')
+    expect(r.libelle(op('a', '2026-10-01', -5, { label: 'CARREFOUR MARKET CB*1111' }))).toBe('Carrefour')
+    expect(r.libelle(op('a', '2026-10-01', -5, { label: 'LIDL CB*1111' }))).toBe('LIDL CB*1111')
+    expect(r.libelle(op('a', '2026-10-01', -5, { label: 'CARREFOUR CB*1', label_local: 'Pique-nique' }))).toBe('Pique-nique')
+    expect(r.estLocal(op('a', '2026-10-01', -5, { label: 'LIDL' }))).toBe(false)
+  })
+})
+
+describe('opérations semblables', () => {
+  it('retrouve le même intitulé (carte comprise) sur les autres mois, hors celles déjà bien rangées', () => {
+    const reco = creerReconnaissance([])
+    const a = op(joint.id, '2026-10-02', -5, { label: 'LA BOULANGERIE 2 CB*1111', category_id: divers.id })
+    const b = op(joint.id, '2026-08-02', -4, { label: 'LA BOULANGERIE 2 CB*2222', category_id: divers.id })
+    const c = op(joint.id, '2026-07-02', -4, { label: 'LA BOULANGERIE 2 CB*3333', category_id: boulangerie.id })
+    const d = op(joint.id, '2026-09-02', -9, { label: 'CARREFOUR CB*1111', category_id: divers.id })
+    expect(operationsSemblables(a, [a, b, c, d], reco, idx, boulangerie.id).map((t) => t.id)).toEqual([b.id])
+  })
+  it('suit aussi une règle d’intitulé local commune', () => {
+    const reco = creerReconnaissance([{ id: 'r', user_id: 'u', pattern: 'carrefour', label: 'Carrefour', created_at: '' }])
+    const a = op(joint.id, '2026-10-02', -5, { label: 'CARREFOUR CITY 2 CB*1111' })
+    const b = op(joint.id, '2026-09-02', -5, { label: 'CARREFOUR MARKET CB*3333' })
+    expect(operationsSemblables(a, [a, b], reco, idx, alim.id).map((t) => t.id)).toEqual([b.id])
   })
 })
 

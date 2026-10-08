@@ -5,7 +5,7 @@ import { useOutletContext } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { useHorizon } from '../../lib/store'
-import { indexer, moisDe, type FiltreTitulaire, type IndexFinances } from '../../lib/finances'
+import { creerReconnaissance, indexer, moisDe, type FiltreTitulaire, type IndexFinances } from '../../lib/finances'
 import type { FinCategory } from '../../lib/types'
 import { todayIso } from '../../lib/logic'
 
@@ -27,6 +27,12 @@ export function useIndex(): IndexFinances {
   return useMemo(() => indexer(accounts, categories, lines), [accounts, categories, lines])
 }
 
+/** Reconnaissance des intitulés locaux, recalculée quand les règles changent. */
+export function useReconnaissance() {
+  const regles = useHorizon((s) => s.finLabels)
+  return useMemo(() => creerReconnaissance(regles), [regles])
+}
+
 /** Catégories en groupes : chaque catégorie principale, puis ses sous-catégories.
  *  Les catégories masquées sont écartées, sauf `garder` (la catégorie en cours d'une opération). */
 export function useArbreCategories(garder: string | null = null) {
@@ -46,3 +52,4 @@ export function useArbreCategories(garder: string | null = null) {
 }
 
 export const dateCourte = (d: string) => format(parseISO(d), 'd MMM', { locale: fr })
+export const dateLongue = (d: string) => format(parseISO(d), 'd MMM yy', { locale: fr })

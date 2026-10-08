@@ -13,7 +13,7 @@
 // ================================================================
 import type {
   FinAccount, FinAccountKind, FinAssetClass, FinBudget, FinCategory, FinHolding, FinLine, FinOwner, FinPlanned,
-  FinTarget, FinTransaction,
+  FinTarget, FinTransaction, FinLabel,
 } from './types'
 
 export type FiltreTitulaire = 'foyer' | FinOwner
@@ -354,6 +354,62 @@ export function nomCategorie(cat: FinCategory | undefined, idx: IndexFinances): 
   if (!cat) return 'Sans catégorie'
   const parent = cat.parent_id ? idx.categories.get(cat.parent_id) : undefined
   return parent ? `${parent.name} › ${cat.name}` : cat.name
+}
+
+// ---------- Intitulés locaux ----------
+
+/**
+ * Intitulé bancaire nettoyé pour la reconnaissance : minuscules, sans accents,
+ * sans le « CB*1234 » de la carte ni les préfixes de prélèvement, espaces réduits.
+ * « LA BOULANGERIE 2 CB*1111 » et « … CB*2222 » donnent le même motif.
+ */
+export function normaliserLibelle(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/\bcb\*\s*\d+/g, ' ')
+    .replace(/^(prlv sepa|prlv|carte|cb)\s+/, '')
+    .replace(/\s+/g, ' ').trim()
+}
+
+/** Reconnaît les intitulés : l'intitulé propre à l'opération, sinon la règle au motif
+ *  le plus long contenu dans l'intitulé nettoyé, sinon rien (null). Mémorise par intitulé. */
+export function creerReconnaissance(regles: FinLabel[]) {
+  const triees = [...regles].filter((r) => r.pattern.trim())
+    .sort((a, b) => b.pattern.length - a.pattern.length)
+  const cache = new Map<string, FinLabel | null>()
+  const regleDe = (label: string): FinLabel | null => {
+    let r = cache.get(label)
+    if (r === undefined) {
+      const n = normaliserLibelle(label)
+      r = triees.find((x) => n.includes(x.pattern)) ?? null
+      cache.set(label, r)
+    }
+    return r
+  }
+  return {
+    regleDe,
+    /** Ce qu'on affiche pour une opération. */
+    libelle: (tx: FinTransaction): string => tx.label_local?.trim() || regleDe(tx.label)?.label || tx.label,
+    /** Vrai si l'opération a un intitulé local (propre ou par règle). */
+    estLocal: (tx: FinTransaction): boolean => !!tx.label_local?.trim() || !!regleDe(tx.label),
+  }
+}
+
+/**
+ * Opérations semblables à `tx` (pour lui appliquer la même catégorie) : même
+ * intitulé nettoyé, ou même règle d'intitulé local. Hors `tx` elle-même et hors
+ * celles déjà dans la catégorie visée ; les plus récentes d'abord.
+ */
+export function operationsSemblables(
+  tx: FinTransaction, transactions: FinTransaction[], reco: ReturnType<typeof creerReconnaissance>,
+  idx: IndexFinances, categorieVisee: string | null,
+): FinTransaction[] {
+  const motif = normaliserLibelle(tx.label)
+  const regle = reco.regleDe(tx.label)
+  return transactions.filter((t) => {
+    if (t.id === tx.id) return false
+    const meme = (motif && normaliserLibelle(t.label) === motif) || (regle && reco.regleDe(t.label)?.id === regle.id)
+    return meme && (categorieEffective(t.category_id, idx)?.id ?? null) !== categorieVisee
+  }).sort((a, b) => b.date.localeCompare(a.date))
 }
 
 // ---------- Patrimoine ----------

@@ -4,7 +4,7 @@ import { useHorizon } from '../../lib/store'
 import { NON_CLASSE, classer, correspond, euros, lignesTriees, moisDe, titulaireDe } from '../../lib/finances'
 import { EmptyState } from '../../components/ui'
 import { FiltreSeg, LigneOperation, NavMois } from './partage'
-import { useFin, useIndex } from './contexte'
+import { useFin, useIndex, useReconnaissance } from './contexte'
 
 type Portee = 'tout' | 'budget' | typeof NON_CLASSE | 'revenus' | 'hors' | string
 
@@ -17,6 +17,7 @@ export function OperationsView() {
   const accounts = useHorizon((s) => s.finAccounts)
   const lines = useHorizon((s) => s.finLines)
   const idx = useIndex()
+  const reco = useReconnaissance()
   const [tousLesMois, setTousLesMois] = useState(false)
   const [compte, setCompte] = useState('')
   const [portee, setPortee] = useState<Portee>('budget')
@@ -29,7 +30,7 @@ export function OperationsView() {
       if (!tousLesMois && moisDe(tx.date) !== mois) return false
       if (compte && tx.account_id !== compte) return false
       if (!correspond(filtre, titulaireDe(tx, idx))) return false
-      if (q && !tx.label.toLowerCase().includes(q)) return false
+      if (q && !tx.label.toLowerCase().includes(q) && !reco.libelle(tx).toLowerCase().includes(q)) return false
       if (portee === 'tout') return true
       const c = classer(tx, idx)
       if (portee === 'budget') return c.type === 'ligne' || c.type === 'non_classe'
@@ -38,7 +39,7 @@ export function OperationsView() {
       if (portee === 'hors') return c.type === 'ignoree'
       return c.type === 'ligne' && c.ligne === portee
     })
-  }, [transactions, tousLesMois, mois, compte, filtre, idx, texte, portee])
+  }, [transactions, tousLesMois, mois, compte, filtre, idx, reco, texte, portee])
 
   const total = liste.reduce((s, tx) => s + Number(tx.amount), 0)
   const aClasser = useMemo(

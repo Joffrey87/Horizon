@@ -46,7 +46,7 @@ const KEY: Record<string, keyof ReturnType<typeof useHorizon.getState>> = {
   calendar_feeds: 'calendarFeeds', celeste_proposals: 'celesteProposals',
   fin_lines: 'finLines', fin_accounts: 'finAccounts', fin_categories: 'finCategories',
   fin_transactions: 'finTransactions', fin_budgets: 'finBudgets', fin_networth: 'finNetworth',
-  fin_holdings: 'finHoldings', fin_targets: 'finTargets', fin_dca: 'finDca', fin_planned: 'finPlanned',
+  fin_holdings: 'finHoldings', fin_targets: 'finTargets', fin_dca: 'finDca', fin_planned: 'finPlanned', fin_labels: 'finLabels',
 }
 /** Clé du store pour une table Supabase — lève si la table n'est pas gérée en démo. */
 const keyFor = (table: string): keyof ReturnType<typeof useHorizon.getState> => {
@@ -60,7 +60,7 @@ const FIN_DEFAUTS: Record<string, Record<string, unknown>> = {
   fin_lines: { kind: 'depense', sort_order: 0 },
   fin_accounts: { kind: 'autre', owner: 'joffrey', in_budget: false, balance: 0, archived: false, sort_order: 0, source: 'manuel' },
   fin_categories: { parent_id: null, line_id: null, role: 'depense', hidden: false, merged_into: null, manual: false, source: 'manuel' },
-  fin_transactions: { category_manual: false, owner: null, internal: false, excluded: false, source: 'manuel' },
+  fin_transactions: { label_local: null, category_manual: false, owner: null, internal: false, excluded: false, source: 'manuel' },
   fin_holdings: { asset_class: 'autre', class_manual: false, source: 'manuel' },
   fin_dca: { active: true, sort_order: 0 },
   fin_planned: { saved: 0, done: false, line_id: null },
@@ -90,6 +90,13 @@ useHorizon.setState({
     const list = useHorizon.getState()[key] as unknown[]
     useHorizon.setState({ [key]: [...list, row] } as never)
     return row as never
+  },
+
+  updateMany: async (table, ids, values) => {
+    const key = keyFor(table)
+    const list = useHorizon.getState()[key] as { id: string }[]
+    useHorizon.setState({ [key]: list.map((r) => (ids.includes(r.id) ? { ...r, ...values } : r)) } as never)
+    return true
   },
 
   update: async (table, id, values) => {

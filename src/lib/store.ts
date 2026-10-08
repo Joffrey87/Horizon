@@ -10,7 +10,7 @@ import { capturesEnAttente, depiler } from './capture'
 import { messageFonction } from './functionError'
 import type {
   Birthday, CalendarFeed, CelesteProposal, CelesteRules, Check, Domain, FinAccount, FinBudget, FinCategory, FinDca,
-  FinHolding, FinLine, FinNetworth, FinPlanned, FinTarget, FinTransaction, GospelQuiz, Habit, HabitLog, Idea, Layout,
+  FinHolding, FinLabel, FinLine, FinNetworth, FinPlanned, FinTarget, FinTransaction, GospelQuiz, Habit, HabitLog, Idea, Layout,
   NewsDigest, NewsKind, NewsTopic, Objective, OlafatcoJob, Project, PropositionAgenda, Review, Settings, ShoppingItem,
   ShoppingList, Step, Task,
 } from './types'
@@ -21,7 +21,7 @@ type Table =
   | 'news_topics' | 'news_digests' | 'shopping_lists' | 'shopping_items' | 'calendar_feeds'
   | 'celeste_proposals'
   | 'fin_lines' | 'fin_accounts' | 'fin_categories' | 'fin_transactions' | 'fin_budgets' | 'fin_networth'
-  | 'fin_holdings' | 'fin_targets' | 'fin_dca' | 'fin_planned'
+  | 'fin_holdings' | 'fin_targets' | 'fin_dca' | 'fin_planned' | 'fin_labels'
 
 interface HorizonState {
   session: Session | null
@@ -72,12 +72,16 @@ interface HorizonState {
   finTargets: FinTarget[]
   finDca: FinDca[]
   finPlanned: FinPlanned[]
+  /** Règles d'intitulés locaux (motif → intitulé affiché). */
+  finLabels: FinLabel[]
 
   init: () => Promise<void>
   loadAll: () => Promise<void>
   insert: <T extends { id: string }>(table: Table, values: Record<string, unknown>) => Promise<T | null>
   update: <T extends { id: string }>(table: Table, id: string, values: Record<string, unknown>) => Promise<T | null>
   remove: (table: Table, id: string) => Promise<void>
+  /** Même modification sur plusieurs lignes d'une table (une seule requête). */
+  updateMany: (table: Table, ids: string[], values: Record<string, unknown>) => Promise<boolean>
   saveSettings: (values: Partial<Settings>) => Promise<void>
   toggleHabitToday: (habitId: string, date: string) => Promise<void>
   cycleHabitDay: (habitId: string, date: string) => Promise<void>
@@ -118,13 +122,13 @@ const COLLECTION: Record<Table, keyof HorizonState> = {
   celeste_proposals: 'celesteProposals',
   fin_lines: 'finLines', fin_accounts: 'finAccounts', fin_categories: 'finCategories',
   fin_transactions: 'finTransactions', fin_budgets: 'finBudgets', fin_networth: 'finNetworth',
-  fin_holdings: 'finHoldings', fin_targets: 'finTargets', fin_dca: 'finDca', fin_planned: 'finPlanned',
+  fin_holdings: 'finHoldings', fin_targets: 'finTargets', fin_dca: 'finDca', fin_planned: 'finPlanned', fin_labels: 'finLabels',
 }
 
 /** Les vides de l'onglet Finances (état initial et déconnexion). */
 const FIN_VIDE = {
   finLoaded: false, finLines: [], finAccounts: [], finCategories: [], finTransactions: [], finBudgets: [],
-  finNetworth: [], finHoldings: [], finTargets: [], finDca: [], finPlanned: [],
+  finNetworth: [], finHoldings: [], finTargets: [], finDca: [], finPlanned: [], finLabels: [],
 }
 
 /** Lit une table en entier : PostgREST plafonne une réponse à 1000 lignes. */
@@ -281,6 +285,16 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       [key]: (get()[key] as { id: string }[]).map((row) => (row.id === id ? data : row)),
     } as Partial<HorizonState>)
     return data
+  },
+
+  updateMany: async (table, ids, values) => {
+    if (!ids.length) return true
+    const { data, error } = await supabase.from(table).update(values).in('id', ids).select()
+    if (error || !data) { set({ error: `Enregistrement impossible : ${error?.message ?? 'réponse vide'}` }); return false }
+    const key = COLLECTION[table]
+    const parId = new Map((data as { id: string }[]).map((r) => [r.id, r]))
+    set({ [key]: (get()[key] as { id: string }[]).map((row) => parId.get(row.id) ?? row) } as Partial<HorizonState>)
+    return true
   },
 
   remove: async (table, id) => {
@@ -474,6 +488,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       ['finBudgets', 'fin_budgets', 'month'], ['finNetworth', 'fin_networth', 'date'],
       ['finHoldings', 'fin_holdings', 'value', false], ['finTargets', 'fin_targets', 'asset_class'],
       ['finDca', 'fin_dca', 'sort_order'], ['finPlanned', 'fin_planned', 'due_date'],
+      ['finLabels', 'fin_labels', 'pattern'],
     ]
     const res = await Promise.all(lectures.map(([, table, ordre, croissant]) => toutLire(table, ordre, croissant)))
     const maj: Partial<HorizonState> = {}

@@ -544,6 +544,7 @@ export interface FinTransaction {
   date: string                // 'yyyy-MM-dd'
   amount: number              // signé : négatif = sortie
   label: string
+  label_local: string | null  // intitulé propre à cette opération (prioritaire sur les règles)
   category_id: UUID | null
   category_manual: boolean
   owner: FinOwner | null      // null = titulaire du compte
@@ -552,6 +553,15 @@ export interface FinTransaction {
   note: string | null
   source: string
   external_id: string | null
+  created_at: string
+}
+
+/** Règle d'intitulé local : l'intitulé nettoyé contient `pattern` → afficher `label`. */
+export interface FinLabel {
+  id: UUID
+  user_id: UUID
+  pattern: string             // déjà nettoyé (normaliserLibelle)
+  label: string
   created_at: string
 }
 
