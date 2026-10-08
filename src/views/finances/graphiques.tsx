@@ -142,3 +142,108 @@ export function CourbePatrimoine({ points }: { points: { date: string; net: numb
     </div>
   )
 }
+
+/**
+ * Patrimoine dans le temps, par composante : aires empilées (bas → haut dans
+ * l'ordre des séries), liseré de 2 px entre les couches, réticule + infobulle
+ * détaillée. Légende chiffrée au-dessus (la couleur n'est jamais seule).
+ */
+export function CourbeComposition({ points, series }: {
+  points: { date: string; parts: Record<string, number> | null; total: number }[]
+  series: { cle: string; label: string; couleur: string }[]
+}) {
+  const ref = useRef<SVGSVGElement>(null)
+  const [survol, setSurvol] = useState<number | null>(null)
+  const W = 640, H = 230, G = 52, B = 22, Hh = 10
+  const geo = useMemo(() => {
+    if (points.length < 2) return null
+    const max = Math.max(1, ...points.map((p) => p.total)) * 1.06
+    const x = (i: number) => G + (i / (points.length - 1)) * (W - G - 8)
+    const y = (v: number) => H - B - (Math.max(0, v) / max) * (H - B - Hh)
+    // Hauts cumulés de chaque couche (une couche négative compte pour 0).
+    const cumuls = points.map((p) => {
+      let c = 0
+      return series.map((s) => (c += Math.max(0, p.parts?.[s.cle] ?? 0)))
+    })
+    const aires = series.map((_, k) => {
+      const haut = points.map((_, i) => `${x(i).toFixed(1)},${y(cumuls[i]![k]!).toFixed(1)}`)
+      const bas = points.map((_, i) => `${x(i).toFixed(1)},${y(k ? cumuls[i]![k - 1]! : 0).toFixed(1)}`).reverse()
+      return `M${haut.join(' L')} L${bas.join(' L')} Z`
+    })
+    const sansParts = points.some((p) => !p.parts)
+    const total = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.total).toFixed(1)}`).join(' ')
+    const ticks = graduations(max).filter((t) => t <= max)
+    const reperes = [0, 1, 2, 3].map((k) => Math.round((k / 3) * (points.length - 1)))
+    return { x, y, aires, total, sansParts, ticks, reperes }
+  }, [points, series])
+
+  if (!geo) return <p className="py-8 text-center text-xs text-ink-3">Pas encore assez de points pour tracer l’évolution.</p>
+
+  const bouge = (e: React.MouseEvent<SVGSVGElement>) => {
+    const r = ref.current?.getBoundingClientRect()
+    if (!r) return
+    const px = ((e.clientX - r.left) / r.width) * W
+    setSurvol(Math.max(0, Math.min(points.length - 1, Math.round(((px - G) / (W - G - 8)) * (points.length - 1)))))
+  }
+  const dernier = points.at(-1)!
+  const p = survol !== null ? points[survol]! : null
+
+  return (
+    <div>
+      {/* Légende chiffrée : valeur du dernier jour par composante. */}
+      <ul className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+        {series.map((s) => (
+          <li key={s.cle} className="flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: s.couleur }} />
+            <span className="text-ink-2">{s.label}</span>
+            {dernier.parts && <span className="tabular-nums text-ink">{euros(dernier.parts[s.cle] ?? 0)}</span>}
+          </li>
+        ))}
+      </ul>
+      <div className="relative">
+        <svg ref={ref} viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Évolution du patrimoine par composante"
+          onMouseMove={bouge} onMouseLeave={() => setSurvol(null)}>
+          {geo.ticks.map((t) => (
+            <g key={t}>
+              <line x1={G} x2={W - 8} y1={geo.y(t)} y2={geo.y(t)} stroke="var(--color-line)" strokeWidth="1" />
+              <text x={G - 6} y={geo.y(t)} textAnchor="end" dominantBaseline="middle" fontSize="10" fill="var(--color-ink-3)">{kEuros(t)}</text>
+            </g>
+          ))}
+          {geo.reperes.map((i) => (
+            <text key={i} x={geo.x(i)} y={H - 6} textAnchor={i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle'}
+              fontSize="10" fill="var(--color-ink-3)">
+              {format(parseISO(points[i]!.date), 'MMM yy', { locale: fr })}
+            </text>
+          ))}
+          {geo.aires.map((d, k) => (
+            <path key={series[k]!.cle} d={d} fill={series[k]!.couleur} fillOpacity="0.75"
+              stroke="var(--color-panel)" strokeWidth="2" strokeLinejoin="round" />
+          ))}
+          {/* Le total en trait : visible aussi sur les anciens jours sans composition. */}
+          {geo.sansParts && <path d={geo.total} fill="none" stroke="var(--color-ink-2)" strokeWidth="2" strokeDasharray="4 3" />}
+          {p && survol !== null && (
+            <g>
+              <line x1={geo.x(survol)} x2={geo.x(survol)} y1={Hh} y2={H - B} stroke="var(--color-ink)" strokeWidth="1" strokeOpacity="0.6" />
+              <circle cx={geo.x(survol)} cy={geo.y(p.total)} r="4.5" fill="var(--color-ink)" stroke="var(--color-panel)" strokeWidth="2" />
+            </g>
+          )}
+        </svg>
+        {p && survol !== null && (
+          <div className="pointer-events-none absolute top-0 min-w-[12rem] rounded-lg border border-line-2 bg-panel-3 px-2.5 py-1.5 text-xs shadow-lg"
+            style={{ left: `${(geo.x(survol) / W) * 100}%`, transform: `translateX(${survol > points.length / 2 ? '-105%' : '5%'})` }}>
+            <p className="text-ink-2">{format(parseISO(p.date), 'd MMMM yyyy', { locale: fr })}</p>
+            <p className="mb-1 font-medium tabular-nums">{euros(p.total)}</p>
+            {p.parts && series.map((s) => (
+              <p key={s.cle} className="flex justify-between gap-3">
+                <span className="flex items-center gap-1.5 text-ink-2">
+                  <span className="inline-block h-2 w-2 rounded-sm" style={{ background: s.couleur }} />{s.label}
+                </span>
+                <span className="tabular-nums">{euros(p.parts?.[s.cle] ?? 0)}</span>
+              </p>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

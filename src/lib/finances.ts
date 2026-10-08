@@ -415,8 +415,8 @@ export function operationsSemblables(
 
 // ---------- Patrimoine ----------
 
-export function patrimoine(accounts: FinAccount[]) {
-  const actifs = accounts.filter((a) => !a.archived)
+export function patrimoine(accounts: FinAccount[], avecCrypto = true) {
+  const actifs = accounts.filter((a) => !a.archived && (avecCrypto || a.kind !== 'crypto'))
   const parGenre = new Map<FinAccountKind, number>()
   for (const a of actifs) parGenre.set(a.kind, (parGenre.get(a.kind) ?? 0) + Number(a.balance))
   const brut = actifs.filter((a) => Number(a.balance) > 0).reduce((s, a) => s + Number(a.balance), 0)
@@ -425,6 +425,50 @@ export function patrimoine(accounts: FinAccount[]) {
     brut, dettes, net: brut - dettes,
     parGenre: [...parGenre].map(([kind, valeur]) => ({ kind, valeur })).sort((a, b) => b.valeur - a.valeur),
   }
+}
+
+// ---------- Composition du patrimoine ----------
+
+export type ComposantePatrimoine = 'immobilier' | 'investissements' | 'metaux' | 'liquidites' | 'crypto'
+
+/** Composantes du graphique, de bas en haut (palette validée sur le fond sombre). */
+export const COMPOSANTES: { cle: ComposantePatrimoine; label: string; couleur: string }[] = [
+  { cle: 'immobilier', label: 'Immobilier (net des prêts)', couleur: 'var(--color-dom-6)' },
+  { cle: 'investissements', label: 'Investissements', couleur: 'var(--color-dom-5)' },
+  { cle: 'metaux', label: 'Métaux précieux', couleur: 'var(--color-dom-1)' },
+  { cle: 'liquidites', label: 'Comptes & épargne', couleur: 'var(--color-dom-2)' },
+  { cle: 'crypto', label: 'Crypto', couleur: 'var(--color-dom-4)' },
+]
+
+export interface PointComposition {
+  date: string
+  parts: Record<ComposantePatrimoine, number> | null   // null : composition inconnue pour ce jour
+  total: number
+}
+
+/**
+ * Patrimoine dans le temps, par composante. Sans la crypto (trop variable), le
+ * total l'exclut aussi. L'immobilier est compté net des prêts.
+ */
+export function compositionPatrimoine(
+  points: { date: string; net: number; immobilier: number | null; prets: number | null; investissements: number | null;
+    metaux: number | null; liquidites: number | null; crypto: number | null }[],
+  avecCrypto: boolean,
+): PointComposition[] {
+  return points.map((p) => {
+    if (p.immobilier === null || p.investissements === null) {
+      // Ancien point sans composition : le total seul (sans crypto, on ne peut pas la retirer).
+      return { date: p.date, parts: null, total: Number(p.net) }
+    }
+    const parts = {
+      immobilier: Number(p.immobilier) - Number(p.prets ?? 0),
+      investissements: Number(p.investissements),
+      metaux: Number(p.metaux ?? 0),
+      liquidites: Number(p.liquidites ?? 0),
+      crypto: avecCrypto ? Number(p.crypto ?? 0) : 0,
+    }
+    return { date: p.date, parts, total: Object.values(parts).reduce((s, v) => s + v, 0) }
+  })
 }
 
 // ---------- Allocation ----------

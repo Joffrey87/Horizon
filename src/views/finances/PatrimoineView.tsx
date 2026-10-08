@@ -1,39 +1,50 @@
 import { useMemo, useState } from 'react'
 import { useHorizon } from '../../lib/store'
-import { GENRES, TITULAIRES, euros, patrimoine } from '../../lib/finances'
+import { COMPOSANTES, GENRES, TITULAIRES, compositionPatrimoine, euros, patrimoine } from '../../lib/finances'
 import type { FinAccountKind } from '../../lib/types'
 import { Card, EmptyState, Seg } from '../../components/ui'
 import { Tuile } from './partage'
-import { CourbePatrimoine } from './graphiques'
+import { CourbeComposition } from './graphiques'
 import { format, parseISO, subMonths } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
 type Periode = '6m' | '1a' | 'tout'
+
+const CLE_CRYPTO = 'horizon.patrimoine.crypto'
+const lireCrypto = () => { try { return localStorage.getItem(CLE_CRYPTO) === '1' } catch { return false } }
 
 /** Patrimoine : net, actifs, dettes, évolution et détail par compte. */
 export function PatrimoineView() {
   const accounts = useHorizon((s) => s.finAccounts)
   const networth = useHorizon((s) => s.finNetworth)
   const [periode, setPeriode] = useState<Periode>('1a')
-  const p = useMemo(() => patrimoine(accounts), [accounts])
+  // La crypto, trop variable, est une option : hors du patrimoine par défaut (choix mémorisé).
+  const [avecCrypto, setAvecCrypto] = useState(lireCrypto)
+  const basculerCrypto = () => {
+    const v = !avecCrypto
+    setAvecCrypto(v)
+    try { localStorage.setItem(CLE_CRYPTO, v ? '1' : '0') } catch { /* stockage indisponible */ }
+  }
+  const p = useMemo(() => patrimoine(accounts, avecCrypto), [accounts, avecCrypto])
   const points = useMemo(() => {
     const depuis = periode === 'tout' ? '' : format(subMonths(new Date(), periode === '6m' ? 6 : 12), 'yyyy-MM-dd')
-    return networth.filter((n) => n.date >= depuis).map((n) => ({ date: n.date, net: Number(n.net) }))
-  }, [networth, periode])
-  const evolution = points.length > 1 ? points.at(-1)!.net - points[0]!.net : null
+    return compositionPatrimoine(networth.filter((n) => n.date >= depuis), avecCrypto)
+  }, [networth, periode, avecCrypto])
+  const series = COMPOSANTES.filter((c) => avecCrypto || c.cle !== 'crypto')
+  const evolution = points.length > 1 ? points.at(-1)!.total - points[0]!.total : null
   const maj = accounts.map((a) => a.balance_at).filter(Boolean).sort().at(-1)
 
   const parGenre = useMemo(() => {
     const groupes = new Map<FinAccountKind, typeof accounts>()
     for (const a of accounts) {
-      if (a.archived) continue
+      if (a.archived || (!avecCrypto && a.kind === 'crypto')) continue
       groupes.set(a.kind, [...(groupes.get(a.kind) ?? []), a])
     }
     return [...groupes].map(([kind, comptes]) => ({
       kind, comptes: comptes.sort((x, y) => Math.abs(Number(y.balance)) - Math.abs(Number(x.balance))),
       total: comptes.reduce((s, a) => s + Number(a.balance), 0),
     })).sort((a, b) => b.total - a.total)
-  }, [accounts])
+  }, [accounts, avecCrypto])
 
   if (!accounts.length) {
     return <EmptyState hint="Les comptes arrivent avec la synchronisation Finary (voir Réglages).">Aucun compte pour l’instant.</EmptyState>
@@ -43,7 +54,7 @@ export function PatrimoineView() {
   return (
     <div className="rise space-y-4">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Tuile titre="Patrimoine net" valeur={euros(p.net)}
+        <Tuile titre={avecCrypto ? 'Patrimoine net' : 'Patrimoine net (hors crypto)'} valeur={euros(p.net)}
           detail={evolution !== null ? `${evolution >= 0 ? '+' : '−'}${euros(Math.abs(evolution))} sur la période` : undefined} />
         <Tuile titre="Actifs" valeur={euros(p.brut)} />
         <Tuile titre="Dettes" valeur={euros(p.dettes)} detail="capital restant des prêts" />
@@ -51,12 +62,20 @@ export function PatrimoineView() {
           detail={maj ? format(parseISO(maj), "yyyy 'à' HH:mm", { locale: fr }) : undefined} />
       </div>
 
-      <Card title="Évolution du patrimoine net" action={
-        <Seg value={periode} onChange={setPeriode} options={[
-          { value: '6m', label: '6 mois' }, { value: '1a', label: '1 an' }, { value: 'tout', label: 'Tout' },
-        ]} />
+      <Card title={avecCrypto ? 'Évolution du patrimoine net' : 'Évolution du patrimoine net, hors crypto'} action={
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-ink-2">
+            <input type="checkbox" checked={avecCrypto} onChange={basculerCrypto} /> Inclure la crypto
+          </label>
+          <Seg value={periode} onChange={setPeriode} options={[
+            { value: '6m', label: '6 mois' }, { value: '1a', label: '1 an' }, { value: 'tout', label: 'Tout' },
+          ]} />
+        </div>
       }>
-        <CourbePatrimoine points={points} />
+        <CourbeComposition points={points} series={series} />
+        {points.some((x) => !x.parts) && (
+          <p className="mt-1 text-[11px] text-ink-3">Pointillés : jours dont la composition n’est pas encore connue (total seul, crypto comprise).</p>
+        )}
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">

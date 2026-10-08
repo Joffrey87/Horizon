@@ -179,13 +179,39 @@ await (async () => {
     if (depuis && lot.every((t) => String(t.date).slice(0, 10) < depuis)) break
   }
 
-  // ---------- Historique du patrimoine ----------
-  const serie = async (type) => {
-    const r = await get(`${base}/holdings_accounts/timeseries?period=all&timeseries_type=sum&wealth_type=${type}`)
+  // ---------- Historique du patrimoine : total et composition ----------
+  const serie = async (chemin) => {
+    const r = await get(chemin)
     return new Map((r?.[0]?.timeseries ?? []).map((p) => [String(p[0]).slice(0, 10), Number(p[1])]))
   }
-  const [net, brut] = await Promise.all([serie('net'), serie('gross')])
-  const networth = [...net].map(([date, v]) => ({ date, net: v, gross: brut.get(date) ?? null }))
+  // Composantes d'Horizon ← catégories Finary (prêts en positif).
+  const COMPOSANTES = {
+    immobilier: ['real_estates'], prets: ['loans'], investissements: ['investments', 'fonds_euro', 'other_assets'],
+    metaux: ['commodities'], liquidites: ['checkings', 'savings'], crypto: ['cryptos'],
+  }
+  const categoriesFinary = [...new Set(Object.values(COMPOSANTES).flat())]
+  const [net, brut, ...parCategorie] = await Promise.all([
+    serie(`${base}/holdings_accounts/timeseries?period=all&timeseries_type=sum&wealth_type=net`),
+    serie(`${base}/holdings_accounts/timeseries?period=all&timeseries_type=sum&wealth_type=gross`),
+    ...categoriesFinary.map((c) => serie(`${base}/portfolio/${c}/timeseries?period=all&timeseries_type=sum`).catch(() => new Map())),
+  ])
+  // Chaque série a ses propres dates : on retient, pour chaque jour du total, la
+  // dernière valeur connue de chaque catégorie (0 avant sa première valeur).
+  const valeurAu = categoriesFinary.map((_, i) => {
+    const points = [...parCategorie[i]].sort((a, b) => a[0].localeCompare(b[0]))
+    return (date) => {
+      let v = 0
+      for (const [d, x] of points) { if (d > date) break; v = x }
+      return v
+    }
+  })
+  const networth = [...net].map(([date, v]) => {
+    const point = { date, net: v, gross: brut.get(date) ?? null }
+    for (const [cle, cats] of Object.entries(COMPOSANTES)) {
+      point[cle] = Math.round(cats.reduce((s, c) => s + valeurAu[categoriesFinary.indexOf(c)](date), 0) * 100) / 100
+    }
+    return point
+  })
 
   // Finary garde des comptes vides (anciens métaux, exchanges fermés…) : on ne
   // garde que ceux qui ont une valeur, des positions ou des opérations.

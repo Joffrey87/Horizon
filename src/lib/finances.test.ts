@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import type { FinAccount, FinBudget, FinCategory, FinHolding, FinLine, FinPlanned, FinTarget, FinTransaction } from './types'
 import {
-  NON_CLASSE, agreger, allocation, bilan, creerReconnaissance, normaliserLibelle, operationsSemblables, budgetDe, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
+  NON_CLASSE, agreger, allocation, bilan, compositionPatrimoine, creerReconnaissance, normaliserLibelle, operationsSemblables, budgetDe, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
   libelleMois, moisEcoules, patrimoine, previsionDe, provision, syntheseMois,
 } from './finances'
 
@@ -227,6 +227,26 @@ describe('opérations semblables', () => {
     const a = op(joint.id, '2026-10-02', -5, { label: 'CARREFOUR CITY 2 CB*1111' })
     const b = op(joint.id, '2026-09-02', -5, { label: 'CARREFOUR MARKET CB*3333' })
     expect(operationsSemblables(a, [a, b], reco, idx, alim.id).map((t) => t.id)).toEqual([b.id])
+  })
+})
+
+describe('composition du patrimoine', () => {
+  const point = { date: '2026-10-08', net: 150000, immobilier: 300000, prets: 200000, investissements: 30000, metaux: 10000, liquidites: 2000, crypto: 8000 }
+  it('compte l’immobilier net des prêts et retrouve le net Finary avec la crypto', () => {
+    const [p] = compositionPatrimoine([point], true)
+    expect(p!.parts!.immobilier).toBe(100000)
+    expect(p!.total).toBe(150000)
+  })
+  it('sans crypto, le total l’exclut aussi', () => {
+    expect(compositionPatrimoine([point], false)[0]!.total).toBe(150000 - 8000)
+  })
+  it('un point sans composition garde son total', () => {
+    const [p] = compositionPatrimoine([{ ...point, immobilier: null, investissements: null }], false)
+    expect(p).toEqual({ date: '2026-10-08', parts: null, total: 150000 })
+  })
+  it('le patrimoine des comptes peut écarter la crypto', () => {
+    const p = patrimoine([compte({ balance: 1000 }), compte({ kind: 'crypto', balance: 500 })], false)
+    expect(p.net).toBe(1000)
   })
 })
 

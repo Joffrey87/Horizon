@@ -582,6 +582,13 @@ export interface FinNetworth {
   date: string
   net: number
   gross: number | null
+  // Composition (valeurs brutes par catégorie ; prêts en positif). Null : inconnue.
+  immobilier: number | null
+  prets: number | null
+  investissements: number | null
+  metaux: number | null
+  liquidites: number | null
+  crypto: number | null
   source: string
 }
 
