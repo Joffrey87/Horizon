@@ -203,13 +203,18 @@ describe('intitulés locaux', () => {
     expect(normaliserLibelle('Pharmacie ÉTÉ  CB*2222')).toBe('pharmacie ete')
     expect(normaliserLibelle('PRLV SEPA EDF CLIENTS')).toBe('edf clients')
   })
-  it('affiche l’intitulé propre, sinon la règle au motif le plus long, sinon l’original', () => {
-    const r = creerReconnaissance([regle('carrefour', 'Carrefour'), regle('carrefour city', 'Carrefour City (rue)')])
+  it('affiche l’intitulé propre, sinon la règle au même intitulé (carte ignorée), sinon l’original', () => {
+    const r = creerReconnaissance([regle('carrefour', 'Carrefour'), regle('carrefour city 2', 'Carrefour City (rue)')])
     expect(r.libelle(op('a', '2026-10-01', -5, { label: 'CARREFOUR CITY 2 CB*3333' }))).toBe('Carrefour City (rue)')
-    expect(r.libelle(op('a', '2026-10-01', -5, { label: 'CARREFOUR MARKET CB*1111' }))).toBe('Carrefour')
+    expect(r.libelle(op('a', '2026-10-01', -5, { label: 'CARREFOUR CB*1111' }))).toBe('Carrefour')
     expect(r.libelle(op('a', '2026-10-01', -5, { label: 'LIDL CB*1111' }))).toBe('LIDL CB*1111')
     expect(r.libelle(op('a', '2026-10-01', -5, { label: 'CARREFOUR CB*1', label_local: 'Pique-nique' }))).toBe('Pique-nique')
     expect(r.estLocal(op('a', '2026-10-01', -5, { label: 'LIDL' }))).toBe(false)
+  })
+  it('une règle ne rebaptise jamais un intitulé qui ne fait que la contenir', () => {
+    const r = creerReconnaissance([regle('ville', 'Retrait')])
+    expect(r.libelle(op('a', '2026-10-01', -5, { label: 'VILLE CB*1111' }))).toBe('Retrait')
+    expect(r.libelle(op('a', '2026-10-01', -5, { label: 'CRF VILLE - CENTRE CB*1111' }))).toBe('CRF VILLE - CENTRE CB*1111')
   })
 })
 
@@ -223,9 +228,9 @@ describe('opérations semblables', () => {
     expect(operationsSemblables(a, [a, b, c, d], reco, idx, boulangerie.id).map((t) => t.id)).toEqual([b.id])
   })
   it('suit aussi une règle d’intitulé local commune', () => {
-    const reco = creerReconnaissance([{ id: 'r', user_id: 'u', pattern: 'carrefour', label: 'Carrefour', created_at: '' }])
+    const reco = creerReconnaissance([{ id: 'r', user_id: 'u', pattern: 'carrefour city 2', label: 'Carrefour', created_at: '' }])
     const a = op(joint.id, '2026-10-02', -5, { label: 'CARREFOUR CITY 2 CB*1111' })
-    const b = op(joint.id, '2026-09-02', -5, { label: 'CARREFOUR MARKET CB*3333' })
+    const b = op(joint.id, '2026-09-02', -5, { label: 'CARREFOUR CITY 2 CB*3333' })
     expect(operationsSemblables(a, [a, b], reco, idx, alim.id).map((t) => t.id)).toEqual([b.id])
   })
 })

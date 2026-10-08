@@ -371,21 +371,12 @@ export function normaliserLibelle(s: string): string {
     .replace(/\s+/g, ' ').trim()
 }
 
-/** Reconnaît les intitulés : l'intitulé propre à l'opération, sinon la règle au motif
- *  le plus long contenu dans l'intitulé nettoyé, sinon rien (null). Mémorise par intitulé. */
+/** Reconnaît les intitulés : l'intitulé propre à l'opération, sinon la règle dont le
+ *  motif est EXACTEMENT l'intitulé nettoyé (jamais « contient » : « reims » ne doit pas
+ *  rebaptiser « CRF REIMS », « LAV REIMS »…), sinon rien (null). */
 export function creerReconnaissance(regles: FinLabel[]) {
-  const triees = [...regles].filter((r) => r.pattern.trim())
-    .sort((a, b) => b.pattern.length - a.pattern.length)
-  const cache = new Map<string, FinLabel | null>()
-  const regleDe = (label: string): FinLabel | null => {
-    let r = cache.get(label)
-    if (r === undefined) {
-      const n = normaliserLibelle(label)
-      r = triees.find((x) => n.includes(x.pattern)) ?? null
-      cache.set(label, r)
-    }
-    return r
-  }
+  const parMotif = new Map(regles.filter((r) => r.pattern.trim()).map((r) => [r.pattern.trim(), r]))
+  const regleDe = (label: string): FinLabel | null => parMotif.get(normaliserLibelle(label)) ?? null
   return {
     regleDe,
     /** Ce qu'on affiche pour une opération. */

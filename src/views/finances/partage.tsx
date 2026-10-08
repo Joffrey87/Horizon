@@ -1,6 +1,6 @@
 // Composants communs aux pages de l'onglet Finances : navigation de mois,
 // filtre de titulaire, tuiles, montants éditables, ligne d'opération éditable.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, EyeOff, Eye } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import { TITULAIRES, categorieEffective, nomCategorie, normaliserLibelle, operationsSemblables, decaleMois, euros, libelleMois, type FiltreTitulaire, type IndexFinances } from '../../lib/finances'
@@ -153,37 +153,90 @@ export function LigneOperation({ tx, idx, montrerDate = true }: { tx: FinTransac
   )
 }
 
-/** Choisir l'intitulé affiché d'une opération : pour toutes les opérations
- *  semblables (règle sur un motif) ou pour celle-ci seulement. */
+/** Intitulé affiché d'une opération : il ne change QUE celle-ci. S'il existe des
+ *  opérations au même intitulé bancaire (carte ignorée), une fenêtre les propose,
+ *  toutes cochées ; on décoche celles à laisser telles quelles. */
 function EditeurLibelle({ tx, onClose }: { tx: FinTransaction; onClose: () => void }) {
   const regles = useHorizon((s) => s.finLabels)
   const transactions = useHorizon((s) => s.finTransactions)
-  const { insert, update, remove } = useHorizon.getState()
+  const { insert, update, remove, updateMany } = useHorizon.getState()
   const reco = useReconnaissance()
   const regle = reco.regleDe(tx.label)
+  const motif = normaliserLibelle(tx.label)
   const [libelle, setLibelle] = useState(tx.label_local ?? regle?.label ?? '')
-  const [portee, setPortee] = useState<'semblables' | 'seule'>(tx.label_local ? 'seule' : 'semblables')
-  const [motif, setMotif] = useState(regle?.pattern ?? normaliserLibelle(tx.label))
-  const m = normaliserLibelle(motif)
-  const semblables = useMemo(() => (m ? transactions.filter((t) => normaliserLibelle(t.label).includes(m)) : []), [transactions, m])
-  const exemples = [...new Set(semblables.map((t) => t.label))].slice(0, 5)
+  const [semblables, setSemblables] = useState<FinTransaction[] | null>(null)
+  const [cochees, setCochees] = useState<Set<string>>(new Set())
+  const [futures, setFutures] = useState(true)
+  const [envoi, setEnvoi] = useState(false)
+  const v = libelle.trim()
 
   const enregistrer = async () => {
-    const v = libelle.trim()
-    if (portee === 'seule') {
-      await update('fin_transactions', tx.id, { label_local: v || null })
-    } else if (v && m) {
-      if (tx.label_local) await update('fin_transactions', tx.id, { label_local: null })
-      const existante = regles.find((r) => r.pattern === m)
-      if (existante) await update('fin_labels', existante.id, { label: v })
-      else await insert('fin_labels', { pattern: m, label: v })
-    }
-    onClose()
+    if (!v) { await update('fin_transactions', tx.id, { label_local: null }); onClose(); return }
+    const autres = motif ? transactions.filter((t) => t.id !== tx.id && normaliserLibelle(t.label) === motif && reco.libelle(t) !== v) : []
+    if (!autres.length) { await update('fin_transactions', tx.id, { label_local: v }); onClose(); return }
+    setSemblables(autres.sort((a, b) => b.date.localeCompare(a.date)))
+    setCochees(new Set(autres.map((t) => t.id)))
   }
-  const retirer = async () => {
-    if (tx.label_local) await update('fin_transactions', tx.id, { label_local: null })
-    else if (regle) await remove('fin_labels', regle.id)
-    onClose()
+  const appliquer = async (seule: boolean) => {
+    setEnvoi(true)
+    const ids = seule ? [tx.id] : [tx.id, ...cochees]
+    let ok = await updateMany('fin_transactions', ids, { label_local: v })
+    // Règle pour les prochaines opérations au même intitulé : seulement si TOUTES sont gardées
+    // (sinon elle rebaptiserait aussi celles qu'on vient d'exclure).
+    if (ok && !seule && futures && semblables && cochees.size === semblables.length && motif) {
+      const existante = regles.find((r) => r.pattern === motif)
+      ok = existante ? !!(await update('fin_labels', existante.id, { label: v })) : !!(await insert('fin_labels', { pattern: motif, label: v }))
+    }
+    setEnvoi(false)
+    if (ok) onClose()
+  }
+  const basculer = (id: string) => {
+    const s2 = new Set(cochees)
+    if (s2.has(id)) s2.delete(id); else s2.add(id)
+    setCochees(s2)
+  }
+
+  if (semblables) {
+    const toutes = cochees.size === semblables.length
+    return (
+      <Modal open onClose={onClose} title="Renommer aussi les opérations identiques ?" wide>
+        <div className="space-y-3 text-sm">
+          <p>
+            « {tx.label} » devient <span className="font-medium text-sun-soft">{v}</span>.
+            {' '}{semblables.length} autre{semblables.length > 1 ? 's' : ''} opération{semblables.length > 1 ? 's ont' : ' a'} le même
+            intitulé bancaire : décoche celles à laisser telles quelles.
+          </p>
+          <label className="flex items-center gap-2 text-xs text-ink-2">
+            <input type="checkbox" checked={toutes} onChange={() => setCochees(toutes ? new Set() : new Set(semblables.map((t) => t.id)))} />
+            Tout cocher / décocher
+          </label>
+          <ul className="max-h-[45vh] divide-y divide-line/40 overflow-y-auto rounded-lg border border-line/60 px-3">
+            {semblables.map((t) => (
+              <li key={t.id}>
+                <label className={`flex cursor-pointer items-center gap-3 py-1.5 ${cochees.has(t.id) ? '' : 'opacity-50'}`}>
+                  <input type="checkbox" checked={cochees.has(t.id)} onChange={() => basculer(t.id)} />
+                  <span className="w-20 shrink-0 text-xs tabular-nums text-ink-3">{dateLongue(t.date)}</span>
+                  <span className="min-w-0 flex-1 truncate" title={t.label}>{reco.libelle(t)}</span>
+                  <span className="w-20 shrink-0 text-right tabular-nums">{euros(Number(t.amount), true)}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          <label className={`flex items-center gap-2 text-xs ${toutes ? 'text-ink-2' : 'text-ink-3'}`}>
+            <input type="checkbox" checked={futures && toutes} disabled={!toutes} onChange={() => setFutures(!futures)} />
+            Et les prochaines opérations au même intitulé bancaire
+            {!toutes && ' (seulement si toutes sont gardées)'}
+          </label>
+          <div className="flex flex-wrap justify-end gap-2 pt-1">
+            <button onClick={onClose} className="btn-ghost mr-auto px-3 py-1.5">Annuler</button>
+            <button disabled={envoi} onClick={() => void appliquer(true)} className="btn-ghost px-3 py-1.5">Celle-ci seulement</button>
+            <button disabled={envoi} onClick={() => void appliquer(false)} className="btn-sun px-4 py-1.5 disabled:opacity-50">
+              {envoi ? 'Enregistrement…' : `Renommer celle-ci + ${cochees.size}`}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    )
   }
 
   return (
@@ -195,32 +248,17 @@ function EditeurLibelle({ tx, onClose }: { tx: FinTransaction; onClose: () => vo
           <input autoFocus value={libelle} onChange={(e) => setLibelle(e.target.value)} placeholder="ex. Boulangerie La Boîte à pain"
             onKeyDown={(e) => { if (e.key === 'Enter') void enregistrer() }} className="field mt-1" />
         </label>
-        <div className="space-y-2">
-          <label className="flex items-start gap-2">
-            <input type="radio" checked={portee === 'semblables'} onChange={() => setPortee('semblables')} className="mt-1" />
-            <span className="min-w-0 flex-1">
-              Pour toutes les opérations dont l’intitulé contient
-              <input value={motif} onChange={(e) => setMotif(e.target.value)} disabled={portee !== 'semblables'}
-                className="field mt-1 !py-1 text-xs disabled:opacity-50" aria-label="Motif reconnu" />
-              <span className="mt-1 block text-[11px] text-ink-3">
-                {semblables.length} opération{semblables.length > 1 ? 's' : ''} reconnue{semblables.length > 1 ? 's' : ''}
-                {exemples.length > 0 && ` : ${exemples.join(' · ')}${semblables.length > exemples.length ? '…' : ''}`}
-              </span>
-            </span>
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="radio" checked={portee === 'seule'} onChange={() => setPortee('seule')} /> Pour cette opération seulement
-          </label>
-        </div>
+        <p className="text-[11px] text-ink-3">
+          Ne change que cette opération ; s’il y en a d’autres au même intitulé bancaire, je te les proposerai.
+          Vide = revenir à l’intitulé bancaire.
+        </p>
         <div className="flex flex-wrap justify-end gap-2 pt-1">
-          {(tx.label_local || regle) && (
-            <button onClick={() => void retirer()} className="btn-ghost mr-auto px-3 py-1.5 text-xs">
-              {tx.label_local ? 'Retirer l’intitulé de cette opération' : `Retirer la règle « ${regle!.pattern} »`}
-            </button>
+          {regle && (
+            <button onClick={() => { if (confirm(`Retirer « ${regle.label} » de toutes les opérations « ${regle.pattern} » ?`)) void remove('fin_labels', regle.id).then(onClose) }}
+              className="btn-ghost mr-auto px-3 py-1.5 text-xs">Retirer la règle « {regle.pattern} »</button>
           )}
           <button onClick={onClose} className="btn-ghost px-3 py-1.5">Annuler</button>
-          <button onClick={() => void enregistrer()} disabled={portee === 'semblables' && (!libelle.trim() || !m)}
-            className="btn-sun px-4 py-1.5 disabled:opacity-50">Enregistrer</button>
+          <button onClick={() => void enregistrer()} className="btn-sun px-4 py-1.5">Enregistrer</button>
         </div>
       </div>
     </Modal>
