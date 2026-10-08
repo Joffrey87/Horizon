@@ -144,9 +144,10 @@ export function CourbePatrimoine({ points }: { points: { date: string; net: numb
 }
 
 /**
- * Patrimoine dans le temps, par composante : aires empilées (bas → haut dans
- * l'ordre des séries), liseré de 2 px entre les couches, réticule + infobulle
- * détaillée. Légende chiffrée au-dessus (la couleur n'est jamais seule).
+ * Patrimoine dans le temps, par composante : courbes cumulées. Chaque couche a
+ * un fond léger de sa couleur et son bord supérieur tracé en trait plein ;
+ * mois sur l'axe, légende à droite dans l'ordre des couches (la plus haute en
+ * premier) avec la valeur du dernier jour. Réticule + infobulle détaillée.
  */
 export function CourbeComposition({ points, series }: {
   points: { date: string; parts: Record<string, number> | null; total: number }[]
@@ -154,27 +155,33 @@ export function CourbeComposition({ points, series }: {
 }) {
   const ref = useRef<SVGSVGElement>(null)
   const [survol, setSurvol] = useState<number | null>(null)
-  const W = 640, H = 230, G = 52, B = 22, Hh = 10
+  const W = 680, H = 280, G = 56, B = 26, Hh = 12, D = 10
   const geo = useMemo(() => {
     if (points.length < 2) return null
-    const max = Math.max(1, ...points.map((p) => p.total)) * 1.06
-    const x = (i: number) => G + (i / (points.length - 1)) * (W - G - 8)
-    const y = (v: number) => H - B - (Math.max(0, v) / max) * (H - B - Hh)
+    const max = Math.max(1, ...points.map((p) => p.total)) * 1.05
+    const ticks = graduations(max)
+    const haut = ticks.at(-1) ?? max
+    const x = (i: number) => G + (i / (points.length - 1)) * (W - G - D)
+    const y = (v: number) => H - B - (Math.max(0, v) / haut) * (H - B - Hh)
     // Hauts cumulés de chaque couche (une couche négative compte pour 0).
     const cumuls = points.map((p) => {
       let c = 0
       return series.map((s) => (c += Math.max(0, p.parts?.[s.cle] ?? 0)))
     })
+    const ligneDe = (k: number) => points.map((_, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(cumuls[i]![k]!).toFixed(1)}`).join(' ')
     const aires = series.map((_, k) => {
-      const haut = points.map((_, i) => `${x(i).toFixed(1)},${y(cumuls[i]![k]!).toFixed(1)}`)
-      const bas = points.map((_, i) => `${x(i).toFixed(1)},${y(k ? cumuls[i]![k - 1]! : 0).toFixed(1)}`).reverse()
-      return `M${haut.join(' L')} L${bas.join(' L')} Z`
+      const dessus = points.map((_, i) => `${x(i).toFixed(1)},${y(cumuls[i]![k]!).toFixed(1)}`)
+      const dessous = points.map((_, i) => `${x(i).toFixed(1)},${y(k ? cumuls[i]![k - 1]! : 0).toFixed(1)}`).reverse()
+      return { aire: `M${dessus.join(' L')} L${dessous.join(' L')} Z`, ligne: ligneDe(k) }
     })
     const sansParts = points.some((p) => !p.parts)
     const total = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.total).toFixed(1)}`).join(' ')
-    const ticks = graduations(max).filter((t) => t <= max)
-    const reperes = [0, 1, 2, 3].map((k) => Math.round((k / 3) * (points.length - 1)))
-    return { x, y, aires, total, sansParts, ticks, reperes }
+    // Un repère par début de mois (un sur deux au-delà d'un an), l'année sur janvier.
+    const debuts: number[] = []
+    points.forEach((p, i) => { if (i === 0 || p.date.slice(0, 7) !== points[i - 1]!.date.slice(0, 7)) debuts.push(i) })
+    const pas = debuts.length > 14 ? Math.ceil(debuts.length / 12) : 1
+    const mois = debuts.filter((_, k) => k % pas === 0)
+    return { x, y, aires, total, sansParts, ticks, mois }
   }, [points, series])
 
   if (!geo) return <p className="py-8 text-center text-xs text-ink-3">Pas encore assez de points pour tracer l’évolution.</p>
@@ -183,57 +190,55 @@ export function CourbeComposition({ points, series }: {
     const r = ref.current?.getBoundingClientRect()
     if (!r) return
     const px = ((e.clientX - r.left) / r.width) * W
-    setSurvol(Math.max(0, Math.min(points.length - 1, Math.round(((px - G) / (W - G - 8)) * (points.length - 1)))))
+    setSurvol(Math.max(0, Math.min(points.length - 1, Math.round(((px - G) / (W - G - D)) * (points.length - 1)))))
   }
   const dernier = points.at(-1)!
   const p = survol !== null ? points[survol]! : null
+  const legende = [...series].reverse()
 
   return (
-    <div>
-      {/* Légende chiffrée : valeur du dernier jour par composante. */}
-      <ul className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
-        {series.map((s) => (
-          <li key={s.cle} className="flex items-center gap-1.5">
-            <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: s.couleur }} />
-            <span className="text-ink-2">{s.label}</span>
-            {dernier.parts && <span className="tabular-nums text-ink">{euros(dernier.parts[s.cle] ?? 0)}</span>}
-          </li>
-        ))}
-      </ul>
-      <div className="relative">
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+      <div className="relative min-w-0 flex-1">
         <svg ref={ref} viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Évolution du patrimoine par composante"
           onMouseMove={bouge} onMouseLeave={() => setSurvol(null)}>
           {geo.ticks.map((t) => (
             <g key={t}>
-              <line x1={G} x2={W - 8} y1={geo.y(t)} y2={geo.y(t)} stroke="var(--color-line)" strokeWidth="1" />
-              <text x={G - 6} y={geo.y(t)} textAnchor="end" dominantBaseline="middle" fontSize="10" fill="var(--color-ink-3)">{kEuros(t)}</text>
+              <line x1={G} x2={W - D} y1={geo.y(t)} y2={geo.y(t)} stroke="var(--color-line)" strokeWidth="1" />
+              <text x={G - 8} y={geo.y(t)} textAnchor="end" dominantBaseline="middle" fontSize="10" fill="var(--color-ink-3)">{kEuros(t)}</text>
             </g>
           ))}
-          {geo.reperes.map((i) => (
-            <text key={i} x={geo.x(i)} y={H - 6} textAnchor={i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle'}
-              fontSize="10" fill="var(--color-ink-3)">
-              {format(parseISO(points[i]!.date), 'MMM yy', { locale: fr })}
-            </text>
+          <line x1={G} x2={G} y1={Hh} y2={H - B} stroke="var(--color-line-2)" strokeWidth="1" />
+          {geo.mois.map((i) => {
+            const d = parseISO(points[i]!.date)
+            return (
+              <g key={i}>
+                <line x1={geo.x(i)} x2={geo.x(i)} y1={H - B} y2={H - B + 4} stroke="var(--color-line-2)" strokeWidth="1" />
+                <text x={geo.x(i)} y={H - 8} textAnchor="middle" fontSize="10" fill="var(--color-ink-3)">
+                  {format(d, d.getMonth() === 0 ? 'MMM yy' : 'MMM', { locale: fr })}
+                </text>
+              </g>
+            )
+          })}
+          {/* Fonds légers d'abord, traits ensuite : chaque bord reste net. */}
+          {geo.aires.map((a, k) => <path key={`f${series[k]!.cle}`} d={a.aire} fill={series[k]!.couleur} fillOpacity="0.22" />)}
+          {geo.aires.map((a, k) => (
+            <path key={`l${series[k]!.cle}`} d={a.ligne} fill="none" stroke={series[k]!.couleur} strokeWidth="2" strokeLinejoin="round" />
           ))}
-          {geo.aires.map((d, k) => (
-            <path key={series[k]!.cle} d={d} fill={series[k]!.couleur} fillOpacity="0.75"
-              stroke="var(--color-panel)" strokeWidth="2" strokeLinejoin="round" />
-          ))}
-          {/* Le total en trait : visible aussi sur les anciens jours sans composition. */}
-          {geo.sansParts && <path d={geo.total} fill="none" stroke="var(--color-ink-2)" strokeWidth="2" strokeDasharray="4 3" />}
+          {/* Le total en pointillés sur les anciens jours sans composition. */}
+          {geo.sansParts && <path d={geo.total} fill="none" stroke="var(--color-ink-2)" strokeWidth="1.5" strokeDasharray="4 3" />}
           {p && survol !== null && (
             <g>
-              <line x1={geo.x(survol)} x2={geo.x(survol)} y1={Hh} y2={H - B} stroke="var(--color-ink)" strokeWidth="1" strokeOpacity="0.6" />
+              <line x1={geo.x(survol)} x2={geo.x(survol)} y1={Hh} y2={H - B} stroke="var(--color-ink)" strokeWidth="1" strokeOpacity="0.5" />
               <circle cx={geo.x(survol)} cy={geo.y(p.total)} r="4.5" fill="var(--color-ink)" stroke="var(--color-panel)" strokeWidth="2" />
             </g>
           )}
         </svg>
         {p && survol !== null && (
-          <div className="pointer-events-none absolute top-0 min-w-[12rem] rounded-lg border border-line-2 bg-panel-3 px-2.5 py-1.5 text-xs shadow-lg"
+          <div className="pointer-events-none absolute top-0 min-w-[13rem] rounded-lg border border-line-2 bg-panel-3 px-2.5 py-1.5 text-xs shadow-lg"
             style={{ left: `${(geo.x(survol) / W) * 100}%`, transform: `translateX(${survol > points.length / 2 ? '-105%' : '5%'})` }}>
             <p className="text-ink-2">{format(parseISO(p.date), 'd MMMM yyyy', { locale: fr })}</p>
             <p className="mb-1 font-medium tabular-nums">{euros(p.total)}</p>
-            {p.parts && series.map((s) => (
+            {p.parts && legende.map((s) => (
               <p key={s.cle} className="flex justify-between gap-3">
                 <span className="flex items-center gap-1.5 text-ink-2">
                   <span className="inline-block h-2 w-2 rounded-sm" style={{ background: s.couleur }} />{s.label}
@@ -244,6 +249,21 @@ export function CourbeComposition({ points, series }: {
           </div>
         )}
       </div>
+      {/* Légende à droite (dessous sur téléphone), dans l'ordre des couches. */}
+      <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs lg:w-52 lg:flex-col lg:pt-2">
+        {legende.map((s) => (
+          <li key={s.cle} className="flex items-center gap-2">
+            <span className="inline-block h-3 w-3 shrink-0 rounded-sm border-2" style={{ borderColor: s.couleur, background: `color-mix(in srgb, ${s.couleur} 30%, transparent)` }} />
+            <span className="min-w-0 flex-1 text-ink-2">{s.label}</span>
+            {dernier.parts && <span className="tabular-nums text-ink">{euros(dernier.parts[s.cle] ?? 0)}</span>}
+          </li>
+        ))}
+        {dernier.parts && (
+          <li className="flex items-center gap-2 border-t border-line pt-1.5 font-medium lg:mt-1">
+            <span className="flex-1">Total</span><span className="tabular-nums">{euros(dernier.total)}</span>
+          </li>
+        )}
+      </ul>
     </div>
   )
 }
