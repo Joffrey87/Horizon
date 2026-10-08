@@ -3,8 +3,8 @@ import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Plus, Trash2 } from 'luc
 import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { useHorizon } from '../../lib/store'
-import { GENRES, TITULAIRES, categorieEffective, euros, lignesTriees } from '../../lib/finances'
-import type { FinCategory, FinLine, FinOwner } from '../../lib/types'
+import { GENRES, TITULAIRES, categorieEffective, euros, lignesTriees, normaliserLibelle } from '../../lib/finances'
+import type { FinCategory, FinLine, FinOwner, FinTransaction } from '../../lib/types'
 import { Card } from '../../components/ui'
 import { useArbreCategories, useIndex } from './contexte'
 
@@ -26,11 +26,91 @@ export function ReglagesView() {
   return (
     <div className="rise grid gap-4 xl:grid-cols-2">
       <div className="space-y-4">
+        <Card title="Intitulés locaux"><IntitulesLocaux /></Card>
         <Card title="Lignes de budget"><Lignes /></Card>
         <Card title="Comptes"><Comptes /></Card>
         <Card title="Synchronisation"><Synchro /></Card>
       </div>
       <Card title="Catégories → lignes"><Correspondance /></Card>
+    </div>
+  )
+}
+
+/** Tous les intitulés renommés : règles (toutes les opérations au même intitulé
+ *  bancaire, prochaines comprises) et intitulés propres à des opérations.
+ *  Chaque intitulé se renomme sur place ou se retire. */
+function IntitulesLocaux() {
+  const regles = useHorizon((s) => s.finLabels)
+  const transactions = useHorizon((s) => s.finTransactions)
+  const { update, remove, updateMany } = useHorizon.getState()
+
+  const parMotif = useMemo(() => {
+    const m = new Map<string, FinTransaction[]>()
+    for (const t of transactions) {
+      const k = normaliserLibelle(t.label)
+      m.set(k, [...(m.get(k) ?? []), t])
+    }
+    return m
+  }, [transactions])
+  // Intitulés propres : regroupés par (intitulé local, intitulé bancaire nettoyé).
+  const propres = useMemo(() => {
+    const g = new Map<string, { local: string; banque: string; ops: FinTransaction[] }>()
+    for (const t of transactions) {
+      if (!t.label_local?.trim()) continue
+      const k = `${t.label_local}|${normaliserLibelle(t.label)}`
+      const e = g.get(k) ?? { local: t.label_local, banque: t.label, ops: [] }
+      e.ops.push(t)
+      g.set(k, e)
+    }
+    return [...g.values()].sort((a, b) => a.local.localeCompare(b.local, 'fr'))
+  }, [transactions])
+  const reglesTriees = [...regles].sort((a, b) => a.label.localeCompare(b.label, 'fr'))
+  const derniere = (ops: FinTransaction[]) => ops.map((t) => t.date).sort().at(-1)
+
+  if (!reglesTriees.length && !propres.length) {
+    return <p className="text-sm text-ink-3">Aucun intitulé renommé : clique l’intitulé d’une opération pour lui en donner un.</p>
+  }
+  const ligne = (cle: string, local: string, banque: string, nb: number, date: string | undefined, renommer: (v: string) => void,
+    retirer: () => void, portee: string) => (
+    <li key={cle} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm">
+      <input defaultValue={local} aria-label="Intitulé local" className="field !w-auto min-w-0 flex-1 !py-1"
+        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+        onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== local) renommer(v) }} />
+      <span className="min-w-0 basis-full truncate text-[11px] text-ink-3 sm:basis-auto sm:flex-1" title={banque}>
+        ← {banque} · {nb} opér.{date ? ` · dernière le ${format(parseISO(date), 'd MMM yy', { locale: fr })}` : ''} · {portee}
+      </span>
+      <button onClick={retirer} className="btn-ghost p-1" title="Revenir à l’intitulé bancaire" aria-label="Retirer"><Trash2 size={12} /></button>
+    </li>
+  )
+
+  return (
+    <div className="space-y-3">
+      {reglesTriees.length > 0 && (
+        <div>
+          <p className="block-title mb-1">Pour toutes les opérations au même intitulé ({reglesTriees.length})</p>
+          <ul className="divide-y divide-line/40">
+            {reglesTriees.map((r) => {
+              const ops = parMotif.get(r.pattern) ?? []
+              return ligne(r.id, r.label, ops[0]?.label ?? r.pattern, ops.length, derniere(ops),
+                (v) => void update('fin_labels', r.id, { label: v }),
+                () => { if (confirm(`Retirer « ${r.label} » de ${ops.length} opération${ops.length > 1 ? 's' : ''} ?`)) void remove('fin_labels', r.id) },
+                'prochaines comprises')
+            })}
+          </ul>
+        </div>
+      )}
+      {propres.length > 0 && (
+        <div>
+          <p className="block-title mb-1">Pour des opérations choisies ({propres.length})</p>
+          <ul className="divide-y divide-line/40">
+            {propres.map((g) => ligne(`${g.local}|${g.banque}`, g.local, g.banque, g.ops.length, derniere(g.ops),
+              (v) => void updateMany('fin_transactions', g.ops.map((t) => t.id), { label_local: v }),
+              () => void updateMany('fin_transactions', g.ops.map((t) => t.id), { label_local: null }),
+              'celles-ci seulement'))}
+          </ul>
+        </div>
+      )}
+      <p className="text-[11px] text-ink-3">Modifie un intitulé puis Entrée (ou clique ailleurs) ; la corbeille rend l’intitulé bancaire.</p>
     </div>
   )
 }
