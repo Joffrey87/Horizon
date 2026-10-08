@@ -165,54 +165,57 @@ export function BudgetView() {
   )
 }
 
-/** Une ligne pour le mois affiché : d'abord les totaux par sous-catégorie ;
- *  les opérations elles-mêmes seulement sur « Détails ». */
+/** Une ligne pour le mois affiché : les totaux par sous-catégorie ; un clic
+ *  sur une sous-catégorie déplie ses opérations, « Détails » ouvre ou ferme tout. */
 function DetailLigne({ cle }: { cle: string }) {
   const { mois, filtre } = useFin()
   const transactions = useHorizon((s) => s.finTransactions)
   const idx = useIndex()
-  const [details, setDetails] = useState(false)
+  const [ouverts, setOuverts] = useState<Set<string>>(new Set())
   const groupes = useMemo(() => detailLigne({ cle, mois, transactions, idx, filtre }), [cle, mois, transactions, idx, filtre])
   if (!groupes.length) return <p className="py-2 text-xs text-ink-3">Aucune opération ce mois-ci.</p>
   const total = groupes.reduce((s, g) => s + g.total, 0)
   const nbOperations = groupes.reduce((s, g) => s + g.operations.length, 0)
+  const toutOuvert = groupes.every((g) => ouverts.has(g.nom))
+  const basculer = (nom: string) => {
+    const s = new Set(ouverts)
+    if (s.has(nom)) s.delete(nom); else s.add(nom)
+    setOuverts(s)
+  }
 
   return (
     <div className="space-y-2">
       <ul className="divide-y divide-line/40">
-        {groupes.map((g) => (
-          <li key={g.nom} className="flex items-center gap-3 py-1.5 text-sm">
-            <span className="min-w-0 flex-1 truncate" title={g.nom}>{g.court}</span>
-            <span className="hidden w-32 sm:block">
-              {total > 0 && g.total > 0 && <ProgressBar value={(g.total / total) * 100} color="var(--color-teal)" />}
-            </span>
-            <span className="w-20 text-right text-xs text-ink-3">
-              {g.operations.length} op.
-            </span>
-            <span className="w-24 text-right font-medium tabular-nums">{euros(g.total)}</span>
-          </li>
-        ))}
+        {groupes.map((g) => {
+          const ouvert = ouverts.has(g.nom)
+          return (
+            <li key={g.nom}>
+              <button onClick={() => basculer(g.nom)} aria-expanded={ouvert}
+                className="flex w-full items-center gap-3 rounded py-1.5 text-left text-sm hover:bg-panel-2/50">
+                {ouvert ? <ChevronDown size={13} className="shrink-0 text-ink-3" /> : <ChevronRight size={13} className="shrink-0 text-ink-3" />}
+                <span className="min-w-0 flex-1 truncate" title={g.nom}>{g.court}</span>
+                <span className="hidden w-32 sm:block">
+                  {total > 0 && g.total > 0 && <ProgressBar value={(g.total / total) * 100} color="var(--color-teal)" />}
+                </span>
+                <span className="w-20 text-right text-xs text-ink-3">{g.operations.length} op.</span>
+                <span className="w-24 text-right font-medium tabular-nums">{euros(g.total)}</span>
+              </button>
+              {ouvert && (
+                <ul className="mb-2 ml-5 divide-y divide-line/40 border-l border-line/60 pl-3">
+                  {g.operations.map((tx) => <LigneOperation key={tx.id} tx={tx} idx={idx} />)}
+                </ul>
+              )}
+            </li>
+          )
+        })}
       </ul>
       <div className="flex justify-end">
-        <button onClick={() => setDetails(!details)} className="btn-ghost flex items-center gap-1 px-3 py-1 text-xs">
-          {details ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-          {details ? 'Masquer les détails' : `Détails (${nbOperations} opération${nbOperations > 1 ? 's' : ''})`}
+        <button onClick={() => setOuverts(toutOuvert ? new Set() : new Set(groupes.map((g) => g.nom)))}
+          className="btn-ghost flex items-center gap-1 px-3 py-1 text-xs">
+          {toutOuvert ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          {toutOuvert ? 'Tout fermer' : `Détails : tout ouvrir (${nbOperations} opération${nbOperations > 1 ? 's' : ''})`}
         </button>
       </div>
-      {details && (
-        <div className="space-y-3 pt-1">
-          {groupes.map((g) => (
-            <div key={g.nom}>
-              <p className="flex justify-between border-b border-line/60 py-1 text-xs text-ink-2">
-                <span>{g.court}</span><span className="tabular-nums">{euros(g.total)}</span>
-              </p>
-              <ul className="divide-y divide-line/40">
-                {g.operations.map((tx) => <LigneOperation key={tx.id} tx={tx} idx={idx} />)}
-              </ul>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
