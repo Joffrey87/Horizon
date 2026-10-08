@@ -20,7 +20,7 @@ const ligne = (name: string, over: Partial<FinLine> = {}): FinLine => ({
   id: id(), user_id: 'u', name, kind: 'depense', sort_order: 0, created_at: '', ...over,
 })
 const categorie = (name: string, over: Partial<FinCategory> = {}): FinCategory => ({
-  id: id(), user_id: 'u', name, parent_id: null, line_id: null, role: 'depense', hidden: false, source: 'test', external_id: null,
+  id: id(), user_id: 'u', name, parent_id: null, line_id: null, role: 'depense', hidden: false, merged_into: null, manual: false, source: 'test', external_id: null,
   created_at: '', ...over,
 })
 const op = (account_id: string, date: string, amount: number, over: Partial<FinTransaction> = {}): FinTransaction => ({
@@ -78,6 +78,13 @@ describe('classer', () => {
   it("ne compte un virement interne que s'il alimente une ligne d'épargne", () => {
     expect(classer(op(perso.id, '2026-10-02', -300, { category_id: invest.id, internal: true }), idx)).toEqual({ type: 'ligne', ligne: epargne.id })
     expect(classer(op(perso.id, '2026-10-02', -300, { category_id: alim.id, internal: true }), idx).type).toBe('ignoree')
+  })
+  it('suit les fusions : une catégorie fusionnée compte dans sa cible', () => {
+    const ancienne = categorie('Courses alimentaires', { merged_into: boulangerie.id, hidden: true })
+    const i2 = indexer([joint], [...categories, ancienne], lines)
+    expect(classer(op(joint.id, '2026-10-02', -9, { category_id: ancienne.id }), i2)).toEqual({ type: 'ligne', ligne: courses.id })
+    const d = detailLigne({ cle: courses.id, mois: '2026-10', transactions: [op(joint.id, '2026-10-02', -9, { category_id: ancienne.id })], idx: i2, filtre: 'foyer' })
+    expect(d.map((g) => g.court)).toEqual(['Boulangerie'])
   })
   it('une sous-catégorie suit le rôle de sa catégorie principale', () => {
     const prime = categorie('Prime', { parent_id: salaire.id, role: 'depense' })

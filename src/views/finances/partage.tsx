@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, EyeOff, Eye } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
-import { TITULAIRES, decaleMois, euros, libelleMois, type FiltreTitulaire, type IndexFinances } from '../../lib/finances'
+import { TITULAIRES, categorieEffective, decaleMois, euros, libelleMois, type FiltreTitulaire, type IndexFinances } from '../../lib/finances'
 import type { FinOwner, FinTransaction } from '../../lib/types'
 import { Seg } from '../../components/ui'
 import { dateCourte, moisCourant, useArbreCategories } from './contexte'
@@ -116,7 +116,7 @@ ${compte?.name ?? ''}${tx.internal ? ' · virement interne' : ''}${tx.category_m
         {Number(tx.amount) > 0 ? '+' : ''}{euros(Number(tx.amount), true)}
       </span>
       <span className="hidden flex-1 sm:block" />
-      <SelectCategorie value={tx.category_id} className="!w-auto max-w-[11rem]"
+      <SelectCategorie value={categorieEffective(tx.category_id, idx)?.id ?? null} className="!w-auto max-w-[11rem]"
         onChange={(id) => maj({ category_id: id, category_manual: true })} />
       <select value={tx.owner ?? ''} onChange={(e) => maj({ owner: (e.target.value || null) as FinOwner | null })}
         className="field !w-auto !py-1 text-xs" aria-label="Titulaire">

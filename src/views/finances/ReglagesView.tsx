@@ -3,10 +3,10 @@ import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Plus, Trash2 } from 'luc
 import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { useHorizon } from '../../lib/store'
-import { GENRES, TITULAIRES, euros, lignesTriees } from '../../lib/finances'
+import { GENRES, TITULAIRES, categorieEffective, euros, lignesTriees } from '../../lib/finances'
 import type { FinCategory, FinLine, FinOwner } from '../../lib/types'
 import { Card } from '../../components/ui'
-import { useArbreCategories } from './contexte'
+import { useArbreCategories, useIndex } from './contexte'
 
 const ROLES: { value: FinCategory['role']; label: string }[] = [
   { value: 'depense', label: 'Dépense' }, { value: 'revenu', label: 'Entrée' }, { value: 'hors_budget', label: 'Hors budget' },
@@ -135,6 +135,7 @@ function Synchro() {
 /** Dans quelle ligne tombe chaque catégorie (une sous-catégorie suit son parent, sauf choix contraire). */
 function Correspondance() {
   const arbre = useArbreCategories()
+  const idx = useIndex()
   const lines = useHorizon((s) => s.finLines)
   const transactions = useHorizon((s) => s.finTransactions)
   const accounts = useHorizon((s) => s.finAccounts)
@@ -147,11 +148,12 @@ function Correspondance() {
     const budget = new Set(accounts.filter((a) => a.in_budget).map((a) => a.id))
     const m = new Map<string, number>()
     for (const tx of transactions) {
-      if (!tx.category_id || !budget.has(tx.account_id)) continue
-      m.set(tx.category_id, (m.get(tx.category_id) ?? 0) + 1)
+      const cat = categorieEffective(tx.category_id, idx)
+      if (!cat || !budget.has(tx.account_id)) continue
+      m.set(cat.id, (m.get(cat.id) ?? 0) + 1)
     }
     return m
-  }, [transactions, accounts])
+  }, [transactions, accounts, idx])
 
   const groupes = arbre
     .map((g) => ({ ...g, n: (compte.get(g.parent.id) ?? 0) + g.enfants.reduce((s, c) => s + (compte.get(c.id) ?? 0), 0) }))

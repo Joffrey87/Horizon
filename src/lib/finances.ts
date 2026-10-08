@@ -105,6 +105,17 @@ export function indexer(accounts: FinAccount[], categories: FinCategory[], lines
   }
 }
 
+/** Catégorie effective d'une opération : suit les fusions (`merged_into`) jusqu'à la cible. */
+export function categorieEffective(id: string | null, idx: IndexFinances): FinCategory | undefined {
+  let cat = id ? idx.categories.get(id) : undefined
+  for (let garde = 0; cat?.merged_into && garde < 10; garde++) {
+    const cible = idx.categories.get(cat.merged_into)
+    if (!cible) break
+    cat = cible
+  }
+  return cat
+}
+
 /** Ligne de budget d'une catégorie : la sienne, à défaut celle de son parent. */
 export function ligneDeCategorie(cat: FinCategory | undefined, idx: IndexFinances): string | null {
   if (!cat) return null
@@ -123,7 +134,7 @@ export function classer(tx: FinTransaction, idx: IndexFinances): Classement {
   const compte = idx.comptes.get(tx.account_id)
   if (!compte || !compte.in_budget) return { type: 'ignoree', raison: 'compte' }
   if (tx.excluded) return { type: 'ignoree', raison: 'exclue' }
-  const cat = tx.category_id ? idx.categories.get(tx.category_id) : undefined
+  const cat = categorieEffective(tx.category_id, idx)
   const ligneId = ligneDeCategorie(cat, idx)
   const ligne = ligneId ? idx.lignes.get(ligneId) : undefined
   if (tx.internal && ligne?.kind !== 'epargne') return { type: 'ignoree', raison: 'interne' }
@@ -327,7 +338,7 @@ export function detailLigne(opts: {
     const c = classer(tx, idx)
     const k = c.type === 'ligne' ? c.ligne : c.type === 'non_classe' ? NON_CLASSE : null
     if (k !== cle) continue
-    const cat = tx.category_id ? idx.categories.get(tx.category_id) : undefined
+    const cat = categorieEffective(tx.category_id, idx)
     const nom = nomCategorie(cat, idx)
     let g = groupes.get(nom)
     if (!g) { g = { nom, court: cat?.name ?? 'Sans catégorie', total: 0, operations: [] }; groupes.set(nom, g) }

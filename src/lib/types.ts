@@ -530,6 +530,8 @@ export interface FinCategory {
   line_id: UUID | null        // à défaut, celle du parent
   role: 'depense' | 'revenu' | 'hors_budget'
   hidden: boolean             // masquée des listes de choix (ses opérations restent comptées)
+  merged_into: UUID | null    // fusionnée dans cette catégorie : ses opérations comptent comme les siennes
+  manual: boolean             // retouchée dans Horizon : l'import ne réécrit ni nom ni parent
   source: string
   external_id: string | null
   created_at: string

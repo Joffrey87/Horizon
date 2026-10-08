@@ -59,7 +59,7 @@ const keyFor = (table: string): keyof ReturnType<typeof useHorizon.getState> => 
 const FIN_DEFAUTS: Record<string, Record<string, unknown>> = {
   fin_lines: { kind: 'depense', sort_order: 0 },
   fin_accounts: { kind: 'autre', owner: 'joffrey', in_budget: false, balance: 0, archived: false, sort_order: 0, source: 'manuel' },
-  fin_categories: { parent_id: null, line_id: null, role: 'depense', hidden: false, source: 'manuel' },
+  fin_categories: { parent_id: null, line_id: null, role: 'depense', hidden: false, merged_into: null, manual: false, source: 'manuel' },
   fin_transactions: { category_manual: false, owner: null, internal: false, excluded: false, source: 'manuel' },
   fin_holdings: { asset_class: 'autre', class_manual: false, source: 'manuel' },
   fin_dca: { active: true, sort_order: 0 },
