@@ -11,7 +11,7 @@ import {
 import { Modal } from '../../components/ui'
 import type { Step, Task } from '../../lib/types'
 import { DayCell } from './DayCell'
-import { EVENT_DEFAULT_COLOR, remplaProposeOn, stepsForDay, useLayerFilter, type MoveFn } from './partage'
+import { EVENT_DEFAULT_COLOR, remplaProposeOn, stepsForDay, type MoveFn } from './partage'
 
 /** Vue Mois pour téléphone : le mois ENTIER sur un écran, façon agenda de poche.
  *  Chaque semaine est une ligne qui se partage la hauteur ; dans chaque jour, des
@@ -27,7 +27,6 @@ export function MoisTelephone({ anchor, onShift, onEdit, onCreate, onStep, onMov
   onEdit: (t: Task) => void; onCreate: (d: string) => void; onStep: (st: Step) => void; onMove: MoveFn
 }) {
   const s = useHorizon()
-  const { layers, taskVisible, stepVisible } = useLayerFilter()
   const [ouvert, setOuvert] = useState<Date | null>(null)
   const zoneRef = useRef<HTMLDivElement>(null)
   const [hauteur, setHauteur] = useState(0)
@@ -57,7 +56,7 @@ export function MoisTelephone({ anchor, onShift, onEdit, onCreate, onStep, onMov
   /** Les lignes d'un jour, dans l'ordre : bandes multi-jours, fêtes/messes, étapes, reste. */
   const lignesDuJour = (jour: Date): Ligne[] => {
     const d = iso(jour)
-    const toutes = [...tasksForDay(s.tasks, jour)].filter(taskVisible).sort(compareTasksByTitleTime)
+    const toutes = [...tasksForDay(s.tasks, jour)].sort(compareTasksByTitleTime)
     const bandes = toutes.filter((t) => spanPart(t, d) !== 'single')
       .sort((a, b) => (a.scheduled_date ?? '').localeCompare(b.scheduled_date ?? '') || a.id.localeCompare(b.id))
     const simples = toutes.filter((t) => spanPart(t, d) === 'single')
@@ -68,14 +67,14 @@ export function MoisTelephone({ anchor, onShift, onEdit, onCreate, onStep, onMov
       const titre = part === 'start' || jour.getDay() === 1
       out.push({ cle: t.id, texte: titre ? t.title : '', couleur: couleurDe(t), bande: true })
     }
-    const fete = layers.fetes && s.settings?.catholic_feasts !== false ? feastOnDay(jour) : null
+    const fete = s.settings?.catholic_feasts !== false ? feastOnDay(jour) : null
     if (fete) out.push({ cle: 'fete', texte: fete, couleur: '#f59e0b', icone: 'fete' })
-    const devotion = layers.messes ? firstFridayOrSaturday(jour) : null
+    const devotion = firstFridayOrSaturday(jour)
     if (devotion && d >= todayIso()) out.push({ cle: 'messe', texte: `Messe · ${devotion}`, couleur: '#a78bfa', icone: 'messe' })
-    for (const b of layers.anniversaires ? birthdaysForDay(s.birthdays, jour) : []) {
+    for (const b of birthdaysForDay(s.birthdays, jour)) {
       out.push({ cle: `b${b.id}`, texte: `🎂 ${b.name}`, couleur: '#ec7f97' })
     }
-    for (const st of stepsForDay(s.steps, jour).filter(stepVisible)) {
+    for (const st of stepsForDay(s.steps, jour)) {
       out.push({ cle: st.id, texte: st.title, couleur: '#378add' })
     }
     for (const t of simples) {

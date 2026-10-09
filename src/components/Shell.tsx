@@ -82,6 +82,7 @@ export function Shell({ children }: { children: ReactNode }) {
     const v = vue && apercu ? { ...vue, actif: true } : vue
     if (v?.actif && !routeAutorisee(pathname, v)) navigate(pageAccueil(v) ?? '/', { replace: true })
   }, [vue, apercu, pathname, navigate])
+  const pleineLargeur = pathname === '/' || pathname.startsWith('/temps')
 
   useEffect(() => {
     if (nbAgendas === 0 || vue) return
@@ -106,7 +107,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
       {/* ---- Barre latérale (style options 1/3) ---- */}
       <aside className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-line bg-panel
-        transition-transform lg:static lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        transition-transform lg:sticky lg:top-0 lg:h-screen lg:shrink-0 lg:self-start lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center gap-1 px-3 py-5">
           <button onClick={() => navigate(-1)}
             className="btn-ghost hidden shrink-0 p-2 lg:flex"
@@ -126,7 +127,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </Link>
         </div>
 
-        <nav className="flex-1 space-y-0.5 px-3">
+        <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3">
           {nav.map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} end={to === '/'} onClick={() => setMenuOpen(false)}
               className={({ isActive }) =>
@@ -163,7 +164,9 @@ export function Shell({ children }: { children: ReactNode }) {
 
       {/* ---- Contenu ---- */}
       <div className="sunrise-veil min-w-0 flex-1">
-        <div className="mx-auto max-w-6xl px-4 pb-16 pt-4 lg:px-8">
+        {/* L'accueil (paysage de bord à bord) et Temps (grilles denses) prennent toute la
+            largeur ; les autres pages restent centrées dans une colonne de lecture. */}
+        <div className={`mx-auto px-4 pt-4 lg:px-8 ${pathname.startsWith('/temps') ? 'pb-16 md:pb-3' : 'pb-16'} ${pleineLargeur ? '' : 'max-w-6xl'}`}>
           {/* Barre mobile : menu + retour + logo (n'existe qu'en petit écran) */}
           <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
             <div className="flex items-center gap-1">

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import { Eraser } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 
-/** Bloc-notes libre sous la vue Semaine : 4 colonnes de 4 lignes, un seul bouton
- *  « Effacer ». Mémorisé dans un layout (projection `temps-notes`), donc retrouvé
+/** Bloc-notes libre en bas de chaque vue de Temps : 4 colonnes, un seul bouton
+ *  « Effacer ». Mêmes notes d'une vue à l'autre. Mémorisé dans un layout (projection `temps-notes`), donc retrouvé
  *  sur le téléphone comme sur l'ordinateur. */
 const PROJECTION = 'temps-notes'
 const COLONNES = 4
@@ -11,7 +12,7 @@ const DELAI_MS = 700
 const normaliser = (notes?: string[]): string[] =>
   Array.from({ length: COLONNES }, (_, i) => notes?.[i] ?? '')
 
-export function NotesSemaine() {
+export function NotesSemaine({ lignes = 4 }: { lignes?: number }) {
   const layout = useHorizon((s) => s.layouts.find((l) => l.projection === PROJECTION))
   const [cols, setCols] = useState<string[]>(() => normaliser(layout?.data.notes))
   const modifie = useRef(false) // l'utilisateur a tapé : ne plus écraser avec le serveur
@@ -65,18 +66,24 @@ export function NotesSemaine() {
   }
 
   return (
-    <section className="card shrink-0 !p-2" aria-label="Notes">
-      <div className="mb-1 flex items-center justify-between px-1">
-        <p className="text-[11px] uppercase tracking-wide text-ink-3">Notes</p>
+    // À droite, une marge laisse la place au bouton flottant « + » (QuickCapture) :
+    // il ne recouvre jamais les notes.
+    // Pas de bandeau de titre : toute la hauteur sert aux notes. Le mot « Notes »
+    // est écrit lettre par lettre, de haut en bas, sur le côté gauche, avec le
+    // bouton d'effacement en dessous.
+    <section className="card flex shrink-0 !bg-panel/55 !p-2 md:mr-[4.75rem]" aria-label="Notes">
+      <div className="flex w-6 shrink-0 flex-col items-center justify-between gap-1 pr-1">
+        <span className="text-[11px] uppercase text-ink-3 [text-orientation:upright] [writing-mode:vertical-rl]">Notes</span>
         <button type="button" onClick={effacer} disabled={!cols.some((c) => c.trim())}
-          className="btn-ghost px-2 py-0.5 text-xs disabled:pointer-events-none disabled:opacity-40">
-          Effacer
+          aria-label="Effacer toutes les notes" title="Effacer toutes les notes"
+          className="btn-ghost p-1 text-ink-3 disabled:pointer-events-none disabled:opacity-30">
+          <Eraser size={13} />
         </button>
       </div>
       {/* Colonnes séparées d'un filet à peine visible. */}
-      <div className="grid grid-cols-2 sm:grid-cols-4">
+      <div className="grid min-w-0 flex-1 grid-cols-2 sm:grid-cols-4">
         {cols.map((c, i) => (
-          <textarea key={i} value={c} rows={4} onChange={(e) => saisir(i, e.target.value)}
+          <textarea key={i} value={c} rows={lignes} onChange={(e) => saisir(i, e.target.value)}
             aria-label={`Notes, colonne ${i + 1}`}
             className={`block w-full resize-none bg-transparent px-2 py-1 text-sm leading-6 text-ink-2 outline-none
               placeholder:text-ink-3/50 focus:bg-white/[0.03] ${i > 0 ? 'sm:border-l sm:border-line-2/40' : ''} ${

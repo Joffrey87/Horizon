@@ -5,9 +5,11 @@ import { Layers, Church, AlertTriangle } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import { useMediaQuery } from '../../lib/useMediaQuery'
 import { extractHourMinute, iso, tasksForDay, spanPart, isMarketParkingDay, feastOnDay, extractEmojis, firstFridayOrSaturday, chosenMassForDay, todayIso } from '../../lib/logic'
-import { Card, ProjectTag } from '../../components/ui'
+import { Card } from '../../components/ui'
+import { couleurProjet } from '../../lib/projectIcons'
+import { IconeProjet } from '../../components/IconeProjet'
 import type { Step, Task } from '../../lib/types'
-import { MassPickCtx, useLayerFilter, stepsForDay, dragData, readDrag, remplaProposeOn, type MoveFn } from './partage'
+import { MassPickCtx, stepsForDay, dragData, readDrag, survol, veutCopier, remplaProposeOn, type MoveFn } from './partage'
 import { RemplaChip } from './DayCell'
 
 // ---- Vue Semaine : grille horaire verticale -------------------------------
@@ -47,7 +49,7 @@ export function WeekHours({ anchor, onEdit, onCreate, onStep, onMove }: {
   const colHeures = 'sticky left-0 z-10 bg-panel'
 
   return (
-    <Card className="flex min-h-0 min-w-0 flex-1 flex-col !p-2">
+    <Card className="flex min-h-0 min-w-0 flex-1 flex-col !border-line-2/60 !bg-transparent !p-2">
       <div ref={defilRef}
         className="flex min-h-0 flex-1 flex-col max-md:snap-x max-md:snap-mandatory max-md:overflow-x-auto max-md:[container-type:inline-size] max-md:[scrollbar-width:none]">
         <div className="grid min-h-0 flex-1"
@@ -89,28 +91,28 @@ function AllDayBand({ day, onEdit, onStep, onMove, onCreate }: {
   day: Date; onEdit: (t: Task) => void; onStep: (st: Step) => void; onMove: MoveFn; onCreate: (d: string) => void
 }) {
   const s = useHorizon()
-  const { layers, taskVisible, stepVisible } = useLayerFilter()
   const openMassPicker = useContext(MassPickCtx)
   const [over, setOver] = useState(false)
-  const steps = stepsForDay(s.steps, day).filter(stepVisible)
-  const feast = layers.fetes && s.settings?.catholic_feasts !== false ? feastOnDay(day) : null
-  const rawMass = layers.messes ? firstFridayOrSaturday(day) : null
+  const steps = stepsForDay(s.steps, day)
+  const feast = s.settings?.catholic_feasts !== false ? feastOnDay(day) : null
+  const rawMass = firstFridayOrSaturday(day)
   const massLabel = rawMass && iso(day) >= todayIso() && day <= addMonths(new Date(), 6) ? rawMass : null
   const chosenMass = massLabel ? chosenMassForDay(s.checks, iso(day)) : null
   const feastMass = feast ? chosenMassForDay(s.checks, iso(day)) : null
-  const untimed = [...tasksForDay(s.tasks, day)].filter((t) => !extractHourMinute(t.title)).filter(taskVisible)
+  const untimed = [...tasksForDay(s.tasks, day)].filter((t) => !extractHourMinute(t.title))
   // Évènements multi-jours d'abord : leurs barres fines s'alignent d'un jour à l'autre (continuité).
   const spanEvents = untimed.filter((t) => spanPart(t, iso(day)) !== 'single')
   const singleEvents = untimed.filter((t) => spanPart(t, iso(day)) === 'single')
   const rempla = remplaProposeOn(s.celesteProposals, iso(day))
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault(); setOver(false)
-    const d = readDrag(e); if (d) onMove(d.kind, d.id, iso(day))
+    const d = readDrag(e); if (d) onMove(d.kind, d.id, iso(day), veutCopier(e))
   }
 
   const renderUntimed = (t: Task) => {
     const part = spanPart(t, iso(day))
-    const c = s.domains.find((d) => d.id === (t.domain_id ?? s.projects.find((p) => p.id === t.project_id)?.domain_id))?.color
+    const projet = t.project_id ? s.projects.find((p) => p.id === t.project_id) : undefined
+    const c = couleurProjet(projet, s.domains) ?? s.domains.find((d) => d.id === (t.domain_id ?? projet?.domain_id))?.color
     // Jours intermédiaires / fin d'un évènement multi-jours : barre fine continue, sans titre — emoji centré par-dessus.
     if (part === 'middle' || part === 'end') {
       const emojis = extractEmojis(t.title)
@@ -128,15 +130,15 @@ function AllDayBand({ day, onEdit, onStep, onMove, onCreate }: {
     }
     return (
       <button key={t.id} draggable={!t.is_recurring} onDragStart={dragData('task', t.id)} onClick={() => onEdit(t)}
-        style={{ background: c ? `${c}2b` : undefined, borderLeft: c ? `3px solid ${c}` : undefined }}
+        style={{ background: c ? `${c}2b` : undefined, border: projet && c ? `1.5px solid ${c}` : undefined }}
         className="block w-full truncate rounded bg-panel-3 px-1 py-0.5 text-left text-[10px] text-ink-2">
-        {t.title}
+        {projet && <IconeProjet project={projet} size={10} className="mr-1 align-[-1px]" />}{t.title}
       </button>
     )
   }
 
   return (
-    <div onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={onDrop}
+    <div onDragOver={(e) => { survol(e); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={onDrop}
       onClick={(e) => { if (e.target === e.currentTarget) onCreate(iso(day)) }}
       className={`min-h-8 space-y-0.5 border-b border-line-2/60 p-0.5 ${over ? 'bg-sun/10' : ''} ${isToday(day) ? 'bg-sun/5' : ''}`}>
       {rempla && <RemplaChip p={rempla} />}
@@ -176,45 +178,87 @@ function AllDayBand({ day, onEdit, onStep, onMove, onCreate }: {
   )
 }
 
+/** Évènements à heure fixe d'une journée, répartis en colonnes quand ils se
+ *  chevauchent : aucun n'en cache un autre. Un évènement court occupe au moins
+ *  45 min dans le calcul (sa hauteur minimale à l'écran dépasse sa durée réelle). */
+function placerSimultanes<T extends { t: Task; hm: { hour: number; minute: number } }>(items: T[]): (T & { col: number; cols: number })[] {
+  const tries = items
+    .map((it) => {
+      const debut = it.hm.hour + it.hm.minute / 60
+      return { it, debut, fin: debut + Math.max(it.t.duration_min ?? 30, 45) / 60 }
+    })
+    .sort((a, b) => a.debut - b.debut || b.fin - a.fin)
+  const out: (T & { col: number; cols: number })[] = []
+  let groupe: (T & { col: number; cols: number })[] = []
+  let finGroupe = -1
+  let finsColonnes: number[] = []
+  const clore = () => {
+    const n = Math.max(...groupe.map((g) => g.col)) + 1
+    for (const g of groupe) g.cols = n
+    out.push(...groupe)
+    groupe = []
+    finsColonnes = []
+  }
+  for (const { it, debut, fin } of tries) {
+    if (groupe.length && debut >= finGroupe) clore()
+    let col = finsColonnes.findIndex((f) => f <= debut)
+    if (col < 0) { col = finsColonnes.length; finsColonnes.push(0) }
+    finsColonnes[col] = fin
+    finGroupe = Math.max(finGroupe, fin)
+    groupe.push({ ...it, col, cols: 1 })
+  }
+  if (groupe.length) clore()
+  return out
+}
+
 function HourColumn({ day, onEdit, onCreate, onMove }: {
   day: Date
   onEdit: (t: Task) => void; onCreate: (d: string) => void; onMove: MoveFn
 }) {
   const s = useHorizon()
-  const { taskVisible } = useLayerFilter()
   const [over, setOver] = useState(false)
-  const timed = [...tasksForDay(s.tasks, day)].filter(taskVisible)
+  const timed = placerSimultanes([...tasksForDay(s.tasks, day)]
     .map((t) => ({ t, hm: extractHourMinute(t.title) }))
-    .filter((x): x is { t: Task; hm: { hour: number; minute: number } } => x.hm !== null)
+    .filter((x): x is { t: Task; hm: { hour: number; minute: number } } => x.hm !== null))
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault(); setOver(false)
-    const d = readDrag(e); if (d) onMove(d.kind, d.id, iso(day))
+    const d = readDrag(e); if (d) onMove(d.kind, d.id, iso(day), veutCopier(e))
   }
 
   return (
-    <div onDragOver={(e) => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={onDrop}
-      className={`relative border-l border-line-2/40 ${isToday(day) ? 'bg-sun/5' : ''} ${over ? 'bg-sun/10' : ''}`}
+    <div onDragOver={(e) => { survol(e); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={onDrop}
+      className={`relative overflow-hidden border-l border-line-2/40 ${isToday(day) ? 'bg-sun/5' : ''} ${over ? 'bg-sun/10' : ''}`}
       onClick={() => onCreate(iso(day))}>
-      {timed.map(({ t, hm }) => {
-        const top = pct(hm.hour + hm.minute / 60)
-        const height = ((t.duration_min ?? 30) / 60 / SLOTS) * 100
+      {timed.map(({ t, hm, col, cols }) => {
+        // Le bloc reste dans la grille (6 h → 23 h) : une garde de nuit qui se
+        // prolonge après 23 h est coupée à 23 h, au lieu de déborder sur les notes.
+        const debut = hm.hour + hm.minute / 60
+        const fin = debut + (t.duration_min ?? 30) / 60
+        const debutVu = Math.min(Math.max(debut, HOUR_START), HOUR_END + 1 - 0.25)
+        const finVu = Math.min(fin, HOUR_END + 1)
+        const top = pct(debutVu)
+        const height = Math.max(0, pct(finVu) - top)
+        // Simultanés : côte à côte, chacun sur sa part de la largeur.
+        const cote = { left: `calc(${(col / cols) * 100}% + 2px)`, width: `calc(${100 / cols}% - 4px)` }
         const done = !t.is_recurring && t.status === 'fait'
         const checkMass = t.notes?.startsWith('source:check') ?? false
         const project = t.project_id ? s.projects.find((p) => p.id === t.project_id) : undefined
         const domain = s.domains.find((d) => d.id === (t.domain_id ?? project?.domain_id))
+        const couleur = couleurProjet(project, s.domains) ?? domain?.color
         return (
           <button key={t.id} draggable={!t.is_recurring} onDragStart={dragData('task', t.id)}
             onClick={(e) => { e.stopPropagation(); onEdit(t) }}
-            className={`absolute left-0.5 right-0.5 overflow-hidden rounded-md px-1 py-0.5 text-left ${
-              checkMass ? 'bg-[#a78bfa]/15' : 'border border-sun/30 bg-panel-2'}`}
+            title={t.title}
+            className={`absolute overflow-hidden rounded-md px-1 py-0.5 text-left ${
+              checkMass ? 'bg-[#a78bfa]/15' : 'bg-panel-2'}`}
             style={checkMass
-              ? { top: `${top}%`, height: `${height}%`, minHeight: 16, outline: '1.5px dashed #a78bfa', outlineOffset: '-1px' }
-              : { top: `${top}%`, height: `${height}%`, minHeight: 16, borderLeftColor: domain?.color, borderLeftWidth: 3 }}>
+              ? { ...cote, top: `${top}%`, height: `${height}%`, minHeight: 16, outline: '1.5px dashed #a78bfa', outlineOffset: '-1px' }
+              : { ...cote, top: `${top}%`, height: `${height}%`, minHeight: 16, border: `1.5px solid ${project && couleur ? couleur : 'rgba(245,158,11,0.3)'}` }}>
             <span className={`block truncate text-[10px] leading-tight ${done ? 'text-ink-3 line-through' : 'text-ink'}`}>
+              {project && <IconeProjet project={project} size={10} className="mr-1 align-[-1px]" />}
               {checkMass && <Church size={9} className="mr-0.5 inline text-[#a78bfa]" />}{t.title}
             </span>
-            {project && height >= 4.5 && <span className="mt-0.5 flex"><ProjectTag name={project.title} color={domain?.color} size="xs" /></span>}
           </button>
         )
       })}

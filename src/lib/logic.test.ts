@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest'
 import type { Check, OlafatcoJob, Task } from './types'
 import {
   buildControlHoursLines, catholicFeasts, checkStatus, chosenMassForDay, citySlug,
-  controlHoursWorkDays, extractEmojis, extractHourMinute, feastOnDay, firstFridayOrSaturday,
+  controlHoursWorkDays, copieDeTache, extractEmojis, extractHourMinute, feastOnDay, firstFridayOrSaturday,
   fmtMinutes, hasMaintainedMasses, isLineValid, isMarketParkingDay, isObligationDay, iso,
   lastControlHoursPeriodEnd, lineTotal, massFitsShift, massesInfoUrl, parseShift,
   misselDayName, proposeControlHours, revisionWeek, quadrant, recurrenceDueOn, recurrenceLabel, spanPart, tasksForDay,
@@ -409,5 +409,37 @@ describe('revisionWeek', () => {
   it('bascule au dimanche suivant', () => {
     expect(revisionWeek(new Date(2026, 8, 6)).sunday).toBe('2026-09-06')
     expect(revisionWeek(new Date(2026, 8, 6)).days[0]).toBe('2026-08-31')
+  })
+})
+
+// ---- copie d'un évènement (Ctrl + glisser) ---------------------------------
+
+describe('copieDeTache', () => {
+  it("démarre au jour cible et garde l'écart des autres dates", () => {
+    const t = task({ scheduled_date: '2026-10-05', end_date: '2026-10-08', due_date: '2026-10-09' })
+    const c = copieDeTache(t, '2026-10-12')
+    expect(c.scheduled_date).toBe('2026-10-12')
+    expect(c.end_date).toBe('2026-10-15')
+    expect(c.due_date).toBe('2026-10-16')
+  })
+  it("retire les marqueurs de synchro mais garde le reste des notes", () => {
+    const c = copieDeTache(task({ scheduled_date: '2026-10-05', notes: 'source:gcal:f1:abc apporter le dossier' }), '2026-10-06')
+    expect(c.notes).toBe('apporter le dossier')
+    expect(copieDeTache(caps('2026-10-05', 'Jour 8-20'), '2026-10-06').notes).toBeNull()
+  })
+  it('repart « à faire », hors récurrence, et reste attachée au projet', () => {
+    const c = copieDeTache(task({ scheduled_date: '2026-10-05', status: 'fait', done_at: '2026-10-05T10:00:00Z', project_id: 'p1', title: 'RDV' }), '2026-10-07')
+    expect(c).toMatchObject({ status: 'a_faire', done_at: null, project_id: 'p1', title: 'RDV', is_recurring: false })
+  })
+  it("sans date d'origine, la copie tombe sur le jour cible", () => {
+    const c = copieDeTache(task(), '2026-10-07')
+    expect(c.scheduled_date).toBe('2026-10-07')
+    expect(c.due_date).toBeNull()
+  })
+  it("n'emporte ni identifiant, ni propriétaire, ni date de création", () => {
+    const c = copieDeTache(task({ scheduled_date: '2026-10-05' }), '2026-10-06')
+    expect(c).not.toHaveProperty('id')
+    expect(c).not.toHaveProperty('user_id')
+    expect(c).not.toHaveProperty('created_at')
   })
 })

@@ -53,6 +53,9 @@ export interface Project {
   progress: number
   blocked: boolean
   blocked_reason: string | null
+  /** Clé d'icône (src/lib/projectIcons.tsx) et couleur du liseret ; à défaut, couleur du domaine. */
+  icon: string | null
+  color: string | null
   last_activity_at: string
   created_at: string
 }

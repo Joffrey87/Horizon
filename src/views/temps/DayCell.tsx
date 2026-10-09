@@ -5,9 +5,10 @@ import { fr } from 'date-fns/locale'
 import { Plus, CheckCircle2, Circle, RotateCw, Layers, Star, Church, AlertTriangle, Check, X } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import { compareTasksByTitleTime, iso, tasksForDay, recurrenceLabel, spanPart, birthdaysForDay, isMarketParkingDay, feastOnDay, extractEmojis, firstFridayOrSaturday, chosenMassForDay, todayIso } from '../../lib/logic'
-import { ProjectTag } from '../../components/ui'
+import { couleurProjet } from '../../lib/projectIcons'
+import { IconeProjet } from '../../components/IconeProjet'
 import type { CelesteProposal, Step, Task } from '../../lib/types'
-import { MassPickCtx, useLayerFilter, stepsForDay, dragData, readDrag, EVENT_DEFAULT_COLOR, remplaProposeOn, type MoveFn } from './partage'
+import { MassPickCtx, stepsForDay, dragData, readDrag, survol, veutCopier, EVENT_DEFAULT_COLOR, remplaProposeOn, type MoveFn } from './partage'
 
 // ---- Cellule d'un jour (partagée par 4 semaines) --------------------------
 
@@ -50,8 +51,11 @@ export function RemplaChip({ p }: { p: CelesteProposal }) {
   )
 }
 
-export function DayCell({ day, tint, dim, emphasize, fit, massCross, onEdit, onCreate, onStep, onMove }: {
+export function DayCell({ day, tint, dim, emphasize, fit, remplir, massCross, onEdit, onCreate, onStep, onMove }: {
   day: Date; tint?: string; emphasize?: boolean; fit?: boolean
+  /** Épouse la ligne de la grille (vue Mois) : pas de hauteur minimale, la ligne
+   *  grandit avec son contenu — rien n'est jamais coupé. */
+  remplir?: boolean
   /** Jour d'un autre mois que celui affiché : grisé (reprend toute sa force au survol). */
   dim?: boolean
   /** Affiche toujours la croix « trouver une messe » (accueil), même hors fête. */
@@ -59,26 +63,25 @@ export function DayCell({ day, tint, dim, emphasize, fit, massCross, onEdit, onC
   onEdit: (t: Task) => void; onCreate: (d: string) => void; onStep: (st: Step) => void; onMove: MoveFn
 }) {
   const s = useHorizon()
-  const { layers, taskVisible, stepVisible } = useLayerFilter()
   const openMassPicker = useContext(MassPickCtx)
   const [over, setOver] = useState(false)
   const today = isToday(day)
   const dayIso = iso(day)
   const rempla = remplaProposeOn(s.celesteProposals, dayIso)
-  const all = [...tasksForDay(s.tasks, day)].filter(taskVisible).sort(compareTasksByTitleTime)
+  const all = [...tasksForDay(s.tasks, day)].sort(compareTasksByTitleTime)
   // Évènements multi-jours (vacances…) : bandes continues épinglées en haut ; le reste dans le flux.
   const spans = all.filter((t) => spanPart(t, dayIso) !== 'single')
   const list = all.filter((t) => spanPart(t, dayIso) === 'single')
-  const steps = stepsForDay(s.steps, day).filter(stepVisible)
-  const birthdays = layers.anniversaires ? birthdaysForDay(s.birthdays, day) : []
-  const feast = layers.fetes && s.settings?.catholic_feasts !== false ? feastOnDay(day) : null
+  const steps = stepsForDay(s.steps, day)
+  const birthdays = birthdaysForDay(s.birthdays, day)
+  const feast = s.settings?.catholic_feasts !== false ? feastOnDay(day) : null
   // Messe de dévotion (1er vendredi/samedi) sur les 6 prochains mois — choisie ou non.
-  const rawMass = layers.messes ? firstFridayOrSaturday(day) : null
+  const rawMass = firstFridayOrSaturday(day)
   const massLabel = rawMass && dayIso >= todayIso() && day <= addMonths(new Date(), 6) ? rawMass : null
   const chosenMass = massLabel ? chosenMassForDay(s.checks, dayIso) : null
   // Croix ✝ « trouver une messe » : sur chaque jour, sauf ceux qui portent déjà le
   // bouton de dévotion (1er vendredi/samedi) — il ouvre déjà le même sélecteur.
-  const showCross = feast !== null || massCross === true || (layers.messes && !massLabel)
+  const showCross = feast !== null || massCross === true || !massLabel
   const crossMass = showCross ? chosenMassForDay(s.checks, dayIso) : null
 
   const handleVoid = (e: React.MouseEvent<HTMLElement>) => {
@@ -86,17 +89,17 @@ export function DayCell({ day, tint, dim, emphasize, fit, massCross, onEdit, onC
   }
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault(); setOver(false)
-    const d = readDrag(e); if (d) onMove(d.kind, d.id, iso(day))
+    const d = readDrag(e); if (d) onMove(d.kind, d.id, iso(day), veutCopier(e))
   }
 
   return (
     <div
-      onDragOver={(e) => { e.preventDefault(); setOver(true) }}
+      onDragOver={(e) => { survol(e); setOver(true) }}
       onDragLeave={() => setOver(false)}
       onDrop={onDrop}
       onClick={handleVoid}
       style={{ backgroundColor: !today && !over ? tint : undefined }}
-      className={`flex min-h-28 cursor-pointer flex-col rounded-lg border p-1.5 transition-[colors,opacity] ${fit ? 'w-max max-w-full' : ''} ${dim && !today ? 'opacity-50 hover:opacity-100' : ''} ${
+      className={`flex cursor-pointer flex-col rounded-lg border p-1.5 transition-[colors,opacity] ${remplir ? 'min-h-0' : 'min-h-28'} ${fit ? 'w-max max-w-full' : ''} ${dim && !today ? 'opacity-50 hover:opacity-100' : ''} ${
         rempla ? 'border-dashed border-[#ef4444]/80' : today ? 'border-sun/50 bg-sun/5' : over ? 'border-sun/70 bg-sun/10' : 'border-line-2/60 hover:bg-panel-2/40'
       }`}>
       <header className="mb-1 flex items-center justify-between gap-1" onClick={(e) => e.stopPropagation()}>
@@ -211,12 +214,12 @@ export function DayCell({ day, tint, dim, emphasize, fit, massCross, onEdit, onC
           <AlertTriangle size={10} /> Marché / Parking
         </div>
       )}
-      <div className="min-h-0 flex-1 space-y-1" onClick={handleVoid}>
+      <div className={`min-h-0 flex-1 ${remplir ? 'space-y-0.5' : 'space-y-1'}`} onClick={handleVoid}>
         {steps.map((st) => (
           <button key={st.id} draggable onDragStart={dragData('step', st.id)}
             onClick={(e) => { e.stopPropagation(); onStep(st) }}
             title={`Étape : ${st.title}`}
-            className="flex w-full items-center gap-1 truncate rounded bg-info/15 px-1 py-0.5 text-left text-[10px] text-[#6ea8ee] transition-colors hover:bg-info/25">
+            className={`flex w-full items-center gap-1 truncate rounded bg-info/15 px-1 ${remplir ? 'py-px' : 'py-0.5'} text-left text-[10px] text-[#6ea8ee] transition-colors hover:bg-info/25`}>
             <Layers size={10} className="shrink-0" />
             <span className="truncate font-medium">{st.title}</span>
           </button>
@@ -224,17 +227,18 @@ export function DayCell({ day, tint, dim, emphasize, fit, massCross, onEdit, onC
         {list.map((t) => {
           const project = t.project_id ? s.projects.find((p) => p.id === t.project_id) : undefined
           const domain = s.domains.find((d) => d.id === (t.domain_id ?? project?.domain_id))
-          const c = domain?.color
+          const c = couleurProjet(project, s.domains) ?? domain?.color
           const isEvent = t.is_task === false
           const done = !t.is_recurring && !isEvent && t.status === 'fait'
           const vacation = / - Vf?$/.test(t.title) // garde posée en congé (V / Vf) → barrée
           const struck = done || vacation
           const checkMass = t.notes?.startsWith('source:check') ?? false // messe issue d'une vérification
           return (
-            <div key={t.id} className="group flex items-start gap-1 rounded px-1 py-0.5"
+            <div key={t.id} className={`group flex items-start gap-1 rounded px-1 ${remplir ? 'py-px' : 'py-0.5'}`}
               style={{
                 background: checkMass ? 'rgba(167,139,250,0.14)' : c ? `${c}2b` : 'var(--color-panel-3)',
-                borderLeft: !checkMass && c ? `3px solid ${c}` : undefined,
+                // Liseret = projet seulement ; une tâche de domaine n'en a pas.
+                border: !checkMass && project && c ? `1.5px solid ${c}` : undefined,
                 outline: checkMass ? '1.5px dashed #a78bfa' : undefined,
                 outlineOffset: checkMass ? '-1px' : undefined,
               }}
@@ -253,11 +257,11 @@ export function DayCell({ day, tint, dim, emphasize, fit, massCross, onEdit, onC
                 </button>
               )}
               <button onClick={() => onEdit(t)} className={`text-left ${fit ? '' : 'min-w-0 flex-1'}`} title={t.is_recurring ? recurrenceLabel(t.recurrence_rule) : t.title}>
-                <span className={`text-[11px] leading-tight ${fit ? 'whitespace-nowrap' : 'block truncate'} ${struck ? 'text-ink-3 line-through' : 'text-ink'}`}>
+                <span className={`text-[11px] ${remplir ? 'leading-[15px]' : 'leading-tight'} ${fit ? 'whitespace-nowrap' : 'block truncate'} ${struck ? 'text-ink-3 line-through' : 'text-ink'}`}>
                   {checkMass && <Church size={9} className="mr-0.5 inline text-[#a78bfa]" />}
+                  {project && <IconeProjet project={project} size={11} className="mr-1 align-[-1px]" />}
                   {t.notable && <Star size={9} className="mr-0.5 inline text-sun" />}{t.title}
                 </span>
-                {project && <span className="mt-0.5 flex"><ProjectTag name={project.title} color={c} size="xs" /></span>}
               </button>
             </div>
           )

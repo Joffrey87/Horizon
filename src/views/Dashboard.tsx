@@ -12,7 +12,7 @@ import { TaskForm } from '../components/TaskForm'
 import { HomeBoard, type PanneauAccueil } from '../components/HomeBoard'
 import { FicheProjet } from './FicheProjet'
 import {
-  checksDueCount, computeAlerts, dayPhraseOfDay, domainBalance, eveningPhraseOfWeek,
+  checksDueCount, computeAlerts, copieDeTache, dayPhraseOfDay, domainBalance, eveningPhraseOfWeek,
   fmtDay, fmtShort, focusOfDay, greetingKind, habitStats, habitsForDay, iso, isRecentlyDone, quoteOfDay,
   suggestedReview, tasksForDay, todayIso, wallpaperOfDay,
 } from '../lib/logic'
@@ -44,8 +44,10 @@ export function Dashboard() {
   // Case du jour (calendrier) embarquée sur l'accueil : édition/création de tâches.
   const [editing, setEditing] = useState<Task | null>(null)
   const [createDate, setCreateDate] = useState<string | null>(null)
-  const handleDayMove = (kind: 'task' | 'step' | 'objective', id: string, dayIso: string) => {
-    if (kind === 'task') void s.update('tasks', id, { scheduled_date: dayIso })
+  const handleDayMove = (kind: 'task' | 'step' | 'objective', id: string, dayIso: string, copier = false) => {
+    const source = kind === 'task' ? s.tasks.find((t) => t.id === id) : undefined
+    if (copier && source) void s.insert('tasks', copieDeTache(source, dayIso))
+    else if (kind === 'task') void s.update('tasks', id, { scheduled_date: dayIso })
     else if (kind === 'step') void s.update('steps', id, { scheduled_date: dayIso })
     else void s.update('objectives', id, { target_date: dayIso })
   }
@@ -130,7 +132,9 @@ export function Dashboard() {
       titre: "Aujourd'hui & demain",
       icone: <CalendarDays size={14} />,
       accent: '#f59e0b',
-      largeur: 480,
+      // Épouse les deux journées côte à côte : ni plus étroit (jour tronqué ou
+      // rejeté sous l'autre), ni plus large (vide).
+      largeur: 'contenu',
       // Jamais plus de 60 % de la hauteur : au-delà, le contenu défile — ce
       // panneau ne doit pas manger l'espace des autres.
       hauteurMax: '60%',
@@ -138,7 +142,7 @@ export function Dashboard() {
       contenu: (
         // La croix ✝ de chaque case ouvre le sélecteur de messe, comme dans « Temps ».
         <MassPickProvider>
-          <div className="flex flex-wrap items-start gap-2">
+          <div className="grid grid-cols-2 items-start gap-2 [&>*]:w-full!">
             <DayCell day={now} emphasize fit massCross onEdit={setEditing} onCreate={setCreateDate}
               onStep={() => navigate('/temps')} onMove={handleDayMove} />
             <DayCell day={tomorrow} emphasize fit massCross onEdit={setEditing} onCreate={setCreateDate}

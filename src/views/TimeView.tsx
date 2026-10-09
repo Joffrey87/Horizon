@@ -2,27 +2,30 @@ import { useMemo, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { addMonths, addWeeks, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameMonth, parseISO, startOfMonth, startOfWeek } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight, CheckCircle2, Circle } from 'lucide-react'
-import { useHorizon } from '../lib/store'
-import { timeQuoteOfDay } from '../lib/logic'
-import { Seg, Modal } from '../components/ui'
+import { CheckCircle2, Circle } from 'lucide-react'
+import { useHorizon, vueCourante } from '../lib/store'
+import { copieDeTache, timeQuoteOfDay } from '../lib/logic'
+import { Modal } from '../components/ui'
 import { TaskForm } from '../components/TaskForm'
 import { AgendaPropositions } from '../components/AgendaPropositions'
 import type { Step, Task } from '../lib/types'
 
-import { LAYER_DEFS, LAYERS_KEY, LayersCtx, MassPickCtx, loadLayers, type CalLayers, type Kind, type MoveFn } from './temps/partage'
+import { MassPickCtx, type Kind, type MoveFn } from './temps/partage'
 import { MassPicker } from './temps/MassPicker'
 import { DayCell } from './temps/DayCell'
 import { WeekHours } from './temps/SemaineHeures'
 import { NotesSemaine } from './temps/NotesSemaine'
 import { MoisTelephone } from './temps/MoisTelephone'
-import { NavMois } from './temps/NavMois'
+import { NavPeriode, type VueTemps } from './temps/NavPeriode'
+import { SelecteurVue } from './temps/SelecteurVue'
 import { useMediaQuery } from '../lib/useMediaQuery'
 import { MultiMonth } from './temps/VuesLongues'
-type View = '4sem' | 'semaine' | 'trimestre' | 'annee'
+type View = VueTemps
 
 export function TimeView() {
   const s = useHorizon()
+  // Vue partagée : Temps en lecture seule (ni création, ni déplacement, ni notes).
+  const lecture = !!vueCourante(s)
   // « /temps/2026-10-23 » (lien d'une notification de rempla) : on ouvre la
   // vue mois sur le mois de ce jour, où il est encadré en pointillé rouge.
   // La forme « ?date= » reste acceptée, mais Android la perd en ouvrant le
@@ -41,26 +44,9 @@ export function TimeView() {
   const [overrideScheduled, setOverrideScheduled] = useState<string | undefined>(undefined)
   const [openStep, setOpenStep] = useState<Step | null>(null)
   const [massPick, setMassPick] = useState<{ date: string; label: string } | null>(null)
-  const [layers, setLayers] = useState<CalLayers>(loadLayers)
   // Téléphone : le mois entier tient sur l'écran (vue agenda de poche).
   const telephone = useMediaQuery('(max-width: 767px)')
   const moisTel = telephone && view === '4sem'
-  const arilId = useMemo(() => s.domains.find((d) => /aril/i.test(d.name))?.id ?? null, [s.domains])
-  const toggleLayer = (k: keyof CalLayers) => setLayers((prev) => {
-    const next = { ...prev, [k]: !prev[k] }
-    try { localStorage.setItem(LAYERS_KEY, JSON.stringify(next)) } catch { /* stockage indispo */ }
-    return next
-  })
-
-  const boutonsCouches = LAYER_DEFS.map(({ key, label }) => (
-    <button key={key} onClick={() => toggleLayer(key)}
-      title={key === 'aril' && !arilId ? 'Crée un domaine nommé « ARIL » pour alimenter ce calendrier' : undefined}
-      className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-        layers[key] ? 'border-sun/50 bg-sun/10 text-sun-soft' : 'border-line-2 text-ink-3 hover:text-ink-2'
-      }`}>
-      {label}
-    </button>
-  ))
 
   const shift = (dir: 1 | -1) => {
     setFocus(null)
@@ -73,9 +59,11 @@ export function TimeView() {
   // Déplacer un item : on ne change que la date. Cohérence : si une tâche
   // atterrit après son échéance, on ouvre le formulaire (date pré-remplie) et
   // la validation reste bloquée tant que ce n'est pas cohérent.
-  const handleMove = (kind: Kind, id: string, dayIso: string) => {
+  const handleMove = (kind: Kind, id: string, dayIso: string, copier = false) => {
     if (kind === 'task') {
       const t = s.tasks.find((x) => x.id === id)
+      // Ctrl + glisser : copie indépendante (rien ne bouge, pas de contrôle d'échéance).
+      if (copier && t) { void s.insert('tasks', copieDeTache(t, dayIso)); return }
       if (t?.due_date && dayIso > t.due_date) { setEditing(t); setOverrideScheduled(dayIso); return }
       void s.update('tasks', id, { scheduled_date: dayIso })
     } else if (kind === 'step') {
@@ -89,80 +77,62 @@ export function TimeView() {
   }
 
   const closeTask = () => { setEditing(null); setCreateDate(null); setOverrideScheduled(undefined) }
-  const common = { onEdit: setEditing, onCreate: setCreateDate, onStep: setOpenStep, onMove: handleMove }
+  const common = lecture
+    ? { onEdit: () => {}, onCreate: () => {}, onStep: () => {}, onMove: () => {} }
+    : { onEdit: setEditing, onCreate: setCreateDate, onStep: setOpenStep, onMove: handleMove }
   const timeQuote = timeQuoteOfDay()
 
   return (
-    <div className="rise flex h-[calc(100vh-5.5rem)] flex-col gap-3 pt-4 max-md:h-[calc(100dvh-8.5rem)] max-md:gap-1.5 max-md:pt-1">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
+    <div className={`rise flex md:h-[calc(100dvh-1.75rem)] flex-col gap-3 pt-4 max-md:h-[calc(100dvh-8.5rem)] max-md:gap-1.5 max-md:pt-1 ${lecture ? 'temps-lecture' : ''}`}>
+      {/* Titre à gauche, période au centre (la même pour les 4 vues), choix de la
+          vue à droite. Téléphone : la période passe sous le choix de la vue. */}
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 md:grid md:grid-cols-[1fr_auto_1fr]">
         <div className="max-md:hidden">
           <h1 className="text-xl font-semibold">Temps</h1>
           <p className="text-sm italic text-ink-3 max-md:hidden">
             « {timeQuote.text} »{timeQuote.source && <span className="not-italic"> — {timeQuote.source}</span>}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Seg value={view} onChange={setView} options={[
+        <div className="max-md:order-last max-md:basis-full">
+          <NavPeriode vue={view} anchor={anchor} onShift={shift} onGoto={(d) => { setFocus(null); setAnchor(d) }} />
+        </div>
+        <div className="flex justify-end max-md:ml-auto">
+          <SelecteurVue value={view} onChange={setView} options={[
             { value: 'semaine', label: 'Semaine' },
             { value: '4sem', label: 'Mois' },
             { value: 'trimestre', label: 'Trimestre' },
             { value: 'annee', label: 'Année' },
           ]} />
-          {/* Vue Mois : la navigation est fusionnée avec le nom du mois (NavMois, dessous). */}
-          {view !== '4sem' && (
-            <>
-              <button onClick={() => shift(-1)} className="btn-ghost p-2" aria-label="Précédent"><ChevronLeft size={15} /></button>
-              <button onClick={() => setAnchor(new Date())} className="btn-ghost px-3 py-2 text-xs">
-                {view === 'semaine' ? 'Cette semaine' : view === 'trimestre' ? 'Ce trimestre' : 'Cette année'}
-              </button>
-              <button onClick={() => shift(1)} className="btn-ghost p-2" aria-label="Suivant"><ChevronRight size={15} /></button>
-            </>
-          )}
         </div>
       </header>
 
-      {/* ---- Calendriers (couches) affichables/masquables. En vue Semaine ils
-           passent à droite du calendrier, en colonne : la hauteur sert à la grille. ---- */}
-      {view !== 'semaine' && !moisTel && (
-        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-          <span className="mr-0.5 text-[11px] uppercase tracking-wide text-ink-3">Calendriers</span>
-          {boutonsCouches}
-        </div>
-      )}
-
       {/* Évènements d'agenda externe en attente de tri : rien n'entre sans accord. */}
-      <div className="shrink-0"><AgendaPropositions /></div>
+      {!lecture && <div className="shrink-0"><AgendaPropositions /></div>}
 
-      {view === '4sem' && <NavMois anchor={anchor} onShift={shift} onGoto={(d) => { setFocus(null); setAnchor(d) }} />}
-
-      <LayersCtx.Provider value={{ layers, arilId }}>
-        <MassPickCtx.Provider value={(date, label) => setMassPick({ date, label })}>
-          <div className={`min-h-0 flex-1 ${moisTel ? 'overflow-hidden' : view === 'semaine' ? 'overflow-hidden max-md:overflow-y-auto' : 'space-y-2 overflow-y-auto pr-0.5'}`}>
+      <MassPickCtx.Provider value={lecture ? () => {} : (date, label) => setMassPick({ date, label })}>
+          {/* Chaque vue remplit la hauteur de l'écran ; elle ne défile qu'en dernier
+              recours (trop d'évènements pour tenir), jamais pour cacher quelque chose. */}
+          <div className={`min-h-0 flex-1 ${view === 'semaine' || moisTel ? 'overflow-hidden max-md:overflow-y-auto' : 'overflow-y-auto'}`}>
             {view === '4sem' && !moisTel && <FourWeeks anchor={anchor} focus={focus} {...common} />}
             {moisTel && <MoisTelephone anchor={anchor} onShift={shift} {...common} />}
-            {/* Semaine : la grille prend toute la hauteur (jours entiers), notes dessous. */}
+            {/* Semaine : la grille prend toute la hauteur (jours entiers). */}
             {view === 'semaine' && (
-              <div className="flex h-full flex-col gap-2">
-                <div className="flex min-h-[340px] flex-1 flex-col gap-2 md:min-h-0 md:flex-row">
-                  <WeekHours anchor={anchor} {...common} />
-                  {/* Téléphone : les boutons passent AU-DESSUS du calendrier. */}
-                  <aside aria-label="Calendriers" className="order-first flex shrink-0 flex-row flex-wrap items-center gap-1.5 md:order-none md:flex-col md:items-stretch md:pt-1">
-                    <span className="px-1 text-[10px] uppercase tracking-wide text-ink-3">Calendriers</span>
-                    {boutonsCouches}
-                  </aside>
-                </div>
-                <NotesSemaine />
+              <div className="flex h-full min-h-[340px] md:min-h-0">
+                <WeekHours anchor={anchor} {...common} />
               </div>
             )}
             {view === 'trimestre' && <MultiMonth anchor={anchor} months={3} {...common} />}
             {view === 'annee' && <MultiMonth anchor={anchor} months={12} yearMode {...common} />}
           </div>
-        </MassPickCtx.Provider>
-      </LayersCtx.Provider>
+          {/* Bloc-notes en bas de TOUTES les vues (même contenu partout), hors de la
+              zone qui défile. Le « mois de poche » du téléphone, qui tient sur un
+              écran, n'en a pas. */}
+          {!moisTel && !lecture && <NotesSemaine lignes={telephone ? 2 : view === 'semaine' ? 4 : 3} />}
+      </MassPickCtx.Provider>
 
       {massPick && <MassPicker pick={massPick} onClose={() => setMassPick(null)} />}
 
-      <TaskForm open={editing !== null || createDate !== null} task={editing}
+      <TaskForm open={!lecture && (editing !== null || createDate !== null)} task={editing}
         defaultDate={createDate ?? undefined} overrideScheduled={overrideScheduled}
         onClose={closeTask} />
 
@@ -201,15 +171,18 @@ function FourWeeks({ anchor, focus, onEdit, onCreate, onStep, onMove }: {
   // Jours hors du mois de référence : légèrement atténués pour rester lisibles sans distraire.
   const outsideTint = 'rgba(120,120,140,0.14)'
   // Les jours des mois voisins que la grille affiche pour compléter les semaines
-  // sont grisés (voir `dim`) ; le nom du mois est dans NavMois.
+  // sont grisés (voir `dim`) ; le nom du mois est dans NavPeriode.
 
   return (
     <>
-      <div className="space-y-2">
+      {/* Les lignes ont la même hauteur, sauf celle dont le contenu en demande plus :
+          elle prend ce qu'il lui faut, les autres se partagent le reste. Tous les
+          évènements restent visibles (le défilement n'est qu'un dernier recours). */}
+      <div className="grid h-full gap-1.5" style={{ gridTemplateRows: `repeat(${weeks.length}, minmax(min-content, 1fr))` }}>
         {weeks.map((days, i) => (
-          <div key={i} className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 md:grid-cols-7">
+          <div key={i} className="grid grid-cols-7 gap-1.5">
             {days.map((day) => (
-              <DayCell key={day.toISOString()} day={day}
+              <DayCell key={day.toISOString()} day={day} remplir
                 tint={isSameMonth(day, anchor) ? undefined : outsideTint}
                 dim={!isSameMonth(day, anchor)}
                 onEdit={onEdit} onCreate={onCreate} onStep={onStep} onMove={onMove} />

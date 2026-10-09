@@ -74,6 +74,29 @@ export function tasksForDay(tasks: Task[], day: Date): Task[] {
   })
 }
 
+/** Copie d'une tâche/évènement vers un autre jour (Ctrl + glisser dans « Temps »).
+ *  La copie démarre le `dayIso` ; ses autres dates (échéance, fin d'une plage)
+ *  gardent le même écart. Elle est indépendante : les marqueurs `source:…` des
+ *  notes (agenda externe, planning CAPS, Céleste, messe d'une vérification) sont
+ *  retirés — sinon la synchro la prendrait pour l'original, ou l'effacerait. */
+export function copieDeTache(t: Task, dayIso: string): Omit<Task, 'id' | 'user_id' | 'created_at'> {
+  const base = t.scheduled_date ?? t.due_date ?? dayIso
+  const decale = (d: string | null) => d ? iso(addDays(parseISO(d), differenceInCalendarDays(parseISO(dayIso), parseISO(base)))) : null
+  const notes = (t.notes ?? '').replace(/(^|\s)source:\S+/g, '$1').trim()
+  const { id: _id, user_id: _uid, created_at: _cree, ...reste } = t
+  return {
+    ...reste,
+    notes: notes || null,
+    status: 'a_faire', done_at: null,
+    scheduled_date: dayIso,
+    due_date: decale(t.due_date),
+    end_date: decale(t.end_date),
+    ideal_date: decale(t.ideal_date),
+    is_recurring: false, recurrence_rule: null,
+    home_pinned: false,
+  }
+}
+
 /** Libellé d'affichage d'un statut de projet. */
 export const STATUS_LABEL: Record<ProjectStatus, string> = {
   actif: 'Actif', pause: 'En pause', termine: 'Terminé', abandonne: 'Abandonné',

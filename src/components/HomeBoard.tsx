@@ -18,7 +18,8 @@ export interface PanneauAccueil {
   titre: string
   icone: ReactNode
   accent: string
-  largeur?: number
+  /** Largeur en pixels, ou `'contenu'` : le panneau épouse son contenu. */
+  largeur?: number | 'contenu'
   /** Hauteur maximale (ex. '60%') ; au-delà, le contenu défile. */
   hauteurMax?: string
   defaut?: Pos
@@ -274,7 +275,10 @@ export function HomeBoard({ panneaux = [], onOuvrirProjet }: {
             // Taille choisie à la main : elle remplace la largeur par défaut et le
             // plafond de hauteur (le contenu défile alors dans le cadre).
             style={{
-              left: pos.x, top: pos.y, width: taille?.w ?? pan.largeur ?? 300,
+              left: pos.x, top: pos.y,
+              ...(pan.largeur === 'contenu' && !taille
+                ? { width: 'max-content', minWidth: MIN_W, maxWidth: '100%' }
+                : { width: taille?.w ?? pan.largeur ?? 300 }),
               ...(taille ? { height: taille.h } : { maxHeight: pan.hauteurMax }),
             }}>
             <div onPointerDown={(e) => onHandleDown(e, pan.id)} onPointerMove={onHandleMove} onPointerUp={onHandleUp}

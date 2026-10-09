@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useHorizon } from '../lib/store'
+import { copieDeTache } from '../lib/logic'
 import { Modal, Scale3, NoteArea, DomainDot } from './ui'
+import { IconeProjet } from './IconeProjet'
 import type { Task } from '../lib/types'
 
 /** Une tâche est ancrée à un projet OU librement à un domaine (jamais nulle part). */
@@ -10,6 +12,8 @@ export function TaskForm({ open, task, defaultDate, overrideScheduled, defaultIs
 }) {
   const s = useHorizon()
   const [form, setForm] = useState<Record<string, unknown> | null>(null)
+  // Copie vers un autre jour (téléphone : pas de Ctrl + glisser). `null` = non demandée.
+  const [copieDate, setCopieDate] = useState<string | null>(null)
 
   if (!open) return null
 
@@ -41,7 +45,7 @@ export function TaskForm({ open, task, defaultDate, overrideScheduled, defaultIs
     notes: task?.notes ?? '',
   }
   const setF = (k: string, v: unknown) => setForm({ ...current, [k]: v })
-  const close = () => { setForm(null); onClose() }
+  const close = () => { setForm(null); setCopieDate(null); onClose() }
 
   // Cohérence : une tâche planifiée ne peut pas l'être après son échéance.
   const sched = current.scheduled_date as string
@@ -50,6 +54,8 @@ export function TaskForm({ open, task, defaultDate, overrideScheduled, defaultIs
   // Rattachement : `p:<projet>` ou `d:<domaine>`.
   const anchor = current.anchor as string
   const anchorProject = anchor.startsWith('p:') ? s.projects.find((p) => p.id === anchor.slice(2)) : undefined
+  // Projets actifs, plus celui auquel la tâche est déjà rattachée même s'il ne l'est plus.
+  const projetsProposes = s.projects.filter((p) => p.status === 'actif' || p.id === anchorProject?.id)
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -92,43 +98,47 @@ export function TaskForm({ open, task, defaultDate, overrideScheduled, defaultIs
         <input required value={current.title as string} onChange={(e) => setF('title', e.target.value)}
           placeholder="Action concrète, idéalement courte" className="field" autoFocus />
 
-        {/* Domaine en boutons (un clic) ; le projet, facultatif, en liste à côté.
+        {/* Domaine et projet : deux groupes de boutons (un clic), séparés et centrés.
             Choisir un domaine = tâche libre de ce domaine ; choisir un projet la
-            rattache à lui (son domaine s'allume alors en pointillé). */}
-        <div className="grid gap-2 sm:grid-cols-[1fr_13rem]">
+            rattache à lui (son domaine s'allume alors en pointillé) ; recliquer le
+            projet choisi la détache et garde son domaine. */}
+        <div className="space-y-0.5">
+          <p className="text-center text-xs text-ink-3">Domaine de vie</p>
+          <div className="flex flex-wrap justify-center gap-1.5">
+            {s.domains.map((d) => {
+              const direct = anchor === `d:${d.id}`
+              const viaProjet = !direct && anchorProject?.domain_id === d.id
+              return (
+                <button key={d.id} type="button" onClick={() => setF('anchor', `d:${d.id}`)}
+                  aria-pressed={direct}
+                  className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                    direct ? 'border-sun bg-sun/15 text-sun-soft'
+                      : viaProjet ? 'border-dashed border-sun/60 text-ink-2'
+                        : 'border-line-2 text-ink-3 hover:text-ink-2'}`}>
+                  <DomainDot color={d.color} /> {d.name}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        {projetsProposes.length > 0 && (
           <div className="space-y-0.5">
-            <p className="text-xs text-ink-3">Domaine de vie</p>
-            <div className="flex flex-wrap gap-1.5">
-              {s.domains.map((d) => {
-                const direct = anchor === `d:${d.id}`
-                const viaProjet = !direct && anchorProject?.domain_id === d.id
+            <p className="text-center text-xs text-ink-3">Projet (facultatif)</p>
+            <div className="flex flex-wrap justify-center gap-1.5">
+              {projetsProposes.map((p) => {
+                const choisi = anchorProject?.id === p.id
                 return (
-                  <button key={d.id} type="button" onClick={() => setF('anchor', `d:${d.id}`)}
-                    aria-pressed={direct}
+                  <button key={p.id} type="button" aria-pressed={choisi}
+                    onClick={() => setF('anchor', choisi ? `d:${p.domain_id ?? s.domains[0]?.id ?? ''}` : `p:${p.id}`)}
                     className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                      direct ? 'border-sun bg-sun/15 text-sun-soft'
-                        : viaProjet ? 'border-dashed border-sun/60 text-ink-2'
-                          : 'border-line-2 text-ink-3 hover:text-ink-2'}`}>
-                    <DomainDot color={d.color} /> {d.name}
+                      choisi ? 'border-sun bg-sun/15 text-sun-soft' : 'border-line-2 text-ink-3 hover:text-ink-2'}`}>
+                    <IconeProjet project={p} size={13} /> {p.title}
                   </button>
                 )
               })}
             </div>
           </div>
-          <label className="block space-y-0.5 text-xs text-ink-3">
-            Projet (facultatif)
-            <select value={anchorProject?.id ?? ''} className="field"
-              onChange={(e) => setF('anchor', e.target.value
-                ? `p:${e.target.value}`
-                // Retour à la tâche libre : on garde le domaine du projet quitté.
-                : `d:${anchorProject?.domain_id ?? s.domains[0]?.id ?? ''}`)}>
-              <option value="">— Aucun —</option>
-              {s.projects.filter((p) => p.status === 'actif' || p.id === anchorProject?.id).map((p) => (
-                <option key={p.id} value={p.id}>{p.title}</option>
-              ))}
-            </select>
-          </label>
-        </div>
+        )}
 
         <div className="grid gap-2 sm:grid-cols-3">
           <label className="space-y-0.5 text-xs text-ink-3">
@@ -249,13 +259,33 @@ export function TaskForm({ open, task, defaultDate, overrideScheduled, defaultIs
           </p>
         )}
 
+        {/* Copier sur un autre jour : le geste du téléphone (Ctrl + glisser sur PC). */}
+        {task && !task.is_recurring && copieDate !== null && (
+          <div className="flex flex-wrap items-end gap-2 rounded-xl border border-line px-3 py-2">
+            <label className="space-y-0.5 text-xs text-ink-3">
+              Copier sur le
+              <input type="date" value={copieDate} onChange={(e) => setCopieDate(e.target.value)} className="field" autoFocus />
+            </label>
+            <button type="button" disabled={!copieDate}
+              onClick={async () => { await s.insert('tasks', copieDeTache(task, copieDate)); close() }}
+              className="btn-sun px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50">Copier</button>
+            <button type="button" onClick={() => setCopieDate(null)} className="btn-ghost px-3 py-2 text-sm">Annuler</button>
+          </div>
+        )}
+
         <div className="flex justify-between gap-2">
           {task ? (
-            <button type="button" onClick={() => {
-              if (!confirm(`Supprimer « ${task.title} » ?`)) return
-              void s.remove('tasks', task.id); close()
-            }}
-              className="btn-ghost px-3 py-2 text-sm text-[#ec7f97]">Supprimer</button>
+            <div className="flex gap-1">
+              <button type="button" onClick={() => {
+                if (!confirm(`Supprimer « ${task.title} » ?`)) return
+                void s.remove('tasks', task.id); close()
+              }}
+                className="btn-ghost px-3 py-2 text-sm text-[#ec7f97]">Supprimer</button>
+              {!task.is_recurring && (
+                <button type="button" onClick={() => setCopieDate(task.scheduled_date ?? '')}
+                  className="btn-ghost px-3 py-2 text-sm">Copier…</button>
+              )}
+            </div>
           ) : <span />}
           <button type="submit" disabled={incoherent}
             className="btn-sun px-5 py-2 disabled:cursor-not-allowed disabled:opacity-50">

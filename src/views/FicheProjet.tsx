@@ -11,6 +11,7 @@ import { fr } from 'date-fns/locale'
 import { Plus, Pencil, CheckCircle2, Circle, Trash2, Layers, CalendarClock, NotebookPen, GripVertical, Pin } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import { STATUS_LABEL } from '../lib/logic'
+import { COULEURS_PROJET, ICONES_PROJET } from '../lib/projectIcons'
 import { Badge, ProgressBar, DomainDot, Modal, NoteArea } from '../components/ui'
 import { TaskForm } from '../components/TaskForm'
 import type { Project, ProjectStatus, Step, Task } from '../lib/types'
@@ -325,6 +326,8 @@ export function ProjectForm({ open, project, onClose }: { open: boolean; project
     progress: project?.progress ?? 0,
     blocked: project?.blocked ?? false,
     blocked_reason: project?.blocked_reason ?? '',
+    icon: project?.icon ?? '',
+    color: project?.color ?? '',
   }
   const setF = (k: string, v: unknown) => setForm({ ...current, [k]: v })
 
@@ -337,6 +340,8 @@ export function ProjectForm({ open, project, onClose }: { open: boolean; project
       objective_id: current.objective_id || null,
       blocked_reason: current.blocked ? ((current.blocked_reason as string).trim() || null) : null,
       description: (current.description as string).trim() || null,
+      icon: (current.icon as string) || null,
+      color: (current.color as string) || null,
       last_activity_at: new Date().toISOString(),
     }
     if (project) await s.update('projects', project.id, values)
@@ -368,6 +373,32 @@ export function ProjectForm({ open, project, onClose }: { open: boolean; project
         </div>
         <textarea value={current.description as string} onChange={(e) => setF('description', e.target.value)}
           placeholder="Description (optionnelle)" rows={2} className="field" />
+        {/* Apparence dans « Temps » : une icône (toujours de la même couleur, pour la
+            lisibilité) et la couleur du liseret qui entoure ses tâches. */}
+        <div className="space-y-1.5">
+          <p className="text-xs text-ink-3">Icône dans Temps</p>
+          <div className="flex flex-wrap gap-1">
+            {Object.entries(ICONES_PROJET).map(([cle, Ic]) => (
+              <button key={cle} type="button" onClick={() => setF('icon', cle)} aria-pressed={current.icon === cle} title={cle}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
+                  current.icon === cle ? 'border-sun bg-sun/15 text-ink' : 'border-line-2 text-ink-2 hover:bg-panel-2'}`}>
+                <Ic size={16} />
+              </button>
+            ))}
+          </div>
+          <p className="pt-1 text-xs text-ink-3">Couleur du liseret</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {COULEURS_PROJET.map((c) => (
+              <button key={c} type="button" onClick={() => setF('color', c)} aria-pressed={current.color === c} aria-label={c}
+                style={{ background: c }}
+                className={`h-6 w-6 rounded-full border-2 transition-transform ${current.color === c ? 'scale-110 border-white' : 'border-transparent'}`} />
+            ))}
+            <button type="button" onClick={() => setF('color', '')} aria-pressed={!current.color}
+              className={`rounded-full border px-2.5 py-0.5 text-xs ${!current.color ? 'border-sun text-sun-soft' : 'border-line-2 text-ink-3'}`}>
+              Couleur du domaine
+            </button>
+          </div>
+        </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="space-y-1 text-xs text-ink-3">
             Statut
