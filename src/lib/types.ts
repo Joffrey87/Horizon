@@ -572,6 +572,15 @@ export interface FinLabel {
   created_at: string
 }
 
+/** Regroupement d'intitulés : clé automatique (cleGroupe) → nom du groupe. */
+export interface FinGroup {
+  id: UUID
+  user_id: UUID
+  pattern: string             // clé automatique, correspondance exacte
+  name: string
+  created_at: string
+}
+
 export interface FinBudget {
   id: UUID
   user_id: UUID

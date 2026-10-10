@@ -3,10 +3,11 @@ import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Plus, Trash2 } from 'luc
 import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { useHorizon } from '../../lib/store'
-import { GENRES, TITULAIRES, categorieEffective, euros, lignesTriees, normaliserLibelle } from '../../lib/finances'
+import { GENRES, TITULAIRES, budgetDe, categorieEffective, clesGroupe, euros, libelleMois, lignesTriees, normaliserLibelle } from '../../lib/finances'
 import type { FinCategory, FinLine, FinOwner, FinTransaction } from '../../lib/types'
 import { Card } from '../../components/ui'
-import { useArbreCategories, useIndex } from './contexte'
+import { moisCourant, useArbreCategories, useIndex } from './contexte'
+import { MontantEditable } from './partage'
 
 /** Fonds translucides des lignes de budget (variantes « A » choisies sur la page d'aperçu). */
 const COULEURS = [
@@ -27,6 +28,7 @@ export function ReglagesView() {
     <div className="rise grid gap-4 xl:grid-cols-2">
       <div className="space-y-4">
         <Card title="Intitulés locaux"><IntitulesLocaux /></Card>
+        <Card title="Regroupements d’intitulés"><Regroupements /></Card>
         <Card title="Lignes de budget"><Lignes /></Card>
         <Card title="Comptes"><Comptes /></Card>
         <Card title="Synchronisation"><Synchro /></Card>
@@ -117,7 +119,10 @@ function IntitulesLocaux() {
 
 function Lignes() {
   const lines = useHorizon((s) => s.finLines)
+  const budgets = useHorizon((s) => s.finBudgets)
+  const setFinBudget = useHorizon((s) => s.setFinBudget)
   const { insert, update, remove } = useHorizon.getState()
+  const mois = moisCourant()
   const [nom, setNom] = useState('')
   const triees = lignesTriees(lines)
 
@@ -143,6 +148,11 @@ function Lignes() {
             <input defaultValue={l.name} aria-label="Nom de la ligne" className="field flex-1 !py-1"
               style={l.color ? { background: l.color } : undefined}
               onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== l.name) void update('fin_lines', l.id, { name: v }) }} />
+            <span className="w-24 shrink-0 text-right text-sm">
+              <MontantEditable valeur={budgetDe(l.id, mois, budgets)} vide="budget…"
+                titre={`Budget à partir de ${libelleMois(mois)} (les mois passés gardent le leur)`}
+                onSave={(v) => void setFinBudget(l.id, 'budget', `${mois}-01`, v)} />
+            </span>
             <select value={l.kind} onChange={(e) => void update('fin_lines', l.id, { kind: e.target.value })}
               className="field !w-auto !py-1 text-xs" aria-label="Nature">
               <option value="depense">Dépense</option>
@@ -167,7 +177,50 @@ function Lignes() {
           onKeyDown={(e) => { if (e.key === 'Enter') ajouter() }} />
         <button onClick={ajouter} className="btn-ghost flex items-center gap-1 px-3 text-sm"><Plus size={14} /> Ajouter</button>
       </div>
+      <p className="mt-2 text-[11px] text-ink-3">Le montant est le budget mensuel à partir de {libelleMois(mois)} ; les mois passés gardent le leur.</p>
     </div>
+  )
+}
+
+/** Les regroupements manuels du détail compacté : un nom → les intitulés réunis.
+ *  Le nom se change sur place (pour tout le groupe) ; la corbeille défait le groupe. */
+function Regroupements() {
+  const regles = useHorizon((s) => s.finGroups)
+  const transactions = useHorizon((s) => s.finTransactions)
+  const { update, remove } = useHorizon.getState()
+  // Un exemple d'intitulé bancaire par clé automatique, pour savoir ce qui est réuni.
+  const exemples = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const t of transactions) for (const k of clesGroupe(t.label)) if (!m.has(k)) m.set(k, t.label)
+    return m
+  }, [transactions])
+  const decrire = (pattern: string) =>
+    pattern.startsWith('local:') ? `intitulé local « ${pattern.slice(6)} »` : exemples.get(pattern) ?? pattern
+  const parNom = useMemo(() => {
+    const g = new Map<string, typeof regles>()
+    for (const r of regles) g.set(r.name, [...(g.get(r.name) ?? []), r])
+    return [...g.entries()].sort(([a], [b]) => a.localeCompare(b, 'fr'))
+  }, [regles])
+
+  if (!parNom.length) {
+    return <p className="text-sm text-ink-3">Aucun regroupement : dans Budget, clique une moyenne sur 3 mois puis l’icône de regroupement d’un intitulé.</p>
+  }
+  return (
+    <ul className="divide-y divide-line/40">
+      {parNom.map(([nom, rs]) => (
+        <li key={nom} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm">
+          <input defaultValue={nom} aria-label="Nom du groupe" className="field !w-auto min-w-0 flex-1 !py-1"
+            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+            onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== nom) rs.forEach((r) => void update('fin_groups', r.id, { name: v })) }} />
+          <span className="min-w-0 basis-full truncate text-[11px] text-ink-3 sm:basis-auto sm:flex-1"
+            title={rs.map((r) => decrire(r.pattern)).join('\n')}>
+            ← {rs.map((r) => decrire(r.pattern)).join(' · ')}
+          </span>
+          <button onClick={() => { if (confirm(`Défaire le groupe « ${nom} » ?`)) rs.forEach((r) => void remove('fin_groups', r.id)) }}
+            className="btn-ghost p-1" title="Défaire le groupe" aria-label="Défaire le groupe"><Trash2 size={12} /></button>
+        </li>
+      ))}
+    </ul>
   )
 }
 

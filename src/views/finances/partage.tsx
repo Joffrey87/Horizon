@@ -163,7 +163,9 @@ function EditeurLibelle({ tx, onClose }: { tx: FinTransaction; onClose: () => vo
   const reco = useReconnaissance()
   const regle = reco.regleDe(tx.label)
   const motif = normaliserLibelle(tx.label)
-  const [libelle, setLibelle] = useState(tx.label_local ?? regle?.label ?? '')
+  // Sans intitulé local, on part de l'intitulé bancaire (sans le « CB*1234 » de la carte), à retoucher.
+  const bancaire = tx.label.replace(/\s*\bCB\*\s*\d+/gi, '').replace(/\s+/g, ' ').trim()
+  const [libelle, setLibelle] = useState(tx.label_local ?? regle?.label ?? bancaire)
   const [semblables, setSemblables] = useState<FinTransaction[] | null>(null)
   const [cochees, setCochees] = useState<Set<string>>(new Set())
   const [futures, setFutures] = useState(true)
@@ -172,6 +174,8 @@ function EditeurLibelle({ tx, onClose }: { tx: FinTransaction; onClose: () => vo
 
   const enregistrer = async () => {
     if (!v) { await update('fin_transactions', tx.id, { label_local: null }); onClose(); return }
+    // Intitulé bancaire laissé tel quel : rien à enregistrer.
+    if (v === bancaire && !reco.estLocal(tx)) { onClose(); return }
     const autres = motif ? transactions.filter((t) => t.id !== tx.id && normaliserLibelle(t.label) === motif && reco.libelle(t) !== v) : []
     if (!autres.length) { await update('fin_transactions', tx.id, { label_local: v }); onClose(); return }
     setSemblables(autres.sort((a, b) => b.date.localeCompare(a.date)))
@@ -245,7 +249,9 @@ function EditeurLibelle({ tx, onClose }: { tx: FinTransaction; onClose: () => vo
         <p className="text-xs text-ink-3">Intitulé bancaire : <span className="text-ink-2">{tx.label}</span></p>
         <label className="block">
           <span className="block-title">Intitulé local</span>
-          <input autoFocus value={libelle} onChange={(e) => setLibelle(e.target.value)} placeholder="ex. Boulangerie La Boîte à pain"
+          <input autoFocus value={libelle} onChange={(e) => setLibelle(e.target.value)}
+            onFocus={(e) => { const n = e.target.value.length; e.target.setSelectionRange(n, n) }}
+            placeholder="ex. Boulangerie La Boîte à pain"
             onKeyDown={(e) => { if (e.key === 'Enter') void enregistrer() }} className="field mt-1" />
         </label>
         <p className="text-[11px] text-ink-3">

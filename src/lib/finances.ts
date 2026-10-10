@@ -13,7 +13,7 @@
 // ================================================================
 import type {
   FinAccount, FinAccountKind, FinAssetClass, FinBudget, FinCategory, FinHolding, FinLine, FinOwner, FinPlanned,
-  FinTarget, FinTransaction, FinLabel,
+  FinTarget, FinTransaction, FinLabel, FinGroup,
 } from './types'
 
 export type FiltreTitulaire = 'foyer' | FinOwner
@@ -207,7 +207,7 @@ export interface LigneBudget {
   budget: number | null       // null hors vue « Foyer » (les budgets sont ceux du foyer)
   reel: number
   precedent: number
-  moyenne6: number
+  moyenne3: number           // moyenne des 3 mois précédents
   prevision: number | null
   previsionSaisie: boolean
 }
@@ -216,7 +216,7 @@ export interface SyntheseMois {
   mois: string
   lignes: LigneBudget[]
   entrees: number
-  total: { budget: number | null; reel: number; precedent: number; moyenne6: number; prevision: number | null }
+  total: { budget: number | null; reel: number; precedent: number; moyenne3: number; prevision: number | null }
 }
 
 /** Le tableau de bord du mois : une ligne par ligne de budget (+ « Non classé » s'il y a lieu). */
@@ -225,7 +225,7 @@ export function syntheseMois(opts: {
 }): SyntheseMois {
   const { mois, budgets, agregat, filtre } = opts
   const suivant = decaleMois(mois, 1)
-  const precedents = [1, 2, 3, 4, 5, 6].map((n) => decaleMois(mois, -n))
+  const precedents = [1, 2, 3].map((n) => decaleMois(mois, -n))
   const foyer = filtre === 'foyer'
   const ligne = (cle: string, l: FinLine | null): LigneBudget => {
     const prev = l && foyer ? previsionDe(l.id, suivant, budgets) : { montant: null, saisi: false }
@@ -234,7 +234,7 @@ export function syntheseMois(opts: {
       budget: l && foyer ? budgetDe(l.id, mois, budgets) : null,
       reel: reelDe(agregat, mois, cle),
       precedent: reelDe(agregat, precedents[0]!, cle),
-      moyenne6: precedents.reduce((s, m) => s + reelDe(agregat, m, cle), 0) / 6,
+      moyenne3: precedents.reduce((s, m) => s + reelDe(agregat, m, cle), 0) / 3,
       prevision: prev.montant,
       previsionSaisie: prev.saisi,
     }
@@ -251,7 +251,7 @@ export function syntheseMois(opts: {
       budget: foyer ? somme((l) => l.budget) : null,
       reel: somme((l) => l.reel),
       precedent: somme((l) => l.precedent),
-      moyenne6: somme((l) => l.moyenne6),
+      moyenne3: somme((l) => l.moyenne3),
       prevision: foyer ? somme((l) => l.prevision) : null,
     },
   }
@@ -402,6 +402,240 @@ export function operationsSemblables(
     const meme = (motif && normaliserLibelle(t.label) === motif) || (regle && reco.regleDe(t.label)?.id === regle.id)
     return meme && (categorieEffective(t.category_id, idx)?.id ?? null) !== categorieVisee
   }).sort((a, b) => b.date.localeCompare(a.date))
+}
+
+// ---------- Recherche d'opérations ----------
+
+const sansAccents = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+
+/**
+ * Opérations qui répondent à une recherche, les plus récentes d'abord.
+ * Un nombre (« 42 », « 42,50 ») cherche le montant (à l'euro près s'il n'a pas de
+ * centimes) ; sinon chaque mot doit figurer dans l'intitulé bancaire, l'intitulé
+ * affiché, la catégorie ou la ligne (casse et accents ignorés).
+ */
+export function rechercherOperations(opts: {
+  transactions: FinTransaction[]; requete: string; idx: IndexFinances; filtre: FiltreTitulaire
+  libelle?: (tx: FinTransaction) => string
+}): FinTransaction[] {
+  const { transactions, idx, filtre, libelle } = opts
+  const q = opts.requete.trim()
+  if (!q) return []
+  const nombre = /^[+-]?\d+(?:[.,]\d{1,2})?$/.test(q.replace(/\s|€/g, '')) ? q.replace(/\s|€/g, '').replace(',', '.') : null
+  const mots = sansAccents(q).split(/\s+/).filter(Boolean)
+  return transactions.filter((tx) => {
+    if (!correspond(filtre, titulaireDe(tx, idx))) return false
+    const montant = Math.abs(Number(tx.amount))
+    if (nombre !== null) {
+      const n = Math.abs(Number(nombre))
+      return nombre.includes('.') ? Math.abs(montant - n) < 0.005 : Math.trunc(montant) === n
+    }
+    const cat = categorieEffective(tx.category_id, idx)
+    const ligne = idx.lignes.get(ligneDeCategorie(cat, idx) ?? '')
+    const texte = sansAccents([tx.label, tx.label_local ?? '', libelle?.(tx) ?? '', nomCategorie(cat, idx), ligne?.name ?? ''].join(' '))
+    return mots.every((m) => texte.includes(m))
+  }).sort((a, b) => b.date.localeCompare(a.date))
+}
+
+// ---------- Regroupements d'intitulés (détail compacté) ----------
+
+/** Enseignes et fournisseurs reconnus d'office : début de l'intitulé nettoyé → nom du groupe.
+ *  Un fournisseur passe avant le mandat : Orange fibre et Orange mobile (deux mandats) → Orange. */
+const ENSEIGNES: [RegExp, string][] = [
+  [/^(carrefour|crf)\b/, 'Carrefour'],
+  [/^(intermarche|inter)\b/, 'Intermarché'],
+  [/^(monoprix|monop)\b/, 'Monoprix'],
+  [/^(e\.? ?leclerc|leclerc)\b/, 'Leclerc'],
+  [/^auchan\b/, 'Auchan'],
+  [/^lidl\b/, 'Lidl'],
+  [/^aldi\b/, 'Aldi'],
+  [/^franprix\b/, 'Franprix'],
+  [/^(super u|hyper u|u express|magasins u)\b/, 'Super U'],
+  [/^picard\b/, 'Picard'],
+  [/^biocoop\b/, 'Biocoop'],
+  [/^naturalia\b/, 'Naturalia'],
+  [/^grand frais\b/, 'Grand Frais'],
+  [/^(amazon|amzn)\b/, 'Amazon'],
+  [/^sncf\b/, 'SNCF'],
+  [/^orange\b/, 'Orange'],
+  [/^sfr\b/, 'SFR'],
+  [/^bouygues\b/, 'Bouygues Telecom'],
+  [/^(free mobile|free telecom|freebox)\b/, 'Free'],
+  [/^edf\b/, 'EDF'],
+  [/^engie\b/, 'Engie'],
+  [/^total ?energies\b/, 'TotalEnergies'],
+  [/^spotify\b/, 'Spotify'],
+  [/^netflix\b/, 'Netflix'],
+  [/^deezer\b/, 'Deezer'],
+  [/^(canal ?\+|canal plus|canalplus)/, 'Canal+'],
+  [/^disney/, 'Disney+'],
+  [/^apple\b/, 'Apple'],
+  [/^google\b/, 'Google'],
+]
+
+const PARTICULES = new Set(['de', 'du', 'des', 'la', 'le', 'les', 'a', 'au', 'aux', 'et', 'en', 'sur', 'pour'])
+const titre = (m: string) => m.charAt(0).toUpperCase() + m.slice(1).toLowerCase()
+
+/** Nom lisible tiré d'un intitulé bancaire : sans carte ni numéros, 4 mots au plus ;
+ *  les mots en MAJUSCULES passent en casse de titre (sigles courts gardés : SA, EDF). */
+export function nomLisible(label: string): string {
+  const mots: string[] = []
+  for (const m of label.replace(/\bCB\*\s*\d+/gi, ' ').split(/\s+/)) {
+    if (!m) continue
+    // Un mot chiffré, une parenthèse ou « RUM » ouvre la partie technique (références, « (facture: … », mandat).
+    if (/\d/.test(m) || m.startsWith('(') || m === 'RUM') { if (mots.length) break; continue }
+    const propre = m.replace(/[:;,(-]+$/, '')
+    if (!propre) continue
+    mots.push(propre)
+    if (mots.length === 4) break
+  }
+  if (!mots.length) return label.trim()
+  return mots.map((m, i) => {
+    if (m !== m.toUpperCase()) return m
+    if (PARTICULES.has(m.toLowerCase())) return i === 0 ? titre(m) : m.toLowerCase()
+    return m.replace(/[^\p{L}]/gu, '').length > 3 ? titre(m) : m
+  }).join(' ')
+}
+
+/**
+ * Clé de regroupement automatique d'une opération, prudente :
+ * - enseigne ou fournisseur connu (Carrefour City, CRF Reims… → Carrefour ; Orange) ;
+ * - prélèvement : la référence du mandat (« RUM … »), stable d'un mois à l'autre ;
+ * - sinon l'intitulé nettoyé sans aucun mot contenant un chiffre
+ *   (« CARREFOUR CITY 2 », numéros de facture, dates, « Réf : SCT… »).
+ */
+export function cleGroupe(label: string): { cle: string; nom: string } {
+  const n = normaliserLibelle(label)
+  for (const [re, nom] of ENSEIGNES) if (re.test(n)) return { cle: `enseigne:${nom.toLowerCase()}`, nom }
+  return { cle: clesGroupe(label)[0]!, nom: nomLisible(label) }
+}
+
+/** Toutes les clés possibles d'une opération, de la plus forte à la plus faible :
+ *  enseigne, mandat, intitulé sans mots chiffrés. Un regroupement manuel posé sur
+ *  l'une d'elles (même avant l'ajout d'une enseigne à la liste) reste reconnu. */
+export function clesGroupe(label: string): string[] {
+  const n = normaliserLibelle(label)
+  const cles: string[] = []
+  for (const [re, nom] of ENSEIGNES) if (re.test(n)) { cles.push(`enseigne:${nom.toLowerCase()}`); break }
+  const rum = /\bRUM\s+(\S+)/i.exec(label)
+  if (rum) cles.push(`rum:${rum[1]!.toLowerCase()}`)
+  const mots = n.split(' ').filter((m) => !/\d/.test(m) && /[a-z]/.test(m) && m !== 'ref')
+  cles.push(mots.join(' ') || n)
+  return cles
+}
+
+/** Opérations réunies sous un même intitulé (automatique ou regroupement manuel). */
+export interface GroupeIntitules {
+  cle: string                // `groupe:<nom>` pour un regroupement manuel, sinon la clé automatique
+  nom: string
+  manuel: boolean
+  cles: string[]             // clés automatiques réunies dans ce groupe
+  total: number              // dépensé (sorties positives, remboursements déduits)
+  operations: FinTransaction[]
+  /** Groupe manuel : ses opérations regroupées à leur tour par intitulé semblable
+   *  (absent s'il n'y en a qu'un : les opérations s'affichent alors directement). */
+  sousGroupes?: GroupeIntitules[]
+}
+
+/**
+ * Regroupe des opérations par intitulé très semblable (cleGroupe) ; un regroupement
+ * manuel (`fin_groups` : clé automatique → nom) réunit plusieurs clés sous un nom,
+ * et ses opérations sont à leur tour regroupées par intitulé semblable (`sousGroupes`) :
+ * groupe manuel → intitulés semblables → opérations.
+ * Le nom d'un groupe automatique : l'enseigne, sinon l'intitulé local de
+ * l'opération la plus récente, sinon un nom lisible tiré de l'intitulé bancaire.
+ * Les plus gros d'abord ; dans chaque groupe, les opérations les plus récentes d'abord.
+ */
+export function grouperParIntitule(
+  operations: FinTransaction[], groupes: FinGroup[], libelleLocal?: (tx: FinTransaction) => string | null,
+): GroupeIntitules[] {
+  const regles = new Map(groupes.map((g) => [g.pattern, g.name.trim()]))
+  const parCle = new Map<string, GroupeIntitules & { nomAuto: string; recente: string; local: string | null }>()
+  for (const tx of operations) {
+    const auto = cleGroupe(tx.label)
+    // Même intitulé local = même groupe, même si les intitulés bancaires diffèrent
+    // (« X Virement de … Réf : … » et « X » tout court).
+    const local = libelleLocal?.(tx)?.trim() || null
+    // Clé retenue : celle qui porte un regroupement manuel s'il y en a un (pour pouvoir le défaire).
+    const candidates = [...(local ? [`local:${normaliserLibelle(local)}`] : []), ...clesGroupe(tx.label)]
+    const base = candidates.find((k) => regles.get(k)) ?? candidates[0]!
+    const manuel = regles.get(base) || null
+    const cleG = manuel ? `groupe:${manuel}` : base
+    let g = parCle.get(cleG)
+    if (!g) {
+      g = { cle: cleG, nom: manuel ?? auto.nom, manuel: !!manuel, cles: [], total: 0, operations: [], nomAuto: auto.nom, recente: '', local: null }
+      parCle.set(cleG, g)
+    }
+    if (!g.cles.includes(base)) g.cles.push(base)
+    g.total -= Number(tx.amount)
+    g.operations.push(tx)
+    if (tx.date >= g.recente) {
+      g.recente = tx.date
+      g.local = libelleLocal?.(tx) ?? null
+      g.nomAuto = auto.nom
+    }
+  }
+  return [...parCle.values()].map(({ nomAuto, recente: _r, local, ...g }) => {
+    const enseigne = g.cles.length === 1 && g.cles[0]!.startsWith('enseigne:')
+    const sous = g.manuel ? grouperParIntitule(g.operations, [], libelleLocal) : []
+    return {
+      ...g,
+      nom: g.manuel || enseigne ? g.nom : local?.trim() || nomAuto,
+      operations: g.operations.sort((a, b) => b.date.localeCompare(a.date)),
+      ...(sous.length > 1 ? { sousGroupes: sous } : {}),
+    }
+  }).sort((a, b) => b.total - a.total || a.nom.localeCompare(b.nom, 'fr'))
+}
+
+/** Même nom à l'accent, à la casse et au pluriel près (« Abonnement » = « abonnements »). */
+const memeNom = (a: string, b: string) => {
+  const n = (x: string) => normaliserLibelle(x).replace(/s$/, '')
+  return n(a) === n(b)
+}
+
+/**
+ * Évite un échelon inutile dans une catégorie : un groupe manuel qui porte le nom de la
+ * catégorie (« Abonnements » dans Abonnements) ou qui y est seul laisse la place à ses
+ * intitulés semblables, remontés d'un cran. Les plus gros d'abord.
+ */
+export function aplatirGroupes(groupes: GroupeIntitules[], nomCategorie?: string): GroupeIntitules[] {
+  const plats = groupes.flatMap((g) =>
+    g.manuel && g.sousGroupes && (groupes.length === 1 || (nomCategorie && memeNom(g.nom, nomCategorie))) ? g.sousGroupes : [g])
+  return plats.sort((a, b) => b.total - a.total || a.nom.localeCompare(b.nom, 'fr'))
+}
+
+export interface GroupePeriode extends GroupeIntitules {
+  parMois: number[]          // dépensé, aligné sur les mois demandés
+  moyenne: number
+  sousGroupes?: GroupePeriode[]
+}
+
+/**
+ * Détail compacté d'une ligne (ou de « Non classé ») sur plusieurs mois : une ligne
+ * par groupe d'intitulés (grouperParIntitule), le dépensé de chaque mois et la moyenne.
+ */
+export function detailPeriode(opts: {
+  cle: string; mois: string[]; transactions: FinTransaction[]; idx: IndexFinances; filtre: FiltreTitulaire
+  groupes: FinGroup[]; libelleLocal?: (tx: FinTransaction) => string | null
+}): GroupePeriode[] {
+  const { cle, mois, transactions, idx, filtre } = opts
+  const rang = new Map(mois.map((m, i) => [m, i]))
+  const retenues = transactions.filter((tx) => {
+    if (!rang.has(moisDe(tx.date)) || !correspond(filtre, titulaireDe(tx, idx))) return false
+    const c = classer(tx, idx)
+    return (c.type === 'ligne' ? c.ligne : c.type === 'non_classe' ? NON_CLASSE : null) === cle
+  })
+  const parPeriode = (g: GroupeIntitules): GroupePeriode => {
+    const parMois = mois.map(() => 0)
+    for (const tx of g.operations) parMois[rang.get(moisDe(tx.date))!]! -= Number(tx.amount)
+    const { sousGroupes, ...reste } = g
+    return {
+      ...reste, parMois, moyenne: mois.length ? g.total / mois.length : 0,
+      ...(sousGroupes ? { sousGroupes: trier(sousGroupes.map(parPeriode)) } : {}),
+    }
+  }
+  const trier = (gs: GroupePeriode[]) => gs.sort((a, b) => b.moyenne - a.moyenne || a.nom.localeCompare(b.nom, 'fr'))
+  return trier(grouperParIntitule(retenues, opts.groupes, opts.libelleLocal).map(parPeriode))
 }
 
 // ---------- Patrimoine ----------

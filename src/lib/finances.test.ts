@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import type { FinAccount, FinBudget, FinCategory, FinHolding, FinLine, FinPlanned, FinTarget, FinTransaction } from './types'
 import {
-  NON_CLASSE, agreger, allocation, bilan, compositionPatrimoine, creerReconnaissance, normaliserLibelle, operationsSemblables, budgetDe, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
+  NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, cleGroupe, compositionPatrimoine, detailPeriode, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, budgetDe, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
   libelleMois, moisEcoules, patrimoine, previsionDe, provision, syntheseMois,
 } from './finances'
 
@@ -119,27 +119,27 @@ describe('synthèse du mois', () => {
     op(joint.id, '2026-10-06', 20, { category_id: alim.id }),                  // remboursement : se déduit
     op(perso.id, '2026-10-07', -80, { category_id: alim.id }),
     op(perso.id, '2026-10-08', -40, { category_id: alim.id, owner: 'honorine' }),
-    op(joint.id, '2026-10-01', -1300, { category_id: loyer.id }),
+    op(joint.id, '2026-10-01', -1100, { category_id: loyer.id }),
     op(joint.id, '2026-10-09', -15, { category_id: divers.id }),
     op(joint.id, '2026-10-25', 4000, { category_id: salaire.id }),
     op(joint.id, '2026-09-04', -600, { category_id: alim.id }),
     op(joint.id, '2026-04-04', -60, { category_id: alim.id }),
-    op(joint.id, '2026-03-04', -999, { category_id: alim.id }),                // hors des 6 mois
+    op(joint.id, '2026-03-04', -999, { category_id: alim.id }),                // hors des 3 mois
   ]
-  const budgets = [budget(courses.id, '2025-01-01', 750), budget(fixes.id, '2025-01-01', 1300)]
+  const budgets = [budget(courses.id, '2025-01-01', 750), budget(fixes.id, '2025-01-01', 1100)]
 
-  it('reproduit le tableau de bord : réel, budget, M-1, moyenne 6 mois, prévisionnel', () => {
+  it('reproduit le tableau de bord : réel, budget, M-1, moyenne 3 mois, prévisionnel', () => {
     const s = syntheseMois({ mois: '2026-10', lines, budgets, agregat: agreger(tx, idx, 'foyer'), filtre: 'foyer' })
     expect(s.lignes.map((l) => l.ligne?.name ?? l.cle)).toEqual(['Frais fixe', 'Courses', 'Épargne avenir', NON_CLASSE])
     const c = s.lignes.find((l) => l.cle === courses.id)!
     expect(c.reel).toBe(250)               // 120 + 30 − 20 + 80 + 40
     expect(c.budget).toBe(750)
     expect(c.precedent).toBe(600)
-    expect(c.moyenne6).toBe(110)           // (600 + 60) / 6
+    expect(c.moyenne3).toBe(200)           // 600 / 3 : avril est hors des 3 mois
     expect(c.prevision).toBe(750)
     expect(s.entrees).toBe(4000)
-    expect(s.total.reel).toBe(250 + 1300 + 15)
-    expect(s.total.budget).toBe(2050)
+    expect(s.total.reel).toBe(250 + 1100 + 15)
+    expect(s.total.budget).toBe(1850)
   })
 
   it('ne montre « Non classé » que s’il reste des opérations à classer ce mois-ci', () => {
@@ -168,7 +168,7 @@ describe('synthèse du mois', () => {
     expect(c.budget).toBe(1500)
     expect(c.depassements).toBe(0)
     const f = b.lignes.find((l) => l.cle === fixes.id)!
-    expect(f.cellules.map((x) => x.reel)).toEqual([0, 1300])
+    expect(f.cellules.map((x) => x.reel)).toEqual([0, 1100])
     expect(b.total.entrees).toBe(4000)
   })
 })
@@ -215,6 +215,150 @@ describe('intitulés locaux', () => {
     const r = creerReconnaissance([regle('ville', 'Retrait')])
     expect(r.libelle(op('a', '2026-10-01', -5, { label: 'VILLE CB*1111' }))).toBe('Retrait')
     expect(r.libelle(op('a', '2026-10-01', -5, { label: 'CRF VILLE - CENTRE CB*1111' }))).toBe('CRF VILLE - CENTRE CB*1111')
+  })
+})
+
+describe('recherche d’opérations', () => {
+  const tx = [
+    op(joint.id, '2026-09-03', -42.5, { category_id: alim.id, label: 'EPICERIE ÉTÉ 2 CB*1111' }),
+    op(joint.id, '2026-10-03', -42.9, { category_id: boulangerie.id, label: 'FOURNIL CB*1111', label_local: 'Pain du coin' }),
+    op(perso.id, '2026-10-05', -8, { category_id: loyer.id, label: 'ASSURANCE HABITATION', owner: 'honorine' }),
+  ]
+  const r = (requete: string, filtre: 'foyer' | 'honorine' = 'foyer') =>
+    rechercherOperations({ transactions: tx, requete, idx, filtre }).map((t) => t.label)
+  it('cherche dans l’intitulé bancaire, l’intitulé local, la catégorie et la ligne, sans casse ni accents', () => {
+    expect(r('epicerie ete')).toEqual(['EPICERIE ÉTÉ 2 CB*1111'])
+    expect(r('pain coin')).toEqual(['FOURNIL CB*1111'])
+    expect(r('courses')).toEqual(['FOURNIL CB*1111', 'EPICERIE ÉTÉ 2 CB*1111'])  // la ligne ; récentes d'abord
+    expect(r('frais fixe')).toEqual(['ASSURANCE HABITATION'])
+  })
+  it('un nombre cherche le montant : à l’euro près sans centimes, au centime sinon', () => {
+    expect(r('42')).toEqual(['FOURNIL CB*1111', 'EPICERIE ÉTÉ 2 CB*1111'])
+    expect(r('42,50')).toEqual(['EPICERIE ÉTÉ 2 CB*1111'])
+    expect(r('8 €')).toEqual(['ASSURANCE HABITATION'])
+  })
+  it('suit le filtre de titulaire ; rien pour une recherche vide', () => {
+    expect(r('assurance', 'honorine')).toEqual(['ASSURANCE HABITATION'])
+    expect(r('epicerie', 'honorine')).toEqual([])
+    expect(r('  ')).toEqual([])
+  })
+})
+
+describe('regroupements d’intitulés', () => {
+  it('prélèvement : regroupe par mandat (RUM), quels que soient les numéros', () => {
+    const a = cleGroupe('FOURNISSEUR SA Mandat 00X1 REF20261001ABC RUM MANDAT-42')
+    const b = cleGroupe('FOURNISSEUR S.A. 99999 REF20261101XYZ RUM MANDAT-42')
+    expect(a.cle).toBe('rum:mandat-42')
+    expect(b.cle).toBe(a.cle)
+    expect(a.nom).toBe('Fournisseur SA Mandat')
+  })
+  it('enseigne connue : Carrefour City, Carrefour Market et CRF → Carrefour ; « interne » n’est pas Intermarché', () => {
+    expect(cleGroupe('CARREFOUR CITY 2 CB*1111')).toEqual({ cle: 'enseigne:carrefour', nom: 'Carrefour' })
+    expect(cleGroupe('CARREFOUR MARKET CB*2222').cle).toBe('enseigne:carrefour')
+    expect(cleGroupe('CRF VILLE - CENTRE CB*1111').cle).toBe('enseigne:carrefour')
+    expect(cleGroupe('INTER QUARTIER 9 CB*1111').nom).toBe('Intermarché')
+    expect(cleGroupe('Interne depenses annualisees Réf : SCT123').cle).toBe('interne depenses annualisees')
+  })
+  it('fournisseur connu : passe avant le mandat (fibre et mobile → un seul groupe)', () => {
+    expect(cleGroupe('ORANGE SA Votre abonnement fibre (facture: X1) 123 RUM MANDAT-A').cle).toBe('enseigne:orange')
+    expect(cleGroupe('ORANGE SA-ORANGE Votre abonnement mobile 456 RUM MANDAT-B').cle).toBe('enseigne:orange')
+    expect(cleGroupe('Spotify P4206A2E5 CB*1111').nom).toBe('Spotify')
+  })
+  it('sinon : l’intitulé sans mots chiffrés (numéro de magasin, référence, date)', () => {
+    expect(cleGroupe('LA BOULANGERIE 2 CB*1111').cle).toBe(cleGroupe('LA BOULANGERIE CB*2222').cle)
+    expect(cleGroupe('Musique P44336255 CB*1111').cle).toBe(cleGroupe('Musique P453AFB22 CB*1111').cle)
+    expect(cleGroupe('ECH PRET 1234X DU 01/07/26').cle).toBe(cleGroupe('ECH PRET 1234X DU 01/08/26').cle)
+    expect(nomLisible('LA BOULANGERIE 2 CB*1111')).toBe('La Boulangerie')
+    expect(nomLisible('EPICERIE DE QUARTIER CB*1111')).toBe('Epicerie de Quartier')
+    expect(nomLisible('OPERATEUR SA fibre (facture: X01) RUM M-1')).toBe('Operateur SA fibre')
+    expect(nomLisible('FOURNISSEUR S.A. Mandat 00X01')).toBe('Fournisseur S.A. Mandat')
+  })
+  it('regroupe les opérations d’une catégorie par intitulé semblable, les plus grosses d’abord', () => {
+    const ops = [
+      op(joint.id, '2026-10-03', -30, { label: 'CARREFOUR CITY 2 CB*1111' }),
+      op(joint.id, '2026-10-09', -60, { label: 'CRF VILLE CB*2222' }),
+      op(joint.id, '2026-10-12', -20, { label: 'CARREFOUR MARKET CB*1111' }),
+      op(joint.id, '2026-10-05', -15, { label: 'LA BOULANGERIE 2 CB*1111' }),
+      op(joint.id, '2026-10-06', 5, { label: 'CARREFOUR CITY CB*1111' }),           // remboursement : se déduit
+    ]
+    const g = grouperParIntitule(ops, [])
+    expect(g.map((x) => [x.nom, x.operations.length, x.total])).toEqual([['Carrefour', 4, 105], ['La Boulangerie', 1, 15]])
+    expect(g[0]!.operations[0]!.date).toBe('2026-10-12')
+  })
+  it('réunit les opérations au même intitulé local, même si les intitulés bancaires diffèrent', () => {
+    const ops = [
+      op(joint.id, '2026-07-01', -900, { label: 'Bailleur EXEMPLE Virement de Moi Réf : SCT111', label_local: 'Loyer' }),
+      op(joint.id, '2026-06-01', -900, { label: 'Bailleur EXEMPLE', label_local: 'Loyer' }),
+      op(joint.id, '2026-05-04', -900, { label: 'Bailleur EXEMPLE Virement de Moi Réf : SCT222', label_local: 'Loyer' }),
+    ]
+    const g = grouperParIntitule(ops, [], (t) => t.label_local)
+    expect(g.map((x) => [x.nom, x.operations.length, x.cles])).toEqual([['Loyer', 3, ['local:loyer']]])
+  })
+  it('un regroupement manuel posé sur le mandat ou l’intitulé reste reconnu après l’ajout d’une enseigne', () => {
+    const ops = [
+      op(joint.id, '2026-09-10', -40, { label: 'ORANGE SA fibre 1 RUM MANDAT-A' }),
+      op(joint.id, '2026-09-12', -20, { label: 'ORANGE SA-ORANGE mobile 2 RUM MANDAT-B' }),
+      op(joint.id, '2026-09-15', -9, { label: 'SYNDICAT EXEMPLE cotisation RUM ADH-1' }),
+    ]
+    const groupes = [
+      { id: 'g1', user_id: 'u', pattern: 'rum:mandat-a', name: 'Abonnements', created_at: '' },
+      { id: 'g2', user_id: 'u', pattern: 'rum:adh-1', name: 'Abonnements', created_at: '' },
+    ]
+    const g = grouperParIntitule(ops, groupes)
+    expect(g.map((x) => [x.nom, x.operations.length])).toEqual([['Abonnements', 2], ['Orange', 1]])
+  })
+  it('dans un groupe manuel, les opérations semblables sont regroupées à leur tour', () => {
+    const ops = [
+      op(joint.id, '2026-09-10', -40, { label: 'ORANGE SA fibre 1 RUM MANDAT-A' }),
+      op(joint.id, '2026-09-12', -20, { label: 'ORANGE SA-ORANGE mobile 2 RUM MANDAT-B' }),
+      op(joint.id, '2026-09-15', -9, { label: 'SYNDICAT EXEMPLE cotisation RUM ADH-1' }),
+    ]
+    const groupes = ['rum:mandat-a', 'rum:mandat-b', 'rum:adh-1']
+      .map((pattern, i) => ({ id: `g${i}`, user_id: 'u', pattern, name: 'Abonnements', created_at: '' }))
+    const [abo] = grouperParIntitule(ops, groupes)
+    expect(abo!.nom).toBe('Abonnements')
+    expect(abo!.sousGroupes!.map((x) => [x.nom, x.operations.length, x.total])).toEqual([['Orange', 2, 60], ['Syndicat Exemple cotisation', 1, 9]])
+    // Sur plusieurs mois : les sous-groupes ont aussi leurs montants par mois.
+    const [p] = detailPeriode({ cle: NON_CLASSE, mois: ['2026-09'], transactions: ops, idx, filtre: 'foyer', groupes })
+    expect(p!.sousGroupes!.map((x) => x.parMois)).toEqual([[60], [9]])
+  })
+  it('dans une catégorie, un groupe manuel du même nom (ou seul) laisse place à ses intitulés', () => {
+    const ops = [
+      op(joint.id, '2026-09-10', -40, { label: 'ORANGE SA fibre 1 RUM MANDAT-A' }),
+      op(joint.id, '2026-09-12', -20, { label: 'ORANGE SA-ORANGE mobile 2 RUM MANDAT-B' }),
+      op(joint.id, '2026-09-15', -9, { label: 'SYNDICAT EXEMPLE cotisation RUM ADH-1' }),
+      op(joint.id, '2026-09-16', -70, { label: 'AUTRE CHOSE' }),
+    ]
+    const regles = ['rum:mandat-a', 'rum:mandat-b', 'rum:adh-1']
+      .map((pattern, i) => ({ id: `g${i}`, user_id: 'u', pattern, name: 'Abonnements', created_at: '' }))
+    const g = grouperParIntitule(ops, regles)
+    expect(aplatirGroupes(g, 'Abonnement').map((x) => x.nom)).toEqual(['Autre Chose', 'Orange', 'Syndicat Exemple cotisation'])
+    expect(aplatirGroupes(g, 'Téléphone').map((x) => x.nom)).toEqual(['Autre Chose', 'Abonnements'])
+    expect(aplatirGroupes(grouperParIntitule(ops.slice(0, 3), regles)).map((x) => x.nom)).toEqual(['Orange', 'Syndicat Exemple cotisation'])
+  })
+  it('compacte une ligne sur 3 mois : une ligne par groupe, montant par mois et moyenne', () => {
+    const mois = ['2026-07', '2026-08', '2026-09']
+    const tx = [
+      op(joint.id, '2026-07-03', -30, { category_id: alim.id, label: 'CARREFOUR CITY 2 CB*1111' }),
+      op(joint.id, '2026-08-03', -60, { category_id: alim.id, label: 'CRF VILLE CB*1111' }),
+      op(joint.id, '2026-09-03', -15, { category_id: boulangerie.id, label: 'LA BOULANGERIE 2 CB*1111' }),
+      op(joint.id, '2026-09-04', -9, { category_id: boulangerie.id, label: 'LE FOURNIL CB*1111', label_local: 'Fournil du coin' }),
+      op(joint.id, '2026-09-05', -500, { category_id: loyer.id, label: 'LOYER' }),               // autre ligne
+      op(joint.id, '2026-06-05', -99, { category_id: alim.id, label: 'CARREFOUR CB*1111' }),     // hors période
+    ]
+    const g = detailPeriode({ cle: courses.id, mois, transactions: tx, idx, filtre: 'foyer', groupes: [],
+      libelleLocal: (t) => t.label_local })
+    expect(g.map((x) => x.nom)).toEqual(['Carrefour', 'La Boulangerie', 'Fournil du coin'])
+    expect(g[0]!.parMois).toEqual([30, 60, 0])
+    expect(g[0]!.moyenne).toBe(30)
+    // Regroupement manuel : la boulangerie et le fournil sous un même nom.
+    const groupes = [{ id: 'g1', user_id: 'u', pattern: 'la boulangerie', name: 'Pain', created_at: '' },
+      { id: 'g2', user_id: 'u', pattern: 'le fournil', name: 'Pain', created_at: '' }]
+    const r = detailPeriode({ cle: courses.id, mois, transactions: tx, idx, filtre: 'foyer', groupes })
+    const pain = r.find((x) => x.nom === 'Pain')!
+    expect(pain.manuel).toBe(true)
+    expect(pain.parMois).toEqual([0, 0, 24])
+    expect(pain.cles.sort()).toEqual(['la boulangerie', 'le fournil'])
   })
 })
 
