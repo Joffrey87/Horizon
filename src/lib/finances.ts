@@ -13,7 +13,7 @@
 // ================================================================
 import type {
   FinAccount, FinAccountKind, FinAssetClass, FinBudget, FinCategory, FinHolding, FinLine, FinOwner, FinPlanned,
-  FinTarget, FinTransaction, FinLabel, FinGroup,
+  FinTarget, FinTransaction, FinLabel, FinGroup, FinEcheance,
 } from './types'
 
 export type FiltreTitulaire = 'foyer' | FinOwner
@@ -255,6 +255,17 @@ export function syntheseMois(opts: {
       prevision: foyer ? somme((l) => l.prevision) : null,
     },
   }
+}
+
+// ---------- Capital remboursé ----------
+
+/**
+ * Capital de prêts remboursé pendant un mois : la part de capital des échéances du mois
+ * (tableaux d'amortissement, table fin_echeances — seuls y figurent les prêts dont le
+ * capital doit compter comme épargné, ex. l'appartement de Reims).
+ */
+export function capitalRembourse(echeances: FinEcheance[], mois: string): number {
+  return echeances.reduce((s, e) => (moisDe(e.date) === mois ? s + Number(e.capital) : s), 0)
 }
 
 // ---------- Entrées prévues ----------
@@ -631,11 +642,21 @@ export function grouperParIntitule(
 ): GroupeIntitules[] {
   const regles = new Map(groupes.map((g) => [g.pattern, g.name.trim()]))
   const parCle = new Map<string, GroupeIntitules & { nomAuto: string; recente: string; local: string | null }>()
+  // Une opération sans intitulé local rejoint celles qui en ont un au même intitulé
+  // bancaire ou au même mandat (« Loyer » posé sur quelques virements seulement) —
+  // jamais par l'enseigne : un ticket Carrefour renommé n'emporte pas tout Carrefour.
+  const localParCle = new Map<string, string>()
+  for (const tx of operations) {
+    const local = libelleLocal?.(tx)?.trim()
+    if (!local) continue
+    for (const k of clesGroupe(tx.label)) if (!k.startsWith('enseigne:') && !localParCle.has(k)) localParCle.set(k, local)
+  }
   for (const tx of operations) {
     const auto = cleGroupe(tx.label)
     // Même intitulé local = même groupe, même si les intitulés bancaires diffèrent
     // (« X Virement de … Réf : … » et « X » tout court).
-    const local = libelleLocal?.(tx)?.trim() || null
+    const local = libelleLocal?.(tx)?.trim()
+      || clesGroupe(tx.label).map((k) => localParCle.get(k)).find(Boolean) || null
     // Clé retenue : celle qui porte un regroupement manuel s'il y en a un (pour pouvoir le défaire).
     const candidates = [...(local ? [`local:${normaliserLibelle(local)}`] : []), ...clesGroupe(tx.label)]
     const base = candidates.find((k) => regles.get(k)) ?? candidates[0]!
@@ -651,7 +672,7 @@ export function grouperParIntitule(
     g.operations.push(tx)
     if (tx.date >= g.recente) {
       g.recente = tx.date
-      g.local = libelleLocal?.(tx) ?? null
+      g.local = local
       g.nomAuto = auto.nom
     }
   }

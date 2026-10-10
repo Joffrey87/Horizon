@@ -48,7 +48,7 @@ export function Tuile({ titre, valeur, detail, ton, compacte = false }: {
   if (compacte) {
     // Une seule ligne : titre et détail à gauche, montant à droite.
     return (
-      <div className="card flex items-baseline justify-between gap-2 px-3 py-1.5">
+      <div className="card flex items-baseline justify-between gap-4 px-3 py-1.5">
         <p className="min-w-0 truncate">
           <span className="block-title">{titre}</span>
           {detail && <span className="ml-2 text-[11px] text-ink-3">{detail}</span>}

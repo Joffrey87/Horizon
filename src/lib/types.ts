@@ -591,6 +591,17 @@ export interface FinBudget {
   created_at: string
 }
 
+/** Échéance d'un prêt (tableau d'amortissement) : la part de capital compte comme épargnée. */
+export interface FinEcheance {
+  id: UUID
+  user_id: UUID
+  account_id: UUID
+  date: string
+  capital: number
+  interets: number
+  created_at: string
+}
+
 export interface FinNetworth {
   id: UUID
   user_id: UUID

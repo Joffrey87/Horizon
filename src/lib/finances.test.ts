@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import type { FinAccount, FinBudget, FinCategory, FinHolding, FinLine, FinPlanned, FinTarget, FinTransaction } from './types'
 import {
-  NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, budgetDe, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
+  NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, capitalRembourse, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, budgetDe, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
   libelleMois, moisEcoules, patrimoine, previsionDe, provision, syntheseMois,
 } from './finances'
 
@@ -218,6 +218,16 @@ describe('intitulés locaux', () => {
   })
 })
 
+describe('capital remboursé', () => {
+  const ech = (date: string, capital: number) => ({ id: id(), user_id: 'u', account_id: 'p', date, capital, interets: 10, created_at: '' })
+  it('somme la part de capital des échéances du mois (différé : 0)', () => {
+    const e = [ech('2026-09-01', 850), ech('2026-09-05', 207), ech('2026-10-01', 852), ech('2026-04-01', 0)]
+    expect(capitalRembourse(e, '2026-09')).toBe(1057)
+    expect(capitalRembourse(e, '2026-04')).toBe(0)
+    expect(capitalRembourse(e, '2026-11')).toBe(0)
+  })
+})
+
 describe('dépenses à venir dans le mois', () => {
   it('frais fixes réguliers pas encore passés + courses au-delà de ce qui est dépensé', () => {
     const fixe = (date: string, montant: number, label: string) => op(joint.id, date, -montant, { category_id: loyer.id, label })
@@ -370,6 +380,17 @@ describe('regroupements d’intitulés', () => {
     expect(aplatirGroupes(g, 'Abonnement').map((x) => x.nom)).toEqual(['Autre Chose', 'Orange', 'Syndicat Exemple cotisation'])
     expect(aplatirGroupes(g, 'Téléphone').map((x) => x.nom)).toEqual(['Autre Chose', 'Abonnements'])
     expect(aplatirGroupes(grouperParIntitule(ops.slice(0, 3), regles)).map((x) => x.nom)).toEqual(['Orange', 'Syndicat Exemple cotisation'])
+  })
+  it('une opération sans intitulé local rejoint celles qui en ont un au même intitulé bancaire', () => {
+    const ops = [
+      op(joint.id, '2026-07-01', -900, { label: 'BAILLEUR EXEMPLE Virement de Moi Réf : SCT1', label_local: 'Loyer' }),
+      op(joint.id, '2026-08-01', -900, { label: 'BAILLEUR EXEMPLE Virement de Moi Réf : SCT2' }),
+      op(joint.id, '2026-09-01', -900, { label: 'BAILLEUR EXEMPLE Virement de Moi Réf : SCT3' }),
+      op(joint.id, '2026-09-03', -40, { label: 'CARREFOUR CITY CB*1111', label_local: 'Pique-nique' }),
+      op(joint.id, '2026-09-04', -60, { label: 'CARREFOUR MARKET CB*1111' }),        // l'enseigne ne suit pas l'intitulé local
+    ]
+    const g = grouperParIntitule(ops, [], (t) => t.label_local)
+    expect(g.map((x) => [x.nom, x.operations.length])).toEqual([['Loyer', 3], ['Carrefour', 1], ['Pique-nique', 1]])
   })
   it('compacte une ligne sur 3 mois : une ligne par groupe, montant par mois et moyenne', () => {
     const mois = ['2026-07', '2026-08', '2026-09']

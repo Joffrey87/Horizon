@@ -28,7 +28,7 @@ export function DetailTroisMois({ cle }: { cle: string }) {
     libelleLocal: (tx) => (reco.estLocal(tx) ? reco.libelle(tx) : null),
   }), [cle, periode, transactions, idx, filtre, regles, reco])
 
-  if (!groupes.length) return <p className="py-2 text-xs text-ink-3">Aucune opération sur les 3 mois précédents.</p>
+  if (!groupes.length) return <p className="py-2 text-xs text-ink-3">Aucune opération</p>
 
   const basculer = (k: string) => {
     const s = new Set(ouverts)
@@ -136,19 +136,13 @@ export function DetailTroisMois({ cle }: { cle: string }) {
             )
           })}
           <tr className="border-t border-line text-xs text-ink-3">
-            <td className="py-1.5 pr-2 uppercase tracking-wider">Total · {groupes.length} groupe{groupes.length > 1 ? 's' : ''}</td>
+            <td className="py-1.5 pr-2" />
             {totaux.map((v, i) => <td key={periode[i]} className="px-2 text-right tabular-nums">{euros(v)}</td>)}
             <td className="px-2 text-right font-medium tabular-nums">{euros(moyenne)}</td>
             <td />
           </tr>
         </tbody>
       </table>
-      {rangeable && (
-        <p className="text-[11px] text-ink-3">
-          Glisse une ligne sur une autre pour en faire un groupe nommé, ou sur un groupe pour l’y ajouter (au doigt : <Combine size={11} className="inline" />).
-          Les groupes valent pour tous les mois ; l’intitulé des opérations ne change pas.
-        </p>
-      )}
       {aRegrouper && <FenetreRegrouper groupe={aRegrouper.groupe} depose={aRegrouper.depose}
         autres={groupes.filter((g) => g.cle !== aRegrouper.groupe.cle)} onClose={() => setARegrouper(null)} />}
     </div>

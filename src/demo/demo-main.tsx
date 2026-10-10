@@ -46,7 +46,7 @@ const KEY: Record<string, keyof ReturnType<typeof useHorizon.getState>> = {
   calendar_feeds: 'calendarFeeds', celeste_proposals: 'celesteProposals',
   fin_lines: 'finLines', fin_accounts: 'finAccounts', fin_categories: 'finCategories',
   fin_transactions: 'finTransactions', fin_budgets: 'finBudgets', fin_networth: 'finNetworth',
-  fin_holdings: 'finHoldings', fin_targets: 'finTargets', fin_dca: 'finDca', fin_planned: 'finPlanned', fin_labels: 'finLabels', fin_groups: 'finGroups',
+  fin_holdings: 'finHoldings', fin_targets: 'finTargets', fin_dca: 'finDca', fin_planned: 'finPlanned', fin_labels: 'finLabels', fin_groups: 'finGroups', fin_echeances: 'finEcheances',
   partages: 'partages',
 }
 /** Clé du store pour une table Supabase — lève si la table n'est pas gérée en démo. */

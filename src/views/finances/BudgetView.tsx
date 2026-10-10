@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { ArrowRight, ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import {
-  NON_CLASSE, agreger, aplatirGroupes, decaleMois, depensesAVenir, detailLigne, entreesPrevues, euros, grouperParIntitule, libelleMois, syntheseMois, type GroupeIntitules, type LigneBudget,
+  NON_CLASSE, agreger, aplatirGroupes, capitalRembourse, decaleMois, depensesAVenir, detailLigne, entreesPrevues, euros, grouperParIntitule, libelleMois, syntheseMois, type GroupeIntitules, type LigneBudget,
 } from '../../lib/finances'
 import type { FinTransaction } from '../../lib/types'
 import { EmptyState, ProgressBar } from '../../components/ui'
@@ -28,6 +28,7 @@ export function BudgetView() {
   const transactions = useHorizon((s) => s.finTransactions)
   const lines = useHorizon((s) => s.finLines)
   const budgets = useHorizon((s) => s.finBudgets)
+  const echeances = useHorizon((s) => s.finEcheances)
   const setFinBudget = useHorizon((s) => s.setFinBudget)
   const idx = useIndex()
   const [depli, setDepli] = useState<Depli>(null)
@@ -67,7 +68,11 @@ export function BudgetView() {
   // Reste réaliste : ce qui n'est pas encore dépensé, moins les frais fixes habituels et les courses à venir.
   const aVenir = useMemo(() => depensesAVenir({ mois, moisCourant: moisCourant(), transactions, idx, filtre, lines }),
     [mois, transactions, idx, filtre, lines])
-  const reste = s.total.budget !== null ? s.total.budget - s.total.reel - aVenir.total : null
+  const reste = s.total.budget !== null ? s.total.budget - s.total.reel : null
+  // Épargné : lignes d'épargne + capital de prêt remboursé (vue Foyer : les prêts sont ceux du foyer).
+  const capital = foyer ? capitalRembourse(echeances, mois) : 0
+  // Tuile « Reste » : dépenses seulement (l'épargne n'y entre pas), après ce qui est encore à venir.
+  const resteTuile = foyer ? somme(depenses, (l) => l.budget) - somme(depenses, (l) => l.reel) - aVenir.total : null
 
   if (!lines.length) {
     return <EmptyState hint="Crée tes lignes (Frais fixe, Courses…) dans Réglages.">Aucune ligne de budget pour l’instant.</EmptyState>
@@ -175,14 +180,15 @@ export function BudgetView() {
 
       {recherche.trim() ? <ResultatsRecherche requete={recherche} /> : (
         <>
-          <div className="grid gap-2 sm:grid-cols-3">
-            <Tuile compacte titre="Épargné" valeur={euros(somme(epargnes, (l) => l.reel))} />
-            <Tuile compacte titre={reste !== null && reste < 0 ? 'Au-delà du budget' : 'Reste'}
-              valeur={reste === null ? '—' : euros(Math.abs(reste))} ton={reste !== null && reste < 0 ? 'warn' : undefined}
-              detail={reste === null ? 'budget : vue Foyer' : aVenir.total > 0.5
+          {/* Petites tuiles côte à côte, à la largeur de leur contenu, centrées. */}
+          <div className="flex flex-wrap justify-center gap-2">
+            <Tuile compacte titre={resteTuile !== null && resteTuile < 0 ? 'Au-delà du budget' : 'Reste'}
+              valeur={resteTuile === null ? '—' : euros(Math.abs(resteTuile))} ton={resteTuile !== null && resteTuile < 0 ? 'warn' : undefined}
+              detail={resteTuile === null ? 'budget : vue Foyer' : aVenir.total > 0.5
                 ? <span title={aVenir.details.map((d) => `${d.nom} : ${euros(d.montant)}`).join('\n')}>après {euros(aVenir.total)} à venir</span>
                 : undefined} />
-            <Tuile compacte titre="Entrées" valeur={euros(s.entrees)} detail="salaires, remboursements…" />
+            <Tuile compacte titre="Épargné" valeur={euros(somme(epargnes, (l) => l.reel) + capital)}
+              detail={capital > 0.5 ? <span title="Épargne + capital de prêt remboursé ce mois-ci">dont {euros(capital)} de capital remboursé</span> : undefined} />
           </div>
 
           <div className="card overflow-x-auto p-4">
@@ -388,7 +394,7 @@ function DetailLigne({ cle, niveauTous }: { cle: string; niveauTous: Niveau }) {
   const [dernier, setDernier] = useState(niveauTous)
   if (dernier !== niveauTous) { setDernier(niveauTous); setDefaut(niveauTous); setNiveaux(new Map()) }
   const groupes = useMemo(() => detailLigne({ cle, mois, transactions, idx, filtre }), [cle, mois, transactions, idx, filtre])
-  if (!groupes.length) return <p className="py-2 text-xs text-ink-3">Aucune opération ce mois-ci.</p>
+  if (!groupes.length) return <p className="py-2 text-xs text-ink-3">Aucune opération</p>
   // Ligne sans sous-catégorie (Dons, Vacances…) : pas d'étage intermédiaire, les groupes directement.
   if (groupes.length === 1 && !groupes[0]!.nom.includes(' › ')) {
     return (

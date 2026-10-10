@@ -55,12 +55,10 @@ export function PatrimoineView() {
 
   return (
     <div className="rise space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Tuile titre={avecCrypto ? 'Patrimoine net' : 'Patrimoine net (hors crypto)'} valeur={euros(p.net)}
+      <div className="flex flex-wrap gap-2">
+        <Tuile compacte titre={avecCrypto ? 'Patrimoine net' : 'Patrimoine net (hors crypto)'} valeur={euros(p.net)}
           detail={evolution !== null ? `${evolution >= 0 ? '+' : '−'}${euros(Math.abs(evolution))} sur la période` : undefined} />
-        <Tuile titre="Actifs" valeur={euros(p.brut)} />
-        <Tuile titre="Dettes" valeur={euros(p.dettes)} detail="capital restant des prêts" />
-        <Tuile titre="Mis à jour" valeur={maj ? format(parseISO(maj), 'd MMM', { locale: fr }) : '—'}
+        <Tuile compacte titre="Mis à jour" valeur={maj ? format(parseISO(maj), 'd MMM', { locale: fr }) : '—'}
           detail={maj ? format(parseISO(maj), "yyyy 'à' HH:mm", { locale: fr }) : undefined} />
       </div>
 
