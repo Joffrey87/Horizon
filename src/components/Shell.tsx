@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { useHorizon, vueCourante } from '../lib/store'
 import { ONGLETS_PARTAGE, pageAccueil, routeAutorisee } from '../lib/partage'
+import { pagesFinancesVisibles } from '../lib/financesNav'
 import { todayIso, wallpaperOfDay } from '../lib/logic'
 import { QuickCapture } from './QuickCapture'
 
@@ -99,7 +100,7 @@ export function Shell({ children }: { children: ReactNode }) {
   }, [nbAgendas, syncAgenda, vue])
 
   return (
-    <div className="flex min-h-screen overflow-x-hidden">
+    <div className="flex min-h-screen overflow-x-clip">
       {/* ---- Fond paysage du jour de l'accueil, répliqué en version très estompée (pages hors accueil) ---- */}
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 bg-bg">
         <img src={wallpaperOfDay()} alt="" className="h-full w-full object-cover opacity-30" />
@@ -108,12 +109,7 @@ export function Shell({ children }: { children: ReactNode }) {
       {/* ---- Barre latérale (style options 1/3) ---- */}
       <aside className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-line bg-panel
         transition-transform lg:sticky lg:top-0 lg:h-screen lg:shrink-0 lg:self-start lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex items-center gap-1 px-3 py-5">
-          <button onClick={() => navigate(-1)}
-            className="btn-ghost hidden shrink-0 p-2 lg:flex"
-            aria-label="Revenir à la page précédente" title="Revenir à la page précédente">
-            <ArrowLeft size={18} strokeWidth={2} />
-          </button>
+        <div className="flex items-center gap-1 px-5 py-5">
           <Link to={accueil} onClick={() => setMenuOpen(false)}
             className="flex items-center gap-3 transition-opacity hover:opacity-80"
             aria-label="Retour à l'accueil">
@@ -129,14 +125,31 @@ export function Shell({ children }: { children: ReactNode }) {
 
         <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3">
           {nav.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} end={to === '/'} onClick={() => setMenuOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors ${
-                  isActive ? 'bg-panel-3 text-sun-soft' : 'text-ink-2 hover:bg-panel-2 hover:text-ink'
-                }`}>
-              <Icon size={16} strokeWidth={1.8} />
-              {label}
-            </NavLink>
+            <Fragment key={to}>
+              <NavLink to={to} end={to === '/'} onClick={() => setMenuOpen(false)}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors ${
+                    isActive ? 'bg-panel-3 text-sun-soft' : 'text-ink-2 hover:bg-panel-2 hover:text-ink'
+                  }`}>
+                <Icon size={16} strokeWidth={1.8} />
+                {label}
+              </NavLink>
+              {/* Sous-menu de Finances, déplié quand on y est. */}
+              {to === '/finances' && pathname.startsWith('/finances') && (
+                <div className="mb-1 ml-5 space-y-0.5 border-l border-line pl-2">
+                  {pagesFinancesVisibles(vue).map((p) => (
+                    <NavLink key={p.to} to={p.to} end={p.end} onClick={() => setMenuOpen(false)}
+                      className={({ isActive }) =>
+                        `flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors ${
+                          isActive ? 'bg-panel-2 text-sun-soft' : 'text-ink-3 hover:bg-panel-2 hover:text-ink'
+                        }`}>
+                      <p.icon size={14} strokeWidth={1.8} />
+                      {p.label}
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+            </Fragment>
           ))}
         </nav>
 
@@ -169,7 +182,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <div className={`mx-auto px-4 pt-4 lg:px-8 ${pathname.startsWith('/temps') ? 'pb-16 md:pb-3' : 'pb-16'} ${pleineLargeur ? '' : 'max-w-6xl'}`}>
           {/* Barre mobile : menu + retour + logo (n'existe qu'en petit écran) */}
           <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
-            <div className="flex items-center gap-1">
+            <div className="flex shrink-0 items-center gap-1">
               <button onClick={() => setMenuOpen(true)} className="btn-ghost p-2" aria-label="Menu">
                 <Menu size={18} />
               </button>
@@ -178,7 +191,19 @@ export function Shell({ children }: { children: ReactNode }) {
                 <ArrowLeft size={18} strokeWidth={2} />
               </button>
             </div>
-            <Link to={accueil} aria-label="Retour à l'accueil">
+            {/* Finances : ses pages sur la même ligne (défilent de côté si elles ne tiennent pas). */}
+            {pathname.startsWith('/finances') && (
+              <nav className="flex min-w-0 flex-1 gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {pagesFinancesVisibles(vue).map((p) => (
+                  <NavLink key={p.to} to={p.to} end={p.end}
+                    className={({ isActive }) => `flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs transition-colors ${
+                      isActive ? 'bg-panel-3 text-sun-soft' : 'text-ink-2 hover:bg-panel-2'}`}>
+                    <p.icon size={13} strokeWidth={1.8} /> {p.label}
+                  </NavLink>
+                ))}
+              </nav>
+            )}
+            <Link to={accueil} aria-label="Retour à l'accueil" className="shrink-0">
               <span className="block h-8 w-8 overflow-hidden rounded-full ring-1 ring-white/10">
                 <img src="/logo.png" alt="Horizon" className="h-full w-full object-cover"
                   style={{ transform: 'scale(2.1)', transformOrigin: '50% 41%' }} />

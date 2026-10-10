@@ -257,6 +257,86 @@ export function syntheseMois(opts: {
   }
 }
 
+// ---------- Entrées prévues ----------
+
+/**
+ * Entrées prévues pour un mois : les entrées régulières (même intitulé, cleGroupe,
+ * présent en entrée chacun des 3 mois précédents — un salaire), chacune comptée pour
+ * le plus petit montant mensuel observé (`montant`) ; `moyenne` : leur moyenne sur ces
+ * 3 mois. Null s'il n'y en a pas.
+ */
+export function entreesPrevues(opts: {
+  mois: string; transactions: FinTransaction[]; idx: IndexFinances; filtre: FiltreTitulaire
+}): { montant: number; moyenne: number; sources: { nom: string; montant: number; moyenne: number }[] } | null {
+  const precedents = [1, 2, 3].map((n) => decaleMois(opts.mois, -n))
+  const rang = new Map(precedents.map((m, i) => [m, i]))
+  const parCle = new Map<string, { nom: string; parMois: number[] }>()
+  for (const tx of opts.transactions) {
+    const i = rang.get(moisDe(tx.date))
+    if (i === undefined || !correspond(opts.filtre, titulaireDe(tx, opts.idx))) continue
+    if (classer(tx, opts.idx).type !== 'revenu' || Number(tx.amount) <= 0) continue
+    const { cle, nom } = cleGroupe(tx.label)
+    const g = parCle.get(cle) ?? { nom, parMois: [0, 0, 0] }
+    g.parMois[i]! += Number(tx.amount)
+    parCle.set(cle, g)
+  }
+  const sources = [...parCle.values()]
+    .filter((g) => g.parMois.every((v) => v > 0))
+    .map((g) => ({ nom: g.nom, montant: Math.min(...g.parMois), moyenne: g.parMois.reduce((s, v) => s + v, 0) / 3 }))
+    .sort((a, b) => b.montant - a.montant)
+  if (!sources.length) return null
+  return { montant: sources.reduce((s, x) => s + x.montant, 0), moyenne: sources.reduce((s, x) => s + x.moyenne, 0), sources }
+}
+
+// ---------- Dépenses encore à venir dans le mois ----------
+
+/**
+ * Ce qui va encore partir ce mois-ci, pour un « reste » réaliste :
+ * - ligne « Frais fixe » : chaque charge régulière (même intitulé, cleGroupe, présente
+ *   chacun des 3 mois précédents) pas encore passée ce mois-ci, à son montant moyen ;
+ * - ligne « Courses » : la moyenne des 3 mois précédents moins ce qui est déjà dépensé.
+ * Un mois passé n'a plus rien à venir. Les lignes sont reconnues à leur nom.
+ */
+export function depensesAVenir(opts: {
+  mois: string; moisCourant: string; transactions: FinTransaction[]; idx: IndexFinances
+  filtre: FiltreTitulaire; lines: FinLine[]
+}): { total: number; details: { nom: string; montant: number }[] } {
+  const vide = { total: 0, details: [] }
+  if (opts.mois < opts.moisCourant) return vide
+  const ligneNommee = (nom: string) => opts.lines.find((l) => memeNom(l.name, nom))?.id ?? null
+  const fixes = ligneNommee('Frais fixe')
+  const courses = ligneNommee('Courses')
+  const precedents = [1, 2, 3].map((n) => decaleMois(opts.mois, -n))
+  const rang = new Map(precedents.map((m, i) => [m, i]))
+  const charges = new Map<string, { nom: string; parMois: number[]; ceMois: boolean }>()
+  const coursesParMois = [0, 0, 0]
+  let coursesCeMois = 0
+  for (const tx of opts.transactions) {
+    if (!correspond(opts.filtre, titulaireDe(tx, opts.idx))) continue
+    const c = classer(tx, opts.idx)
+    if (c.type !== 'ligne') continue
+    const m = moisDe(tx.date)
+    const i = rang.get(m)
+    if (c.ligne === courses) {
+      if (i !== undefined) coursesParMois[i]! -= Number(tx.amount)
+      else if (m === opts.mois) coursesCeMois -= Number(tx.amount)
+    } else if (c.ligne === fixes && (i !== undefined || m === opts.mois)) {
+      const { cle, nom } = cleGroupe(tx.label)
+      const g = charges.get(cle) ?? { nom, parMois: [0, 0, 0], ceMois: false }
+      if (i !== undefined) g.parMois[i]! -= Number(tx.amount)
+      else g.ceMois = true
+      charges.set(cle, g)
+    }
+  }
+  const details = [...charges.values()]
+    .filter((g) => !g.ceMois && g.parMois.every((v) => v > 0))
+    .map((g) => ({ nom: g.nom, montant: g.parMois.reduce((s, v) => s + v, 0) / 3 }))
+    .sort((a, b) => b.montant - a.montant)
+  const coursesRestantes = courses ? Math.max(0, coursesParMois.reduce((s, v) => s + v, 0) / 3 - coursesCeMois) : 0
+  if (coursesRestantes > 0.5) details.push({ nom: 'Courses (moyenne 3 mois)', montant: coursesRestantes })
+  return { total: details.reduce((s, d) => s + d.montant, 0), details }
+}
+
 // ---------- Bilan de plusieurs mois ----------
 
 export interface BilanLigne {

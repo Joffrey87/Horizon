@@ -11,16 +11,19 @@ import { dateCourte, dateLongue, moisCourant, useArbreCategories, useReconnaissa
 export function NavMois({ mois, onChange }: { mois: string; onChange: (m: string) => void }) {
   const courant = moisCourant()
   return (
-    <div className="flex items-center gap-1">
-      <button onClick={() => onChange(decaleMois(mois, -1))} className="btn-ghost p-1.5" aria-label="Mois précédent">
+    <div className="flex shrink-0 items-center gap-1 max-sm:gap-0">
+      <button onClick={() => onChange(decaleMois(mois, -1))} className="btn-ghost p-1.5 max-sm:p-1" aria-label="Mois précédent">
         <ChevronLeft size={16} />
       </button>
-      <span className="min-w-[9.5rem] text-center text-sm font-medium capitalize">{libelleMois(mois)}</span>
-      <button onClick={() => onChange(decaleMois(mois, 1))} className="btn-ghost p-1.5" aria-label="Mois suivant">
+      <span className="text-center text-sm font-medium capitalize sm:min-w-[9.5rem]">
+        <span className="sm:hidden">{libelleMois(mois, true)}</span>
+        <span className="max-sm:hidden">{libelleMois(mois)}</span>
+      </span>
+      <button onClick={() => onChange(decaleMois(mois, 1))} className="btn-ghost p-1.5 max-sm:p-1" aria-label="Mois suivant">
         <ChevronRight size={16} />
       </button>
       {mois !== courant && (
-        <button onClick={() => onChange(courant)} className="ml-1 text-xs text-ink-3 hover:text-ink-2">Ce mois-ci</button>
+        <button onClick={() => onChange(courant)} className="ml-1 text-xs text-ink-3 hover:text-ink-2 max-sm:hidden">Ce mois-ci</button>
       )}
     </div>
   )
@@ -28,15 +31,32 @@ export function NavMois({ mois, onChange }: { mois: string; onChange: (m: string
 
 export function FiltreSeg({ value, onChange }: { value: FiltreTitulaire; onChange: (f: FiltreTitulaire) => void }) {
   return (
-    <Seg value={value} onChange={onChange} options={[
-      { value: 'foyer', label: 'Foyer' }, { value: 'commun', label: 'Commun' },
-      { value: 'joffrey', label: 'Joffrey' }, { value: 'honorine', label: 'Honorine' },
+    <Seg compact value={value} onChange={onChange} options={[
+      { value: 'foyer', label: 'Foyer', separe: true },
+      { value: 'commun', label: 'Commun', titre: 'Compte bancaire commun' },
+      { value: 'joffrey', label: 'Joffrey', titre: 'Carte bleue Joffrey' },
+      { value: 'honorine', label: 'Honorine', titre: 'Carte bleue Honorine' },
     ]} />
   )
 }
 
-/** Tuile chiffre clé. */
-export function Tuile({ titre, valeur, detail, ton }: { titre: string; valeur: string; detail?: ReactNode; ton?: 'warn' | 'good' }) {
+/** Tuile chiffre clé. `compacte` : tout sur une ligne (titre, détail, montant). */
+export function Tuile({ titre, valeur, detail, ton, compacte = false }: {
+  titre: string; valeur: string; detail?: ReactNode; ton?: 'warn' | 'good'; compacte?: boolean
+}) {
+  const couleur = ton === 'warn' ? 'text-[#eda145]' : ton === 'good' ? 'text-[#4cc79a]' : ''
+  if (compacte) {
+    // Une seule ligne : titre et détail à gauche, montant à droite.
+    return (
+      <div className="card flex items-baseline justify-between gap-2 px-3 py-1.5">
+        <p className="min-w-0 truncate">
+          <span className="block-title">{titre}</span>
+          {detail && <span className="ml-2 text-[11px] text-ink-3">{detail}</span>}
+        </p>
+        <p className={`shrink-0 text-base font-semibold tabular-nums ${couleur}`}>{valeur}</p>
+      </div>
+    )
+  }
   return (
     <div className="card px-4 py-3">
       <p className="block-title">{titre}</p>

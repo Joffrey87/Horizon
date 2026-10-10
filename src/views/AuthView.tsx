@@ -109,7 +109,7 @@ export function AuthView() {
             {/* Champ caché pour que le navigateur associe le mot de passe au bon compte. */}
             <input type="text" value={email} readOnly hidden autoComplete="username" />
             <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
-              placeholder={`Mot de passe ${de(personne)}`} minLength={6} autoComplete="current-password" autoFocus
+              placeholder="Mot de passe" minLength={6} autoComplete="current-password" autoFocus
               className="field w-full" />
             <button type="submit" disabled={busy} className="btn-sun w-full py-2.5 disabled:opacity-60">
               {busy ? '…' : 'Se connecter'}

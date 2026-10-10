@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import type { FinAccount, FinBudget, FinCategory, FinHolding, FinLine, FinPlanned, FinTarget, FinTransaction } from './types'
 import {
-  NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, cleGroupe, compositionPatrimoine, detailPeriode, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, budgetDe, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
+  NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, budgetDe, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
   libelleMois, moisEcoules, patrimoine, previsionDe, provision, syntheseMois,
 } from './finances'
 
@@ -215,6 +215,41 @@ describe('intitulés locaux', () => {
     const r = creerReconnaissance([regle('ville', 'Retrait')])
     expect(r.libelle(op('a', '2026-10-01', -5, { label: 'VILLE CB*1111' }))).toBe('Retrait')
     expect(r.libelle(op('a', '2026-10-01', -5, { label: 'CRF VILLE - CENTRE CB*1111' }))).toBe('CRF VILLE - CENTRE CB*1111')
+  })
+})
+
+describe('dépenses à venir dans le mois', () => {
+  it('frais fixes réguliers pas encore passés + courses au-delà de ce qui est dépensé', () => {
+    const fixe = (date: string, montant: number, label: string) => op(joint.id, date, -montant, { category_id: loyer.id, label })
+    const tx = [
+      ...['07', '08', '09'].map((m) => fixe(`2026-${m}-02`, 800, 'BAILLEUR EXEMPLE RUM B-1')),
+      ...['07', '08', '09'].map((m) => fixe(`2026-${m}-10`, 30, 'BOX INTERNET EXEMPLE RUM I-1')),
+      fixe('2026-10-02', 800, 'BAILLEUR EXEMPLE RUM B-1'),                                           // déjà passé ce mois-ci
+      fixe('2026-08-15', 99, 'DEPENSE PONCTUELLE'),                                                   // pas régulière
+      ...['07', '08', '09'].map((m, i) => op(joint.id, `2026-${m}-05`, -(300 + i * 30), { category_id: alim.id })), // moyenne 330
+      op(joint.id, '2026-10-05', -100, { category_id: alim.id }),
+    ]
+    const r = depensesAVenir({ mois: '2026-10', moisCourant: '2026-10', transactions: tx, idx, filtre: 'foyer', lines })
+    expect(r.details.map((d) => [d.nom, Math.round(d.montant)])).toEqual([['BOX Internet Exemple', 30], ['Courses (moyenne 3 mois)', 230]])
+    expect(Math.round(r.total)).toBe(260)
+    expect(depensesAVenir({ mois: '2026-09', moisCourant: '2026-10', transactions: tx, idx, filtre: 'foyer', lines }).total).toBe(0)
+  })
+})
+
+describe('entrées prévues', () => {
+  it('retient les entrées présentes chacun des 3 mois précédents, au plus petit montant', () => {
+    const paie = (date: string, montant: number) =>
+      op(joint.id, date, montant, { category_id: salaire.id, label: `EMPLOYEUR EXEMPLE PAIE ${date} REF X${montant}` })
+    const tx = [
+      paie('2026-07-28', 3000), paie('2026-08-28', 3400), paie('2026-09-28', 3100),
+      op(joint.id, '2026-09-10', 250, { category_id: salaire.id, label: 'PRIME UNIQUE' }),     // une seule fois : ignorée
+      paie('2026-10-28', 9999),                                                                   // mois en cours : hors calcul
+    ]
+    const p = entreesPrevues({ mois: '2026-10', transactions: tx, idx, filtre: 'foyer' })
+    expect(p!.montant).toBe(3000)
+    expect(p!.moyenne).toBeCloseTo(3166.67, 2)          // (3000 + 3400 + 3100) / 3
+    expect(p!.sources.map((x) => x.nom)).toEqual(['Employeur Exemple Paie'])
+    expect(entreesPrevues({ mois: '2026-10', transactions: tx.slice(3), idx, filtre: 'foyer' })).toBeNull()
   })
 })
 

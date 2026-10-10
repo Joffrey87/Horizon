@@ -1,16 +1,22 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowRight, ChevronDown, ChevronRight } from 'lucide-react'
+import { ArrowRight, ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import {
-  NON_CLASSE, agreger, aplatirGroupes, decaleMois, detailLigne, euros, grouperParIntitule, libelleMois, syntheseMois, type GroupeIntitules, type LigneBudget,
+  NON_CLASSE, agreger, aplatirGroupes, decaleMois, depensesAVenir, detailLigne, entreesPrevues, euros, grouperParIntitule, libelleMois, syntheseMois, type GroupeIntitules, type LigneBudget,
 } from '../../lib/finances'
 import type { FinTransaction } from '../../lib/types'
 import { EmptyState, ProgressBar } from '../../components/ui'
 import { FiltreSeg, LigneOperation, MontantEditable, NavMois, Tuile } from './partage'
 import { DetailTroisMois } from './DetailTroisMois'
 import { ChampRecherche, ResultatsRecherche } from './RechercheOperations'
-import { useFin, useIndex, useReconnaissance, useVue } from './contexte'
+import { moisCourant, useFin, useIndex, useReconnaissance, useVue } from './contexte'
+
+const CLE_PREV = 'horizon.finances.voirPrevision'
+const CLE_M1 = 'horizon.finances.voirM1'
+
+/** Salaire prévu : arrondi à la centaine la plus proche. */
+const aLaCentaine = (v: number) => Math.round(v / 100) * 100
 
 /** Ce qui est déplié sous une ligne : le détail du mois, ou celui des 3 mois précédents. */
 type Depli = { cle: string; vue: 'mois' | 'moy3' } | null
@@ -32,11 +38,24 @@ export function BudgetView() {
   const [retour, setRetour] = useState<string | null>(null)
   // Recherche : tant qu'elle est remplie, ses résultats (tous les mois) remplacent le tableau.
   const [recherche, setRecherche] = useState('')
+  // Colonne du prévisionnel : cachée tant qu'on ne clique pas son intitulé (choix gardé sur cet appareil).
+  const [voirPrev, setVoirPrev] = useState(() => { try { return localStorage.getItem(CLE_PREV) === '1' } catch { return false } })
+  const basculerPrev = () => {
+    setVoirPrev(!voirPrev)
+    try { localStorage.setItem(CLE_PREV, voirPrev ? '0' : '1') } catch { /* sans mémoire, tant pis */ }
+  }
+  // Colonne M-1 : cachée de même tant qu'on ne clique pas son intitulé.
+  const [voirM1, setVoirM1] = useState(() => { try { return localStorage.getItem(CLE_M1) === '1' } catch { return false } })
+  const basculerM1 = () => {
+    setVoirM1(!voirM1)
+    try { localStorage.setItem(CLE_M1, voirM1 ? '0' : '1') } catch { /* sans mémoire, tant pis */ }
+  }
   // Vue partagée : les budgets et le prévisionnel restent ceux du propriétaire.
   const modifiable = !useVue()
 
   const agregat = useMemo(() => agreger(transactions, idx, filtre), [transactions, idx, filtre])
   const s = useMemo(() => syntheseMois({ mois, lines, budgets, agregat, filtre }), [mois, lines, budgets, agregat, filtre])
+  const prevues = useMemo(() => entreesPrevues({ mois, transactions, idx, filtre }), [mois, transactions, idx, filtre])
   const foyer = filtre === 'foyer'
   const suivant = decaleMois(mois, 1)
   const precedent = decaleMois(mois, -1)
@@ -45,7 +64,10 @@ export function BudgetView() {
   const depenses = s.lignes.filter((l) => l.ligne?.kind !== 'epargne')
   const epargnes = s.lignes.filter((l) => l.ligne?.kind === 'epargne')
   const somme = (ls: LigneBudget[], f: (l: LigneBudget) => number | null) => ls.reduce((t, l) => t + (f(l) ?? 0), 0)
-  const reste = s.total.budget !== null ? s.total.budget - s.total.reel : null
+  // Reste réaliste : ce qui n'est pas encore dépensé, moins les frais fixes habituels et les courses à venir.
+  const aVenir = useMemo(() => depensesAVenir({ mois, moisCourant: moisCourant(), transactions, idx, filtre, lines }),
+    [mois, transactions, idx, filtre, lines])
+  const reste = s.total.budget !== null ? s.total.budget - s.total.reel - aVenir.total : null
 
   if (!lines.length) {
     return <EmptyState hint="Crée tes lignes (Frais fixe, Courses…) dans Réglages.">Aucune ligne de budget pour l’instant.</EmptyState>
@@ -96,7 +118,6 @@ export function BudgetView() {
             {ecart !== null ? (depasse ? `+${euros(-ecart)} au-delà` : euros(ecart))
               : l.ligne && foyer && l.reel > 0 ? <span className="text-xs text-ink-3">sans budget</span> : '—'}
           </td>
-          <td className="px-2 text-right text-ink-2">{montantPrecedent(l.precedent)}</td>
           <td className="px-2 text-right">
             <button onClick={() => basculer(l.cle, 'moy3')} aria-expanded={ouvert === 'moy3'}
               title="Détail des 3 mois précédents, regroupé par intitulé"
@@ -104,8 +125,9 @@ export function BudgetView() {
               {euros(l.moyenne3)}
             </button>
           </td>
+          <td className="px-2 text-right text-ink-2">{voirM1 && montantPrecedent(l.precedent)}</td>
           <td className="pl-2 text-right">
-            {l.ligne && foyer && !modifiable
+            {!voirPrev ? null : l.ligne && foyer && !modifiable
               ? <span className="tabular-nums text-ink-2">{l.prevision === null ? '—' : euros(l.prevision)}</span>
               : l.ligne && foyer
               ? <MontantEditable valeur={l.prevision} discret={!l.previsionSaisie}
@@ -135,47 +157,49 @@ export function BudgetView() {
         <td className="py-1.5 pr-2 uppercase tracking-wider">{titre}</td>
         <td className="px-2"><BarreBudget reel={reel} budget={budget} depasse={budget !== null && budget > 0 && reel > budget + 0.5} discret /></td>
         <td className="px-2 text-right tabular-nums">{budget !== null ? euros(budget - reel) : ''}</td>
-        <td className="px-2 text-right">{montantPrecedent(somme(ls, (l) => l.precedent))}</td>
         <td className="px-2 text-right tabular-nums">{euros(somme(ls, (l) => l.moyenne3))}</td>
-        <td className="pl-2 text-right tabular-nums">{budget !== null ? euros(somme(ls, (l) => l.prevision)) : ''}</td>
+        <td className="px-2 text-right">{voirM1 && montantPrecedent(somme(ls, (l) => l.precedent))}</td>
+        <td className="pl-2 text-right tabular-nums">{voirPrev && budget !== null ? euros(somme(ls, (l) => l.prevision)) : ''}</td>
       </tr>
     )
   }
 
   return (
     <div className="rise space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <NavMois mois={mois} onChange={(m) => { setMois(m); setRetour(null) }} />
-          <ChampRecherche valeur={recherche} onChange={setRecherche} />
-        </div>
-        <FiltreSeg value={filtre} onChange={setFiltre} />
+      {/* Recherche à gauche, mois au centre, titulaire à droite. */}
+      <header className="relative flex items-center justify-between gap-1 sm:gap-3 md:grid md:grid-cols-[1fr_auto_1fr]">
+        <div className="md:justify-self-start"><ChampRecherche valeur={recherche} onChange={setRecherche} /></div>
+        <NavMois mois={mois} onChange={(m) => { setMois(m); setRetour(null) }} />
+        <div className="md:justify-self-end"><FiltreSeg value={filtre} onChange={setFiltre} /></div>
       </header>
 
       {recherche.trim() ? <ResultatsRecherche requete={recherche} /> : (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Tuile titre="Dépensé + épargné" valeur={euros(s.total.reel)}
-              detail={s.total.budget !== null ? `sur ${euros(s.total.budget)} prévus` : 'budget : vue Foyer'} />
-            <Tuile titre={reste !== null && reste < 0 ? 'Au-delà du budget' : 'Reste'}
+          <div className="grid gap-2 sm:grid-cols-3">
+            <Tuile compacte titre="Épargné" valeur={euros(somme(epargnes, (l) => l.reel))} />
+            <Tuile compacte titre={reste !== null && reste < 0 ? 'Au-delà du budget' : 'Reste'}
               valeur={reste === null ? '—' : euros(Math.abs(reste))} ton={reste !== null && reste < 0 ? 'warn' : undefined}
-              detail={`dont épargne ${euros(somme(epargnes, (l) => l.reel))}`} />
-            <Tuile titre="Entrées" valeur={euros(s.entrees)} detail="salaires, remboursements…" />
-            <Tuile titre={`Prévu en ${libelleMois(suivant).split(' ')[0]}`}
-              valeur={s.total.prevision !== null ? euros(s.total.prevision) : '—'}
-              detail={`moyenne 3 mois : ${euros(s.total.moyenne3)}`} />
+              detail={reste === null ? 'budget : vue Foyer' : aVenir.total > 0.5
+                ? <span title={aVenir.details.map((d) => `${d.nom} : ${euros(d.montant)}`).join('\n')}>après {euros(aVenir.total)} à venir</span>
+                : undefined} />
+            <Tuile compacte titre="Entrées" valeur={euros(s.entrees)} detail="salaires, remboursements…" />
           </div>
 
           <div className="card overflow-x-auto p-4">
             <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wider text-ink-3">
-                  <th className="pb-2 pr-2 font-medium">Ligne</th>
+                  <th className="pb-2 pr-2 font-medium" aria-label="Ligne" />
                   <th className="px-2 pb-2 font-medium">Réel / budget</th>
                   <th className="px-2 pb-2 text-right font-medium">Reste</th>
+                  <th className="px-2 pb-2 text-right font-medium">Moy. 3 mois</th>
                   <th className="px-2 pb-2 text-right font-medium">
                     <span className="inline-flex items-center gap-1">
-                      {libelleMois(precedent, true)}
+                      <button onClick={basculerM1} aria-pressed={voirM1}
+                        title={voirM1 ? 'Cacher Mois-1' : `Afficher ${libelleMois(precedent)} (Mois-1)`}
+                        className={`inline-flex items-center gap-1 rounded px-1 uppercase tracking-wider hover:text-ink ${voirM1 ? 'text-ink-2' : ''}`}>
+                        {voirM1 ? <EyeOff size={12} /> : <Eye size={12} />} Mois-1
+                      </button>
                       {enRetour && (
                         <button onClick={() => setMois(suivant)} title={`Revenir à ${libelleMois(suivant)}`}
                           aria-label={`Revenir à ${libelleMois(suivant)}`}
@@ -185,11 +209,26 @@ export function BudgetView() {
                       )}
                     </span>
                   </th>
-                  <th className="px-2 pb-2 text-right font-medium">Moy. 3 mois</th>
-                  <th className="pb-2 pl-2 text-right font-medium">Prév. {libelleMois(suivant, true)}</th>
+                  <th className="pb-2 pl-2 text-right font-medium">
+                    <button onClick={basculerPrev} aria-pressed={voirPrev}
+                      title={voirPrev ? 'Cacher le prévisionnel (Mois+1)' : `Afficher le prévisionnel de ${libelleMois(suivant)} (Mois+1)`}
+                      className={`inline-flex items-center gap-1 rounded px-1 uppercase tracking-wider hover:text-ink ${voirPrev ? 'text-ink-2' : ''}`}>
+                      {voirPrev ? <EyeOff size={12} /> : <Eye size={12} />} Mois+1
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody>
+                {prevues && (
+                  <tr className="text-xs text-ink-3" title={prevues.sources.map((x) => `${x.nom} : ${euros(x.montant)} au plus bas, ${euros(x.moyenne)} en moyenne`).join('\n')}>
+                    {/* Même format que les sous-totaux (« Dépenses »). */}
+                    <td className="py-1.5 pr-2 uppercase tracking-wider">Salaire prévu</td>
+                    <td className="px-2 tabular-nums">{euros(aLaCentaine(prevues.montant))}</td>
+                    <td />
+                    <td className="px-2 text-right tabular-nums" title="Salaire moyen des 3 derniers mois">{euros(prevues.moyenne)}</td>
+                    <td colSpan={2} />
+                  </tr>
+                )}
                 {sousTotal('Dépenses', depenses.filter((l) => l.cle !== NON_CLASSE))}
                 {depenses.filter((l) => l.cle !== NON_CLASSE).map(ligneTableau)}
                 {epargnes.length > 0 && sousTotal('Épargne', epargnes)}
@@ -207,18 +246,13 @@ export function BudgetView() {
                       depasse={s.total.budget !== null && s.total.budget > 0 && s.total.reel > s.total.budget + 0.5} />
                   </td>
                   <td className="px-2 text-right tabular-nums">{reste === null ? '—' : reste < 0 ? `+${euros(-reste)} au-delà` : euros(reste)}</td>
-                  <td className="px-2 text-right">{montantPrecedent(s.total.precedent)}</td>
                   <td className="px-2 text-right tabular-nums">{euros(s.total.moyenne3)}</td>
-                  <td className="pl-2 text-right tabular-nums">{s.total.prevision !== null ? euros(s.total.prevision) : '—'}</td>
+                  <td className="px-2 text-right">{voirM1 && montantPrecedent(s.total.precedent)}</td>
+                  <td className="pl-2 text-right tabular-nums">{!voirPrev ? '' : s.total.prevision !== null ? euros(s.total.prevision) : '—'}</td>
                 </tr>
               </tbody>
             </table>
-            <p className="mt-3 text-xs text-ink-3">
-              Survole une barre pour voir le réel et le budget ; clique-la pour changer le budget (il vaut à partir de {libelleMois(mois)},
-              les mois passés gardent le leur). Un montant de {libelleMois(precedent, true)} ouvre ce mois-là ; la moyenne déplie
-              le détail des 3 mois précédents. Le prévisionnel grisé reprend le budget ; clique-le pour prévoir autre chose.
-              {!foyer && ' Les budgets sont ceux du foyer : ils ne s’affichent que dans la vue Foyer.'}
-            </p>
+            {!foyer && <p className="mt-3 text-xs text-ink-3">Les budgets sont ceux du foyer : ils ne s’affichent que dans la vue Foyer.</p>}
           </div>
         </>
       )}

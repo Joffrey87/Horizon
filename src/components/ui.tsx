@@ -1,4 +1,4 @@
-import { useRef, type MouseEvent, type ReactNode } from 'react'
+import { Fragment, useRef, type MouseEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X, List, FolderKanban } from 'lucide-react'
 
@@ -158,18 +158,24 @@ export function EmptyState({ children, hint }: { children: ReactNode; hint?: str
 }
 
 /** Sélecteur segmenté sobre (une vue = une question). */
-export function Seg<T extends string>({ options, value, onChange }: {
-  options: { value: T; label: string }[]; value: T; onChange: (v: T) => void
+/** Boutons à choix unique. `titre` : légende au survol ; `separe` : trait vertical après ce choix. */
+export function Seg<T extends string>({ options, value, onChange, compact = false }: {
+  options: { value: T; label: string; titre?: string; separe?: boolean }[]; value: T; onChange: (v: T) => void
+  /** Plus serré sur téléphone (texte plus petit, moins de marge). */
+  compact?: boolean
 }) {
   return (
-    <div className="inline-flex rounded-xl border border-line bg-panel-2 p-0.5">
+    <div className="inline-flex shrink-0 items-center rounded-xl border border-line bg-panel-2 p-0.5">
       {options.map((o) => (
-        <button key={o.value} onClick={() => onChange(o.value)}
-          className={`rounded-[10px] px-3 py-1 text-sm transition-colors ${
-            value === o.value ? 'bg-panel-3 text-ink' : 'text-ink-3 hover:text-ink-2'
-          }`}>
-          {o.label}
-        </button>
+        <Fragment key={o.value}>
+          <button onClick={() => onChange(o.value)} title={o.titre}
+            className={`rounded-[10px] px-3 py-1 text-sm transition-colors ${compact ? 'max-sm:px-1 max-sm:text-[11px]' : ''} ${
+              value === o.value ? 'bg-panel-3 text-ink' : 'text-ink-3 hover:text-ink-2'
+            }`}>
+            {o.label}
+          </button>
+          {o.separe && <span aria-hidden className={`h-4 w-px bg-line-2 ${compact ? 'mx-1 max-sm:mx-0.5' : 'mx-1'}`} />}
+        </Fragment>
       ))}
     </div>
   )
