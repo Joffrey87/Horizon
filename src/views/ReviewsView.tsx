@@ -254,7 +254,7 @@ function FocusPicker({ tasks, focusIds, setFocusIds }: {
             </li>
           )
         })}
-        {tasks.length === 0 && <p className="text-xs text-ink-3">Aucune tâche ouverte : crée-les dans « Temps » ou depuis un projet.</p>}
+        {tasks.length === 0 && <p className="text-xs text-ink-3">Aucune tâche ouverte : crée-les dans l’agenda ou depuis un projet.</p>}
       </ul>
     </div>
   )

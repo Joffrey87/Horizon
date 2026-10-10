@@ -273,7 +273,7 @@ export function Dashboard() {
         {/* Aujourd'hui */}
         <Card title="Aujourd'hui" className="lg:col-span-2">
           {focus.length === 0 && doneToday.length === 0 && todaysHabits.length === 0 ? (
-            <EmptyState hint="Planifie des tâches dans « Temps » ou confirme ton focus le dimanche.">
+            <EmptyState hint="Planifie des tâches dans l’agenda ou confirme ton focus le dimanche.">
               Rien d'imposé aujourd'hui. Cap libre.
             </EmptyState>
           ) : (

@@ -36,7 +36,7 @@ export function PartageCard() {
     <Card title="Partage avec un proche">
       <p className="mb-3 text-sm text-ink-2">
         Ouvre certains onglets à un autre compte. C’est la base de données qui applique le partage : rien d’autre ne lui est
-        envoyé. Temps est en lecture seule ; dans Finances (budget, bilan, patrimoine), elle peut ranger les opérations si tu
+        envoyé. L’agenda est en lecture seule ; dans Finances (budget, bilan, patrimoine), elle peut ranger les opérations si tu
         le permets.
       </p>
       {partages.map((p) => <LignePartage key={p.id} p={p} ecrire={ecrire} />)}
@@ -48,7 +48,7 @@ export function PartageCard() {
               type="email" className="field !py-1.5 text-sm" onKeyDown={(e) => { if (e.key === 'Enter') creer() }} />
             <button onClick={creer} className="btn-sun px-4 py-1.5 text-sm">Préparer le partage</button>
           </div>
-          <p className="text-xs text-ink-3">Elle crée ensuite son compte avec cet e-mail (« Créer un compte ») ; tu valides son accès ici.</p>
+          <p className="text-xs text-ink-3">Son accès (bouton « Honorine » de l’écran de connexion) s’ouvrira avec cet e-mail ; tu valides ensuite son partage ici.</p>
         </div>
       )}
     </Card>
@@ -116,11 +116,11 @@ function LignePartage({ p, ecrire }: { p: Partage; ecrire: (fn: () => PromiseLik
         <div className="space-y-2">
           <label className="flex items-center gap-1.5">
             <input type="checkbox" checked={p.temps_taches_masquees} onChange={() => void maj({ temps_taches_masquees: !p.temps_taches_masquees })} />
-            Temps : évènements seulement (mes tâches restent cachées)
+            Agenda : évènements seulement (mes tâches restent cachées)
           </label>
           <details className="rounded-lg border border-line/60 px-3 py-2">
             <summary className="cursor-pointer text-xs text-ink-2">
-              Projets cachés dans Temps ({p.temps_projets_masques.length}) — ni le projet ni ses évènements ne lui sont envoyés
+              Projets cachés dans l’agenda ({p.temps_projets_masques.length}) — ni le projet ni ses évènements ne lui sont envoyés
             </summary>
             <ul className="mt-2 grid gap-1 sm:grid-cols-2">
               {[...projects].sort((a, b) => a.title.localeCompare(b.title, 'fr')).map((pr) => (

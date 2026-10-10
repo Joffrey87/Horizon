@@ -43,7 +43,7 @@ export function AgendaPropositions() {
 
       <Modal open={ouvert} onClose={() => setOuvert(false)} title="Évènements d’agenda">
         <p className="mb-3 text-xs text-ink-3">
-          Rien n’entre dans « Temps » sans ton accord. « Écarter » retire toute la série :
+          Rien n’entre dans l’agenda sans ton accord. « Écarter » retire toute la série :
           elle ne te sera plus proposée.
         </p>
         {props.length === 0 ? (
@@ -63,7 +63,7 @@ export function AgendaPropositions() {
                   </p>
                 </div>
                 <button onClick={() => void ajouter(p.cle)} disabled={busy !== null}
-                  title="Ajouter à Temps"
+                  title="Ajouter à l’agenda"
                   className="btn-ghost shrink-0 p-1.5 text-[#4cc79a] disabled:opacity-40">
                   <Check size={15} />
                 </button>

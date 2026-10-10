@@ -305,7 +305,7 @@ function Regles({ regles, onSave }: { regles: CelesteRules | null; onSave: (v: P
           <span>Écarter les demandes fléchées vers quelqu’un (« Pour Marie », réservée)</span>
         </label>
         <p className="text-xs text-ink-3">
-          Toujours écartées, sans réglage : les jours où tu es en congé (V/Vf) ou déjà en vacation dans « Temps »,
+          Toujours écartées, sans réglage : les jours où tu es en congé (V/Vf) ou déjà en vacation dans l’agenda,
           les jours en déplacement (évènement avec un lieu), et les demandes que Céleste juge incompatibles (repos…).
         </p>
 

@@ -12,14 +12,14 @@ export type OngletPartage = 'finances' | 'temps'
 
 export const ONGLETS_PARTAGE: { cle: OngletPartage; label: string; route: string }[] = [
   { cle: 'finances', label: 'Finances', route: '/finances' },
-  { cle: 'temps', label: 'Temps', route: '/temps' },
+  { cle: 'temps', label: 'Agenda', route: '/temps' },
 ]
 
 /** Pages de Finances ouvertes au partage (budget, bilan, patrimoine). */
 export const FINANCES_PARTAGEES = ['/finances', '/finances/bilan', '/finances/patrimoine']
 
 /** Tables qu'un membre peut modifier (s'il peut ranger les opérations). */
-const MODIFIABLES = ['fin_transactions', 'fin_labels']
+const MODIFIABLES = ['fin_transactions', 'fin_labels', 'fin_groups']
 
 /** La vue partagée en cours : celle reçue (membre), sinon l'aperçu du propriétaire. */
 export function vueActive(opts: { partages: Partage[]; moi: string | null; apercu: string | null }): Partage | null {

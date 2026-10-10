@@ -376,7 +376,7 @@ export function ProjectForm({ open, project, onClose }: { open: boolean; project
         {/* Apparence dans « Temps » : une icône (toujours de la même couleur, pour la
             lisibilité) et la couleur du liseret qui entoure ses tâches. */}
         <div className="space-y-1.5">
-          <p className="text-xs text-ink-3">Icône dans Temps</p>
+          <p className="text-xs text-ink-3">Icône dans l’agenda</p>
           <div className="flex flex-wrap gap-1">
             {Object.entries(ICONES_PROJET).map(([cle, Ic]) => (
               <button key={cle} type="button" onClick={() => setF('icon', cle)} aria-pressed={current.icon === cle} title={cle}

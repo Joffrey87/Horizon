@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* Police manuscrite « Champignon » (Claude Pelletier, SIL Open Font License 1.1 —
+   licence jointe : public/fonts/Champignon-OFL.txt). Lettres de l'écran de connexion. */
+@font-face {
+  font-family: "Champignon";
+  src: url("/fonts/Champignon.otf") format("opentype");
+  font-display: swap;
+}
+
 /* ================================================================
    HORIZON — design system
    Thème sombre chaleureux « lever de soleil » (options 2 & 5)

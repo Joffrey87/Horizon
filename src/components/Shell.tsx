@@ -20,7 +20,7 @@ const NAV = [
   { to: '/projets', label: 'Projets', icon: FolderKanban },
   { to: '/priorites', label: 'Priorités', icon: ListTodo },
   { to: '/domaines', label: 'Domaines & objectifs', icon: Compass },
-  { to: '/temps', label: 'Temps', icon: CalendarDays },
+  { to: '/temps', label: 'Agenda', icon: CalendarDays },
   { to: '/planification', label: 'Planification', icon: CalendarRange },
   { to: '/habitudes', label: 'Habitudes', icon: Repeat },
   { to: '/finances', label: 'Finances', icon: Wallet },

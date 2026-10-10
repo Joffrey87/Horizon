@@ -113,7 +113,7 @@ export function SettingsView() {
           Afficher les grandes fêtes catholiques
         </label>
         <p className="text-[11px] text-ink-3">
-          Marque les 15 grandes fêtes (✝) dans le calendrier « Temps ». Les jours de fête travaillés ou en séjour rejoignent aussi la recherche de messe.
+          Marque les 15 grandes fêtes (✝) dans l’agenda. Les jours de fête travaillés ou en séjour rejoignent aussi la recherche de messe.
         </p>
       </Card>
 
@@ -283,7 +283,7 @@ function AgendasCard() {
     const n = r.propositions ?? 0
     setMsg(n === 0
       ? 'Agenda relu : rien de nouveau à proposer.'
-      : `${n} évènement${n > 1 ? 's' : ''} à trier — le choix se fait dans « Temps ».`)
+      : `${n} évènement${n > 1 ? 's' : ''} à trier — le choix se fait dans l’agenda.`)
   }
 
   /** L'adresse ne se réaffiche pas en clair : un agenda se remplace, pas se relit. */
@@ -292,7 +292,7 @@ function AgendasCard() {
   return (
     <Card title="Agendas externes">
       <p className="mb-3 text-xs text-ink-3">
-        Les évènements d’un agenda iCal (Google Agenda…) remontent dans « Temps », comme le
+        Les évènements d’un agenda iCal (Google Agenda…) remontent dans l’agenda, comme le
         planning CAPS. Google met son export iCal en cache : un ajout peut mettre quelques
         heures à apparaître — c’est chez eux, pas ici.
       </p>

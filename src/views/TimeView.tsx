@@ -5,7 +5,7 @@ import { fr } from 'date-fns/locale'
 import { CheckCircle2, Circle } from 'lucide-react'
 import { useHorizon, vueCourante } from '../lib/store'
 import { copieDeTache, timeQuoteOfDay } from '../lib/logic'
-import { Modal } from '../components/ui'
+import { EmptyState, Modal, Seg } from '../components/ui'
 import { TaskForm } from '../components/TaskForm'
 import { AgendaPropositions } from '../components/AgendaPropositions'
 import type { Step, Task } from '../lib/types'
@@ -22,9 +22,13 @@ import { useMediaQuery } from '../lib/useMediaQuery'
 import { MultiMonth } from './temps/VuesLongues'
 type View = VueTemps
 
+/** Agendas qu'on peut afficher (boutons en haut de la page). Seul celui de Joffrey est relié pour l'instant. */
+const AGENDAS = ['Joffrey', 'Honorine'] as const
+type Agenda = (typeof AGENDAS)[number]
+
 export function TimeView() {
   const s = useHorizon()
-  // Vue partagée : Temps en lecture seule (ni création, ni déplacement, ni notes).
+  // Vue partagée : l'agenda en lecture seule (ni création, ni déplacement, ni notes).
   const lecture = !!vueCourante(s)
   // « /temps/2026-10-23 » (lien d'une notification de rempla) : on ouvre la
   // vue mois sur le mois de ce jour, où il est encadré en pointillé rouge.
@@ -35,6 +39,8 @@ export function TimeView() {
   const brut = dateChemin ?? params.get('date')
   const dateDemandee = brut && /^\d{4}-\d{2}-\d{2}$/.test(brut) ? brut : null
   const [view, setView] = useState<View>('4sem')
+  const [agenda, setAgenda] = useState<Agenda>('Joffrey')
+  const agendaRelie = agenda === 'Joffrey'
   const [anchor, setAnchor] = useState(() => (dateDemandee ? parseISO(dateDemandee) : new Date()))
   // Jour à mettre en haut de la grille (vue mois) : celui de la notification,
   // tant qu'on n'a pas navigué ailleurs.
@@ -87,8 +93,12 @@ export function TimeView() {
       {/* Titre à gauche, période au centre (la même pour les 4 vues), choix de la
           vue à droite. Téléphone : la période passe sous le choix de la vue. */}
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 md:grid md:grid-cols-[1fr_auto_1fr]">
-        <div className="max-md:hidden">
-          <h1 className="text-xl font-semibold">Temps</h1>
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-semibold max-md:hidden">Agenda</h1>
+            {/* Quel agenda afficher : celui de Joffrey (partagé avec Honorine) ou celui d'Honorine. */}
+            <Seg value={agenda} onChange={setAgenda} options={AGENDAS.map((a) => ({ value: a, label: a }))} />
+          </div>
           <p className="text-sm italic text-ink-3 max-md:hidden">
             « {timeQuote.text} »{timeQuote.source && <span className="not-italic"> — {timeQuote.source}</span>}
           </p>
@@ -107,12 +117,18 @@ export function TimeView() {
       </header>
 
       {/* Évènements d'agenda externe en attente de tri : rien n'entre sans accord. */}
-      {!lecture && <div className="shrink-0"><AgendaPropositions /></div>}
+      {!lecture && agendaRelie && <div className="shrink-0"><AgendaPropositions /></div>}
 
       <MassPickCtx.Provider value={lecture ? () => {} : (date, label) => setMassPick({ date, label })}>
           {/* Chaque vue remplit la hauteur de l'écran ; elle ne défile qu'en dernier
               recours (trop d'évènements pour tenir), jamais pour cacher quelque chose. */}
           <div className={`min-h-0 flex-1 ${view === 'semaine' || moisTel ? 'overflow-hidden max-md:overflow-y-auto' : 'overflow-y-auto'}`}>
+            {!agendaRelie && (
+              <EmptyState hint="Pour l’instant, c’est l’agenda de Joffrey qui est partagé.">
+                L’agenda d’Honorine n’est pas encore relié.
+              </EmptyState>
+            )}
+            {agendaRelie && <>
             {view === '4sem' && !moisTel && <FourWeeks anchor={anchor} focus={focus} {...common} />}
             {moisTel && <MoisTelephone anchor={anchor} onShift={shift} {...common} />}
             {/* Semaine : la grille prend toute la hauteur (jours entiers). */}
@@ -123,11 +139,12 @@ export function TimeView() {
             )}
             {view === 'trimestre' && <MultiMonth anchor={anchor} months={3} {...common} />}
             {view === 'annee' && <MultiMonth anchor={anchor} months={12} yearMode {...common} />}
+            </>}
           </div>
           {/* Bloc-notes en bas de TOUTES les vues (même contenu partout), hors de la
               zone qui défile. Le « mois de poche » du téléphone, qui tient sur un
               écran, n'en a pas. */}
-          {!moisTel && !lecture && <NotesSemaine lignes={telephone ? 2 : view === 'semaine' ? 4 : 3} />}
+          {!moisTel && !lecture && agendaRelie && <NotesSemaine lignes={telephone ? 2 : view === 'semaine' ? 4 : 3} />}
       </MassPickCtx.Provider>
 
       {massPick && <MassPicker pick={massPick} onClose={() => setMassPick(null)} />}
