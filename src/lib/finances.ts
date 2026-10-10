@@ -262,7 +262,7 @@ export function syntheseMois(opts: {
 /**
  * Capital de prêts remboursé pendant un mois : la part de capital des échéances du mois
  * (tableaux d'amortissement, table fin_echeances — seuls y figurent les prêts dont le
- * capital doit compter comme épargné, ex. l'appartement de Reims).
+ * capital doit compter comme épargné).
  */
 export function capitalRembourse(echeances: FinEcheance[], mois: string): number {
   return echeances.reduce((s, e) => (moisDe(e.date) === mois ? s + Number(e.capital) : s), 0)
