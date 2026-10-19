@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { addMonths, addWeeks, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameMonth, parseISO, startOfMonth, startOfWeek } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -20,6 +20,7 @@ import { NavPeriode, type VueTemps } from './temps/NavPeriode'
 import { SelecteurVue } from './temps/SelecteurVue'
 import { useMediaQuery } from '../lib/useMediaQuery'
 import { MultiMonth } from './temps/VuesLongues'
+import { moisMajoritaire, semainesFenetre, useMolette } from './temps/molette'
 type View = VueTemps
 
 /** Agendas qu'on peut afficher (boutons en haut de la page). Seul celui de Joffrey est relié pour l'instant. */
@@ -53,14 +54,35 @@ export function TimeView() {
   // Téléphone : le mois entier tient sur l'écran (vue agenda de poche).
   const telephone = useMediaQuery('(max-width: 767px)')
   const moisTel = telephone && view === '4sem'
+  // Vue Mois : fenêtre glissante de 5 semaines (lundi de la 1re), posée par la
+  // molette ou le balayage. null = grille habituelle calée sur le mois.
+  const [fenetre, setFenetre] = useState<Date | null>(null)
+  const changerVue = (v: View) => { setFenetre(null); setView(v) }
 
   const shift = (dir: 1 | -1) => {
     setFocus(null)
+    setFenetre(null)
     if (view === '4sem') setAnchor(addMonths(anchor, dir))
     else if (view === 'semaine') setAnchor(addWeeks(anchor, dir))
     else if (view === 'trimestre') setAnchor(addMonths(anchor, dir * 3))
     else setAnchor(addMonths(anchor, dir * 12))
   }
+
+  // Un pas de molette (ou de balayage en vue Mois sur téléphone) : Mois = 1
+  // semaine (fenêtre glissante), Semaine = 1 semaine, Trimestre = 1 mois, Année = 1 an.
+  const pas = (dir: 1 | -1) => {
+    setFocus(null)
+    if (view === '4sem') {
+      const depart = fenetre ?? (moisTel ? startOfWeek(startOfMonth(anchor), { weekStartsOn: 1 }) : debutGrille(anchor, focus))
+      const f = addWeeks(depart, dir)
+      setFenetre(f)
+      setAnchor(moisMajoritaire(f))
+    } else if (view === 'semaine') setAnchor(addWeeks(anchor, dir))
+    else if (view === 'trimestre') setAnchor(addMonths(anchor, dir))
+    else setAnchor(addMonths(anchor, dir * 12))
+  }
+  const calRef = useRef<HTMLDivElement>(null)
+  useMolette(calRef, pas, agendaRelie)
 
   // Déplacer un item : on ne change que la date. Cohérence : si une tâche
   // atterrit après son échéance, on ouvre le formulaire (date pré-remplie) et
@@ -104,10 +126,10 @@ export function TimeView() {
           </p>
         </div>
         <div className="max-md:order-last max-md:basis-full">
-          <NavPeriode vue={view} anchor={anchor} onShift={shift} onGoto={(d) => { setFocus(null); setAnchor(d) }} />
+          <NavPeriode vue={view} anchor={anchor} onShift={shift} onGoto={(d) => { setFocus(null); setFenetre(null); setAnchor(d) }} />
         </div>
         <div className="flex justify-end max-md:ml-auto">
-          <SelecteurVue value={view} onChange={setView} options={[
+          <SelecteurVue value={view} onChange={changerVue} options={[
             { value: 'semaine', label: 'Semaine' },
             { value: '4sem', label: 'Mois' },
             { value: 'trimestre', label: 'Trimestre' },
@@ -122,15 +144,15 @@ export function TimeView() {
       <MassPickCtx.Provider value={lecture ? () => {} : (date, label) => setMassPick({ date, label })}>
           {/* Chaque vue remplit la hauteur de l'écran ; elle ne défile qu'en dernier
               recours (trop d'évènements pour tenir), jamais pour cacher quelque chose. */}
-          <div className={`min-h-0 flex-1 ${view === 'semaine' || moisTel ? 'overflow-hidden max-md:overflow-y-auto' : 'overflow-y-auto'}`}>
+          <div ref={calRef} className={`min-h-0 flex-1 ${view === 'semaine' || moisTel ? 'overflow-hidden max-md:overflow-y-auto' : 'overflow-y-auto'}`}>
             {!agendaRelie && (
               <EmptyState hint="Pour l’instant, c’est l’agenda de Joffrey qui est partagé.">
                 L’agenda d’Honorine n’est pas encore relié.
               </EmptyState>
             )}
             {agendaRelie && <>
-            {view === '4sem' && !moisTel && <FourWeeks anchor={anchor} focus={focus} {...common} />}
-            {moisTel && <MoisTelephone anchor={anchor} onShift={shift} {...common} />}
+            {view === '4sem' && !moisTel && <FourWeeks anchor={anchor} focus={focus} fenetre={fenetre} {...common} />}
+            {moisTel && <MoisTelephone anchor={anchor} fenetre={fenetre} onShift={pas} {...common} />}
             {/* Semaine : la grille prend toute la hauteur (jours entiers). */}
             {view === 'semaine' && (
               <div className="flex h-full min-h-[340px] md:min-h-0">
@@ -160,8 +182,18 @@ export function TimeView() {
 
 // ---- Vue 4 semaines (défaut) ---------------------------------------------
 
-function FourWeeks({ anchor, focus, onEdit, onCreate, onStep, onMove }: {
-  anchor: Date; focus?: Date | null
+/** Premier lundi de la grille Mois habituelle (voir FourWeeks). */
+function debutGrille(anchor: Date, focus?: Date | null): Date {
+  const today = new Date()
+  return focus
+    ? startOfWeek(focus, { weekStartsOn: 1 })
+    : isSameMonth(anchor, today)
+      ? startOfWeek(today, { weekStartsOn: 1 })
+      : startOfWeek(startOfMonth(anchor), { weekStartsOn: 1 })
+}
+
+function FourWeeks({ anchor, focus, fenetre, onEdit, onCreate, onStep, onMove }: {
+  anchor: Date; focus?: Date | null; fenetre?: Date | null
   onEdit: (t: Task) => void; onCreate: (d: string) => void; onStep: (st: Step) => void; onMove: MoveFn
 }) {
   // Mois en cours : la grille démarre sur la SEMAINE DU JOUR (pas de semaines déjà
@@ -169,12 +201,9 @@ function FourWeeks({ anchor, focus, onEdit, onCreate, onStep, onMove }: {
   // Autre mois : grille complète du mois, à partir de la semaine qui contient le 1er.
   // Jour demandé (`focus`, lien d'une notification) : sa semaine en haut.
   const weeks = useMemo(() => {
-    const today = new Date()
-    const gridStart = focus
-      ? startOfWeek(focus, { weekStartsOn: 1 })
-      : isSameMonth(anchor, today)
-        ? startOfWeek(today, { weekStartsOn: 1 })
-        : startOfWeek(startOfMonth(anchor), { weekStartsOn: 1 })
+    // Fenêtre glissante (molette) : 5 semaines à partir de son lundi.
+    if (fenetre) return semainesFenetre(fenetre)
+    const gridStart = debutGrille(anchor, focus)
     const monthEnd = endOfWeek(endOfMonth(anchor), { weekStartsOn: 1 })
     const minEnd = endOfWeek(addWeeks(gridStart, 3), { weekStartsOn: 1 })
     const gridEnd = monthEnd > minEnd ? monthEnd : minEnd
@@ -183,7 +212,7 @@ function FourWeeks({ anchor, focus, onEdit, onCreate, onStep, onMove }: {
       out.push(eachDayOfInterval({ start, end: endOfWeek(start, { weekStartsOn: 1 }) }))
     }
     return out
-  }, [anchor, focus])
+  }, [anchor, focus, fenetre])
 
   // Jours hors du mois de référence : légèrement atténués pour rester lisibles sans distraire.
   const outsideTint = 'rgba(120,120,140,0.14)'

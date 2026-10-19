@@ -11,19 +11,21 @@ import {
 import { Modal } from '../../components/ui'
 import type { Step, Task } from '../../lib/types'
 import { DayCell } from './DayCell'
+import { semainesFenetre } from './molette'
 import { EVENT_DEFAULT_COLOR, remplaProposeOn, stepsForDay, type MoveFn } from './partage'
 
 /** Vue Mois pour téléphone : le mois ENTIER sur un écran, façon agenda de poche.
  *  Chaque semaine est une ligne qui se partage la hauteur ; dans chaque jour, des
  *  lignes colorées (domaine) et, s'il y en a trop, un « +n ». Un appui sur un jour
- *  ouvre son détail complet. Glisser à gauche/droite change de mois. */
+ *  ouvre son détail complet. Glisser à gauche/droite avance/recule d'une semaine
+ *  (fenêtre glissante de 5 semaines) ; les flèches du haut changent de mois. */
 const LIGNE = 14 // hauteur d'une ligne d'évènement (px)
 const ENTETE = 17 // numéro du jour
 
 type Ligne = { cle: string; texte: string; couleur: string; bande?: boolean; fait?: boolean; icone?: 'messe' | 'fete' }
 
-export function MoisTelephone({ anchor, onShift, onEdit, onCreate, onStep, onMove }: {
-  anchor: Date; onShift: (dir: 1 | -1) => void
+export function MoisTelephone({ anchor, fenetre, onShift, onEdit, onCreate, onStep, onMove }: {
+  anchor: Date; fenetre?: Date | null; onShift: (dir: 1 | -1) => void
   onEdit: (t: Task) => void; onCreate: (d: string) => void; onStep: (st: Step) => void; onMove: MoveFn
 }) {
   const s = useHorizon()
@@ -32,11 +34,12 @@ export function MoisTelephone({ anchor, onShift, onEdit, onCreate, onStep, onMov
   const [hauteur, setHauteur] = useState(0)
 
   const semaines = useMemo(() => {
+    if (fenetre) return semainesFenetre(fenetre)
     const debut = startOfWeek(startOfMonth(anchor), { weekStartsOn: 1 })
     const fin = endOfWeek(endOfMonth(anchor), { weekStartsOn: 1 })
     const jours = eachDayOfInterval({ start: debut, end: fin })
     return Array.from({ length: jours.length / 7 }, (_, i) => jours.slice(i * 7, i * 7 + 7))
-  }, [anchor])
+  }, [anchor, fenetre])
 
   useEffect(() => {
     const el = zoneRef.current
@@ -83,7 +86,7 @@ export function MoisTelephone({ anchor, onShift, onEdit, onCreate, onStep, onMov
     return out
   }
 
-  // Balayage horizontal = mois précédent / suivant.
+  // Balayage horizontal = semaine précédente / suivante (fenêtre glissante).
   const debutTouch = useRef<{ x: number; y: number } | null>(null)
   const onTouchStart = (e: React.TouchEvent) => { debutTouch.current = { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY } }
   const onTouchEnd = (e: React.TouchEvent) => {
