@@ -111,24 +111,21 @@ export function TimeView() {
   const timeQuote = timeQuoteOfDay()
 
   return (
-    <div className={`rise flex md:h-[calc(100dvh-1.75rem)] flex-col gap-3 pt-4 max-md:h-[calc(100dvh-8.5rem)] max-md:gap-1.5 max-md:pt-1 ${lecture ? 'temps-lecture' : ''}`}>
-      {/* Titre à gauche, période au centre (la même pour les 4 vues), choix de la
-          vue à droite. Téléphone : la période passe sous le choix de la vue. */}
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 md:grid md:grid-cols-[1fr_auto_1fr]">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl font-semibold max-md:hidden">Agenda</h1>
-            {/* Quel agenda afficher : celui de Joffrey (partagé avec Honorine) ou celui d'Honorine. */}
-            <Seg value={agenda} onChange={setAgenda} options={AGENDAS.map((a) => ({ value: a, label: a }))} />
-          </div>
-          <p className="text-sm italic text-ink-3 max-md:hidden">
-            « {timeQuote.text} »{timeQuote.source && <span className="not-italic"> — {timeQuote.source}</span>}
-          </p>
-        </div>
-        <div className="max-md:order-last max-md:basis-full">
+    <div className={`rise flex md:h-[calc(100dvh-1.75rem)] flex-col gap-2 pt-2 max-md:h-[calc(100dvh-8.5rem)] max-md:gap-1 max-md:pt-0.5 ${lecture ? 'temps-lecture' : ''}`}>
+      {/* Une seule ligne fine : titre, agenda, citation (petite), période, vue.
+          Téléphone : deux lignes serrées (agenda + vue, puis la période). */}
+      <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 max-md:gap-x-1.5 md:flex-nowrap">
+        <h1 className="shrink-0 text-lg font-semibold leading-none max-md:hidden">Agenda</h1>
+        {/* Quel agenda afficher : celui de Joffrey (partagé avec Honorine) ou celui d'Honorine. */}
+        <Seg value={agenda} onChange={setAgenda} compact options={AGENDAS.map((a) => ({ value: a, label: a }))} />
+        <p className="min-w-0 flex-1 truncate text-[11px] italic leading-tight text-ink-3 max-md:hidden"
+          title={`« ${timeQuote.text} »${timeQuote.source ? ` — ${timeQuote.source}` : ''}`}>
+          « {timeQuote.text} »{timeQuote.source && <span className="not-italic"> — {timeQuote.source}</span>}
+        </p>
+        <div className="shrink-0 max-md:order-last max-md:basis-full">
           <NavPeriode vue={view} anchor={anchor} onShift={shift} onGoto={(d) => { setFocus(null); setFenetre(null); setAnchor(d) }} />
         </div>
-        <div className="flex justify-end max-md:ml-auto">
+        <div className="flex shrink-0 justify-end max-md:ml-auto">
           <SelecteurVue value={view} onChange={changerVue} options={[
             { value: 'semaine', label: 'Semaine' },
             { value: '4sem', label: 'Mois' },
@@ -166,7 +163,7 @@ export function TimeView() {
           {/* Bloc-notes en bas de TOUTES les vues (même contenu partout), hors de la
               zone qui défile. Le « mois de poche » du téléphone, qui tient sur un
               écran, n'en a pas. */}
-          {!moisTel && !lecture && agendaRelie && <NotesSemaine lignes={telephone ? 2 : view === 'semaine' ? 4 : 3} />}
+          {!lecture && agendaRelie && <NotesSemaine lignes={telephone ? 3 : 4} />}
       </MassPickCtx.Provider>
 
       {massPick && <MassPicker pick={massPick} onClose={() => setMassPick(null)} />}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Eraser } from 'lucide-react'
+import { ChevronUp, Eraser } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 
 /** Bloc-notes libre en bas de chaque vue de Temps : 4 colonnes, un seul bouton
@@ -65,13 +65,39 @@ export function NotesSemaine({ lignes = 4 }: { lignes?: number }) {
     programmer(vide)
   }
 
+  // Volet replié par défaut : une barre fine « Notes de la semaine » (avec un
+  // aperçu). Il s'ouvre au survol (ordinateur) ou d'un appui, reste ouvert tant
+  // qu'on écrit dedans, et se replie quand on en sort sans y écrire.
+  const racine = useRef<HTMLDivElement>(null)
+  const [survole, setSurvole] = useState(false)
+  const [focus, setFocus] = useState(false)
+  const [epingle, setEpingle] = useState(false)
+  const ouvert = survole || focus || epingle
+  useEffect(() => {
+    if (!epingle) return
+    const dehors = (e: PointerEvent) => { if (!racine.current?.contains(e.target as Node)) setEpingle(false) }
+    document.addEventListener('pointerdown', dehors)
+    return () => document.removeEventListener('pointerdown', dehors)
+  }, [epingle])
+  const apercu = cols.map((c) => c.split('\n').find((l) => l.trim())?.trim()).filter(Boolean).join(' · ')
+
   return (
-    // À droite, une marge laisse la place au bouton flottant « + » (QuickCapture) :
-    // il ne recouvre jamais les notes.
-    // Pas de bandeau de titre : toute la hauteur sert aux notes. Le mot « Notes »
-    // est écrit lettre par lettre, de haut en bas, sur le côté gauche, avec le
-    // bouton d'effacement en dessous.
-    <section className="card flex shrink-0 !bg-panel/55 !p-2 md:mr-[4.75rem]" aria-label="Notes">
+    <div ref={racine} className="relative h-7 shrink-0 md:mr-[4.75rem]"
+      onMouseEnter={(e) => { if (e.nativeEvent instanceof MouseEvent && matchMedia('(hover: hover)').matches) setSurvole(true) }}
+      onMouseLeave={() => { setSurvole(false); setEpingle(false) }}
+      onFocus={() => setFocus(true)}
+      onBlur={(e) => { if (!racine.current?.contains(e.relatedTarget as Node)) setFocus(false) }}>
+      <button type="button" onClick={() => setEpingle((v) => !v)} aria-expanded={ouvert} aria-label="Notes de la semaine"
+        className={`flex h-7 w-full items-center gap-2 rounded-xl border border-line-2/50 bg-panel/55 px-3 text-left text-xs text-ink-3 transition-opacity duration-200 ${ouvert ? 'opacity-0' : 'opacity-100'}`}>
+        <ChevronUp size={13} className="shrink-0" />
+        <span className="shrink-0 font-medium uppercase tracking-wide">Notes de la semaine</span>
+        {apercu && <span className="min-w-0 truncate italic text-ink-3/80">— {apercu}</span>}
+      </button>
+      <div className={`absolute inset-x-0 bottom-0 z-30 origin-bottom transition-all duration-200 ease-out ${
+        ouvert ? 'pointer-events-auto translate-y-0 opacity-100' : 'pointer-events-none translate-y-2 opacity-0'}`}
+        aria-hidden={!ouvert}>
+        {/* Marge à droite pour le bouton « + » flottant ; « Notes » écrit verticalement, gomme dessous. */}
+    <section className="card flex shrink-0 !bg-panel/95 !p-2 shadow-xl shadow-black/40 backdrop-blur" aria-label="Notes">
       <div className="flex w-6 shrink-0 flex-col items-center justify-between gap-1 pr-1">
         <span className="text-[11px] uppercase text-ink-3 [text-orientation:upright] [writing-mode:vertical-rl]">Notes</span>
         <button type="button" onClick={effacer} disabled={!cols.some((c) => c.trim())}
@@ -91,5 +117,7 @@ export function NotesSemaine({ lignes = 4 }: { lignes?: number }) {
         ))}
       </div>
     </section>
+      </div>
+    </div>
   )
 }

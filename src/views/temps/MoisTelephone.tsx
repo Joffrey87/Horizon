@@ -117,7 +117,7 @@ export function MoisTelephone({ anchor, fenetre, onShift, onEdit, onCreate, onSt
                   style={auj ? undefined : { backgroundColor: teinteMois(jour) }}
                   className={`relative flex min-h-0 flex-col overflow-hidden border-b border-r border-line-2/30 text-left ${auj ? 'bg-sun/10' : ''} ${rempla ? 'outline outline-1 -outline-offset-1 outline-dashed outline-[#ef4444]/80' : ''}`}>
                   {ruban && (
-                    <span className="pointer-events-none absolute right-0 top-0 rounded-bl px-1 text-[8px] font-bold leading-[12px] text-bg"
+                    <span className="pointer-events-none absolute right-0 top-0 whitespace-nowrap rounded-bl px-0.5 text-[8px] font-bold leading-[12px] text-bg"
                       style={{ background: couleurMois(jour) }}>{ruban}</span>
                   )}
                   <span className={`flex shrink-0 items-baseline gap-0.5 px-0.5 text-[13px] leading-[17px] ${auj ? 'font-semibold text-sun-soft' : 'text-ink-2'}`}>

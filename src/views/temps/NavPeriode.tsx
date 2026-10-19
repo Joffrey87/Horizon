@@ -49,13 +49,13 @@ export function NavPeriode({ vue, anchor, onShift, onGoto }: {
   const t = TITRES[vue]
   return (
     <div className="flex shrink-0 items-center justify-center gap-1">
-      <button onClick={() => onShift(-1)} className="btn-ghost p-2" aria-label={t.precedent}><ChevronLeft size={16} /></button>
+      <button onClick={() => onShift(-1)} className="btn-ghost p-1.5" aria-label={t.precedent}><ChevronLeft size={16} /></button>
       <button onClick={() => setOuvert(true)} aria-haspopup="dialog" title={t.aller}
-        className="flex items-center gap-1 rounded-xl px-3 py-1.5 text-base font-semibold capitalize transition-colors hover:bg-panel-2">
+        className="flex items-center gap-1 rounded-xl px-2 py-1 text-base font-semibold capitalize leading-tight transition-colors hover:bg-panel-2">
         {libelle(vue, anchor)}
         <ChevronDown size={14} className="text-ink-3" />
       </button>
-      <button onClick={() => onShift(1)} className="btn-ghost p-2" aria-label={t.suivant}><ChevronRight size={16} /></button>
+      <button onClick={() => onShift(1)} className="btn-ghost p-1.5" aria-label={t.suivant}><ChevronRight size={16} /></button>
 
       {ouvert && (
         <Modal open onClose={() => setOuvert(false)} title={t.aller} compact>

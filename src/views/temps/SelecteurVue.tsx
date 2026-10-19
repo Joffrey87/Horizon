@@ -9,7 +9,7 @@ export function SelecteurVue<T extends string>({ options, value, onChange }: {
         const actif = o.value === value
         return (
           <button key={o.value} type="button" role="radio" aria-checked={actif} onClick={() => onChange(o.value)}
-            className={`rounded-lg px-3 py-1 text-sm transition-colors max-md:px-2 max-md:py-0.5 max-md:text-xs ${
+            className={`rounded-lg px-3 py-1 text-sm transition-colors max-md:px-1.5 max-md:py-0.5 max-md:text-[11px] ${
               actif ? 'bg-sun/15 font-medium text-sun-soft' : 'text-ink-2 hover:bg-panel-3'}`}>
             {o.label}
           </button>
