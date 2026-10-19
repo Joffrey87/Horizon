@@ -62,3 +62,17 @@ export function useMolette(ref: React.RefObject<HTMLElement | null>, onPas: (dir
     return () => el.removeEventListener('wheel', onWheel)
   }, [ref, actif])
 }
+
+/** Fond doux par mois, alterné selon la parité du mois (stable au défilement) :
+ *  orange (« sun ») les mois pairs, bleu-vert (« teal ») les mois impairs. */
+export const COULEUR_MOIS = ['#f59e0b', '#17a9c9'] as const
+export function couleurMois(d: Date): string { return COULEUR_MOIS[d.getMonth() % 2]! }
+export function teinteMois(d: Date): string {
+  return d.getMonth() % 2 === 0 ? 'rgba(245,158,11,0.07)' : 'rgba(23,169,201,0.08)'
+}
+/** Ruban « → Novembre » posé sur le 1er du mois. */
+export function rubanMois(d: Date): string | undefined {
+  if (d.getDate() !== 1) return undefined
+  const m = d.toLocaleDateString('fr-FR', { month: 'long' })
+  return `→ ${m.charAt(0).toUpperCase()}${m.slice(1)}`
+}

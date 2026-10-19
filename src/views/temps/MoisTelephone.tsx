@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  eachDayOfInterval, endOfMonth, endOfWeek, format, getISOWeek, isSameMonth, isToday, startOfMonth, startOfWeek,
+  eachDayOfInterval, endOfMonth, endOfWeek, format, getISOWeek, isToday, startOfMonth, startOfWeek,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Church } from 'lucide-react'
@@ -11,7 +11,7 @@ import {
 import { Modal } from '../../components/ui'
 import type { Step, Task } from '../../lib/types'
 import { DayCell } from './DayCell'
-import { semainesFenetre } from './molette'
+import { couleurMois, rubanMois, semainesFenetre, teinteMois } from './molette'
 import { EVENT_DEFAULT_COLOR, remplaProposeOn, stepsForDay, type MoveFn } from './partage'
 
 /** Vue Mois pour téléphone : le mois ENTIER sur un écran, façon agenda de poche.
@@ -105,7 +105,7 @@ export function MoisTelephone({ anchor, fenetre, onShift, onEdit, onCreate, onSt
         {semaines.map((jours, i) => (
           <div key={i} className="grid min-h-0 grid-cols-7">
             {jours.map((jour) => {
-              const dedans = isSameMonth(jour, anchor)
+              const ruban = rubanMois(jour)
               const auj = isToday(jour)
               const lignes = lignesDuJour(jour)
               const trop = lignes.length > maxLignes
@@ -114,8 +114,12 @@ export function MoisTelephone({ anchor, fenetre, onShift, onEdit, onCreate, onSt
               return (
                 <button key={jour.toISOString()} type="button" onClick={() => setOuvert(jour)}
                   aria-label={format(jour, 'EEEE d MMMM', { locale: fr })}
-                  className={`flex min-h-0 flex-col overflow-hidden border-b border-r border-line-2/30 text-left ${
-                    dedans ? '' : 'opacity-45'} ${auj ? 'bg-sun/10' : ''} ${rempla ? 'outline outline-1 -outline-offset-1 outline-dashed outline-[#ef4444]/80' : ''}`}>
+                  style={auj ? undefined : { backgroundColor: teinteMois(jour) }}
+                  className={`relative flex min-h-0 flex-col overflow-hidden border-b border-r border-line-2/30 text-left ${auj ? 'bg-sun/10' : ''} ${rempla ? 'outline outline-1 -outline-offset-1 outline-dashed outline-[#ef4444]/80' : ''}`}>
+                  {ruban && (
+                    <span className="pointer-events-none absolute right-0 top-0 rounded-bl px-1 text-[8px] font-bold leading-[12px] text-bg"
+                      style={{ background: couleurMois(jour) }}>{ruban}</span>
+                  )}
                   <span className={`flex shrink-0 items-baseline gap-0.5 px-0.5 text-[13px] leading-[17px] ${auj ? 'font-semibold text-sun-soft' : 'text-ink-2'}`}>
                     {format(jour, 'd')}
                     {jour.getDay() === 1 && <sup className="text-[8px] text-ink-3">{getISOWeek(jour)}</sup>}

@@ -20,7 +20,7 @@ import { NavPeriode, type VueTemps } from './temps/NavPeriode'
 import { SelecteurVue } from './temps/SelecteurVue'
 import { useMediaQuery } from '../lib/useMediaQuery'
 import { MultiMonth } from './temps/VuesLongues'
-import { moisMajoritaire, semainesFenetre, useMolette } from './temps/molette'
+import { couleurMois, moisMajoritaire, rubanMois, semainesFenetre, teinteMois, useMolette } from './temps/molette'
 type View = VueTemps
 
 /** Agendas qu'on peut afficher (boutons en haut de la page). Seul celui de Joffrey est relié pour l'instant. */
@@ -214,10 +214,8 @@ function FourWeeks({ anchor, focus, fenetre, onEdit, onCreate, onStep, onMove }:
     return out
   }, [anchor, focus, fenetre])
 
-  // Jours hors du mois de référence : légèrement atténués pour rester lisibles sans distraire.
-  const outsideTint = 'rgba(120,120,140,0.14)'
-  // Les jours des mois voisins que la grille affiche pour compléter les semaines
-  // sont grisés (voir `dim`) ; le nom du mois est dans NavPeriode.
+  // Chaque mois a son fond doux (alterné orange / bleu-vert) et le 1er porte un
+  // ruban « → Mois » : le passage d'un mois à l'autre se voit sans rien griser.
 
   return (
     <>
@@ -229,8 +227,7 @@ function FourWeeks({ anchor, focus, fenetre, onEdit, onCreate, onStep, onMove }:
           <div key={i} className="grid grid-cols-7 gap-1.5">
             {days.map((day) => (
               <DayCell key={day.toISOString()} day={day} remplir
-                tint={isSameMonth(day, anchor) ? undefined : outsideTint}
-                dim={!isSameMonth(day, anchor)}
+                tint={teinteMois(day)} ruban={rubanMois(day)} rubanCouleur={couleurMois(day)}
                 onEdit={onEdit} onCreate={onCreate} onStep={onStep} onMove={onMove} />
             ))}
           </div>
