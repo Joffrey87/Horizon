@@ -20,7 +20,7 @@ import { NavPeriode, type VueTemps } from './temps/NavPeriode'
 import { SelecteurVue } from './temps/SelecteurVue'
 import { useMediaQuery } from '../lib/useMediaQuery'
 import { MultiMonth } from './temps/VuesLongues'
-import { couleurMois, moisMajoritaire, rubanMois, semainesFenetre, teinteMois, useMolette } from './temps/molette'
+import { couleurMois, margeMois, moisMajoritaire, semainesFenetre, teinteMois, useMolette } from './temps/molette'
 type View = VueTemps
 
 /** Agendas qu'on peut afficher (boutons en haut de la page). Seul celui de Joffrey est relié pour l'instant. */
@@ -214,21 +214,36 @@ function FourWeeks({ anchor, focus, fenetre, onEdit, onCreate, onStep, onMove }:
   // Chaque mois a son fond doux (alterné orange / bleu-vert) et le 1er porte un
   // ruban « → Mois » : le passage d'un mois à l'autre se voit sans rien griser.
 
+  const marge = margeMois(weeks)
+
   return (
     <>
       {/* Les lignes ont la même hauteur, sauf celle dont le contenu en demande plus :
           elle prend ce qu'il lui faut, les autres se partagent le reste. Tous les
           évènements restent visibles (le défilement n'est qu'un dernier recours). */}
       <div className="grid h-full gap-1.5" style={{ gridTemplateRows: `repeat(${weeks.length}, minmax(min-content, 1fr))` }}>
-        {weeks.map((days, i) => (
-          <div key={i} className="grid grid-cols-7 gap-1.5">
-            {days.map((day) => (
-              <DayCell key={day.toISOString()} day={day} remplir
-                tint={teinteMois(day)} ruban={rubanMois(day)} rubanCouleur={couleurMois(day)}
-                onEdit={onEdit} onCreate={onCreate} onStep={onStep} onMove={onMove} />
-            ))}
-          </div>
-        ))}
+        {weeks.map((days, i) => {
+          // Marge droite : une bande teintée par mois sur ses semaines, son nom
+          // écrit à la verticale en tête de bande.
+          const mg = marge[i]!
+          return (
+            <div key={i} className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr)) 28px' }}>
+              {days.map((day) => (
+                <DayCell key={day.toISOString()} day={day} remplir tint={teinteMois(day)}
+                  onEdit={onEdit} onCreate={onCreate} onStep={onStep} onMove={onMove} />
+              ))}
+              <div className="relative" aria-hidden>
+                <div className={`absolute inset-x-0 bottom-0 ${mg.debut ? 'top-0 rounded-t-lg' : '-top-1.5'} ${mg.fin ? 'rounded-b-lg' : ''}`}
+                  style={{ background: teinteMois(mg.mois) }}>
+                  {mg.debut && (
+                    <span className="absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap text-[13px] font-bold uppercase tracking-[0.2em] [writing-mode:vertical-rl]"
+                      style={{ color: couleurMois(mg.mois) }}>{mg.nom}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </>
   )

@@ -76,3 +76,14 @@ export function rubanMois(d: Date): string | undefined {
   const m = d.toLocaleDateString('fr-FR', { month: 'long' })
   return `→ ${m.charAt(0).toUpperCase()}${m.slice(1)}`
 }
+
+/** Marge des vues Mois : pour chaque ligne-semaine, le mois qu'elle porte (celui
+ *  qui y commence, sinon celui du lundi), et si elle ouvre / ferme sa bande. */
+export function margeMois(semaines: Date[][]): { mois: Date; debut: boolean; fin: boolean; nom: string }[] {
+  const commence = (s: Date[]) => s.some((d) => d.getDate() === 1)
+  return semaines.map((s, i) => {
+    const mois = s.find((d) => d.getDate() === 1) ?? s[0]!
+    const m = mois.toLocaleDateString('fr-FR', { month: 'long' })
+    return { mois, debut: i === 0 || commence(s), fin: i === semaines.length - 1 || commence(semaines[i + 1]!), nom: m }
+  })
+}

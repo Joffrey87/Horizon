@@ -253,7 +253,9 @@ export function Shell({ children }: { children: ReactNode }) {
       {/* ---- Capture rapide : toujours accessible, ne casse pas le focus (pas en vue partagée) ---- */}
       {!vue && (
         <button onClick={() => setCapture(true)} title="Capturer une idée (sans interrompre)"
-          className="btn-sun fixed bottom-6 right-6 z-40 flex h-13 w-13 items-center justify-center rounded-full p-3.5 shadow-lg shadow-black/40">
+          className={`btn-sun fixed bottom-6 right-6 z-40 flex h-13 w-13 items-center justify-center rounded-full p-3.5 shadow-lg shadow-black/40 ${
+            // Agenda (ordinateur) : plus petit et plus bas, à côté du volet de notes, pour ne pas couvrir la marge des mois.
+            pathname.startsWith('/temps') ? 'md:bottom-2 md:h-10 md:w-10 md:p-2.5' : ''}`}>
           <Plus size={22} strokeWidth={2.4} />
         </button>
       )}

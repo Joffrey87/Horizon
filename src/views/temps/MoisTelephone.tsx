@@ -11,7 +11,7 @@ import {
 import { Modal } from '../../components/ui'
 import type { Step, Task } from '../../lib/types'
 import { DayCell } from './DayCell'
-import { couleurMois, rubanMois, semainesFenetre, teinteMois } from './molette'
+import { couleurMois, margeMois, semainesFenetre, teinteMois } from './molette'
 import { EVENT_DEFAULT_COLOR, remplaProposeOn, stepsForDay, type MoveFn } from './partage'
 
 /** Vue Mois pour téléphone : le mois ENTIER sur un écran, façon agenda de poche.
@@ -49,6 +49,7 @@ export function MoisTelephone({ anchor, fenetre, onShift, onEdit, onCreate, onSt
     setHauteur(el.clientHeight)
     return () => ro.disconnect()
   }, [])
+  const marge = margeMois(semaines)
   const hLigne = hauteur / semaines.length
   const maxLignes = Math.max(1, Math.floor((hLigne - ENTETE - 2) / LIGNE))
 
@@ -98,14 +99,13 @@ export function MoisTelephone({ anchor, fenetre, onShift, onEdit, onCreate, onSt
 
   return (
     <div className="flex h-full flex-col" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <div className="grid shrink-0 grid-cols-7 border-b border-line-2/40 text-center text-[10px] uppercase tracking-wide text-ink-3">
+      <div className="grid shrink-0 grid-cols-[repeat(7,minmax(0,1fr))_18px] border-b border-line-2/40 text-center text-[10px] uppercase tracking-wide text-ink-3">
         {['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'].map((j) => <span key={j} className="py-0.5">{j}</span>)}
       </div>
       <div ref={zoneRef} className="grid min-h-0 flex-1" style={{ gridTemplateRows: `repeat(${semaines.length}, minmax(0, 1fr))` }}>
         {semaines.map((jours, i) => (
-          <div key={i} className="grid min-h-0 grid-cols-7">
+          <div key={i} className="grid min-h-0 grid-cols-[repeat(7,minmax(0,1fr))_18px]">
             {jours.map((jour) => {
-              const ruban = rubanMois(jour)
               const auj = isToday(jour)
               const lignes = lignesDuJour(jour)
               const trop = lignes.length > maxLignes
@@ -119,11 +119,6 @@ export function MoisTelephone({ anchor, fenetre, onShift, onEdit, onCreate, onSt
                   <span className={`flex shrink-0 items-baseline gap-0.5 px-0.5 text-[13px] leading-[17px] ${auj ? 'font-semibold text-sun-soft' : 'text-ink-2'}`}>
                     {format(jour, 'd')}
                     {jour.getDay() === 1 && <sup className="text-[8px] text-ink-3">{getISOWeek(jour)}</sup>}
-                  {ruban && (
-                      // Dans la ligne de la date (pas par-dessus le 1er évènement) ; nom court.
-                      <span className="ml-auto self-center whitespace-nowrap rounded-sm px-0.5 text-[8px] font-bold leading-[11px] text-bg"
-                        style={{ background: couleurMois(jour) }}>→ {format(jour, 'MMM', { locale: fr }).replace(/^./, (c) => c.toUpperCase())}</span>
-                    )}
                   </span>
                   {montrees.map((l) => (
                     <span key={l.cle} style={{ background: `${l.couleur}${l.bande ? 'cc' : '55'}`, height: LIGNE }}
@@ -137,6 +132,14 @@ export function MoisTelephone({ anchor, fenetre, onShift, onEdit, onCreate, onSt
                 </button>
               )
             })}
+            {/* Marge : bande teintée du mois, nom à la verticale en tête de bande. */}
+            <div className="relative overflow-hidden border-b border-line-2/10" aria-hidden
+              style={{ background: teinteMois(marge[i]!.mois) }}>
+              {marge[i]!.debut && (
+                <span className="absolute left-1/2 top-1 -translate-x-1/2 whitespace-nowrap text-[9px] font-bold uppercase tracking-[0.15em] [writing-mode:vertical-rl]"
+                  style={{ color: couleurMois(marge[i]!.mois) }}>{marge[i]!.nom}</span>
+              )}
+            </div>
           </div>
         ))}
       </div>
