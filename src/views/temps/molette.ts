@@ -64,11 +64,11 @@ export function useMolette(ref: React.RefObject<HTMLElement | null>, onPas: (dir
 }
 
 /** Fond doux par mois, alterné selon la parité du mois (stable au défilement) :
- *  orange (« sun ») les mois pairs, bleu-vert (« teal ») les mois impairs. */
-export const COULEUR_MOIS = ['#f59e0b', '#17a9c9'] as const
+ *  orange (« sun ») les mois pairs, gris chaud neutre les mois impairs. */
+export const COULEUR_MOIS = ['#f59e0b', '#a8a29e'] as const
 export function couleurMois(d: Date): string { return COULEUR_MOIS[d.getMonth() % 2]! }
 export function teinteMois(d: Date): string {
-  return d.getMonth() % 2 === 0 ? 'rgba(245,158,11,0.15)' : 'rgba(23,169,201,0.16)'
+  return d.getMonth() % 2 === 0 ? 'rgba(245,158,11,0.15)' : 'rgba(168,162,158,0.24)'
 }
 /** Ruban « → Novembre » posé sur le 1er du mois. */
 export function rubanMois(d: Date): string | undefined {
