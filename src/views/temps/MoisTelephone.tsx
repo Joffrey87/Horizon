@@ -112,12 +112,12 @@ export function MoisTelephone({ anchor, fenetre, onShift, onOpenDay }: {
                   aria-label={format(jour, 'EEEE d MMMM', { locale: fr })}
                   style={auj ? undefined : { backgroundColor: teinteMois(jour) }}
                   className={`relative flex min-h-0 flex-col overflow-hidden border-b border-r border-line-2/30 text-left ${auj ? 'bg-sun/10' : ''} ${rempla ? 'outline outline-1 -outline-offset-1 outline-dashed outline-[#ef4444]/80' : ''}`}>
-                  <span className={`flex shrink-0 items-baseline gap-0.5 px-0.5 text-[13px] leading-[17px] ${auj ? 'font-semibold text-sun-soft' : 'text-ink-2'}`}>
+                  <span className={`flex shrink-0 items-baseline gap-0.5 px-0.5 text-[12px] leading-[17px] ${auj ? 'font-semibold text-sun-soft' : 'text-ink-2'}`}>
                     {format(jour, 'd')}
                                       </span>
                   {montrees.map((l) => (
                     <span key={l.cle} style={{ background: `${l.couleur}${l.bande ? 'cc' : '55'}`, height: LIGNE }}
-                      className={`flex shrink-0 items-center gap-0.5 overflow-hidden whitespace-nowrap px-0.5 text-[10px] leading-[14px] text-white ${
+                      className={`flex shrink-0 items-center gap-0.5 overflow-hidden whitespace-nowrap px-0.5 text-[9px] leading-[14px] text-white ${
                         l.bande ? '' : 'mt-px rounded-[2px]'} ${l.fait ? 'line-through opacity-60' : ''}`}>
                       {l.icone === 'messe' && <Church size={9} className="shrink-0" />}
                       <span className="truncate">{l.texte}</span>

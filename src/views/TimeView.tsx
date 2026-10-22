@@ -143,7 +143,7 @@ export function TimeView() {
       <MassPickCtx.Provider value={lecture ? () => {} : (date, label) => setMassPick({ date, label })}>
           {/* Chaque vue remplit la hauteur de l'écran ; elle ne défile qu'en dernier
               recours (trop d'évènements pour tenir), jamais pour cacher quelque chose. */}
-          <div ref={calRef} className={`min-h-0 flex-1 ${view === 'semaine' || moisTel ? 'overflow-hidden max-md:overflow-y-auto' : 'overflow-y-auto'}`}>
+          <div ref={calRef} className={`min-h-0 flex-1 ${view === '4sem' ? '-mx-4 lg:-mx-8' : ''} ${view === 'semaine' || moisTel ? 'overflow-hidden max-md:overflow-y-auto' : 'overflow-y-auto'}`}>
             {!agendaRelie && (
               <EmptyState hint="Pour l’instant, c’est l’agenda de Joffrey qui est partagé.">
                 L’agenda d’Honorine n’est pas encore relié.

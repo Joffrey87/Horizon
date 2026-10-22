@@ -115,7 +115,7 @@ export function DayCell({ day, sansHoraire, onOpenDay, tint, ruban, rubanCouleur
           style={{ background: rubanCouleur }}>{ruban}</span>
       )}
       <header className="mb-1 flex items-center justify-between gap-1" onClick={(e) => e.stopPropagation()}>
-        <p className={`text-xs font-medium capitalize ${today ? 'text-sun-soft' : emphasize ? 'text-white/85' : 'text-ink-3'}`}>
+        <p className={`${sansHoraire ? 'text-[11px]' : 'text-xs'} font-medium capitalize ${today ? 'text-sun-soft' : emphasize ? 'text-white/85' : 'text-ink-3'}`}>
           {format(day, 'EEE d', { locale: fr })}
         </p>
         <div className="flex items-center gap-1">
@@ -289,7 +289,7 @@ export function DayCell({ day, sansHoraire, onOpenDay, tint, ruban, rubanCouleur
                 </button>
               )}
               <button onClick={() => onEdit(t)} className={`text-left ${fit ? '' : 'min-w-0 flex-1'}`} title={t.is_recurring ? recurrenceLabel(t.recurrence_rule) : t.title}>
-                <span className={`text-[11px] ${remplir ? 'leading-[15px]' : 'leading-tight'} ${fit ? 'whitespace-nowrap' : 'block truncate'} ${struck ? 'text-ink-3 line-through' : 'text-ink'}`}>
+                <span className={`${sansHoraire ? 'text-[10px]' : 'text-[11px]'} ${remplir ? 'leading-[15px]' : 'leading-tight'} ${fit ? 'whitespace-nowrap' : 'block truncate'} ${struck ? 'text-ink-3 line-through' : 'text-ink'}`}>
                   {checkMass && <Church size={9} className="mr-0.5 inline text-[#a78bfa]" />}
                   {project && <IconeProjet project={project} size={11} className="mr-1 align-[-1px]" />}
                   {t.notable && <Star size={9} className="mr-0.5 inline text-sun" />}{sansHoraire ? sansHeure(t.title) : t.title}
