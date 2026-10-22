@@ -107,15 +107,15 @@ export function DayCell({ day, sansHoraire, onOpenDay, tint, ruban, rubanCouleur
       onDrop={onDrop}
       onClick={handleVoid}
       style={{ backgroundColor: !today && !over ? tint : undefined }}
-      className={`relative flex cursor-pointer flex-col rounded-lg border ${sansHoraire ? 'p-1' : 'p-1.5'} transition-[colors,opacity] ${remplir ? 'min-h-0' : 'min-h-28'} ${fit ? 'w-max max-w-full' : ''} ${dim && !today ? 'opacity-50 hover:opacity-100' : ''} ${
-        rempla ? 'border-dashed border-[#ef4444]/80' : today ? 'border-sun/50 bg-sun/5' : over ? 'border-sun/70 bg-sun/10' : 'border-line-2/60 hover:bg-panel-2/40'
+      className={`relative flex cursor-pointer flex-col ${sansHoraire ? 'rounded-none border-0 border-b border-r p-1' : 'rounded-lg border p-1.5'} transition-[colors,opacity] ${remplir ? 'min-h-0' : 'min-h-28'} ${fit ? 'w-max max-w-full' : ''} ${dim && !today ? 'opacity-50 hover:opacity-100' : ''} ${
+        rempla ? 'border-dashed border-[#ef4444]/80' : today ? 'border-sun/50 bg-sun/5' : over ? 'border-sun/70 bg-sun/10' : sansHoraire ? 'border-line-2/50 hover:bg-panel-2/40' : 'border-line-2/60 hover:bg-panel-2/40'
       }`}>
       {ruban && (
         <span className="pointer-events-none absolute right-0 top-0 z-10 rounded-bl-lg rounded-tr-lg px-2 py-0.5 text-[10px] font-bold text-bg"
           style={{ background: rubanCouleur }}>{ruban}</span>
       )}
       <header className="mb-1 flex items-center justify-between gap-1" onClick={(e) => e.stopPropagation()}>
-        <p className={`${sansHoraire ? 'text-[11px]' : 'text-xs'} font-medium capitalize ${today ? 'text-sun-soft' : emphasize ? 'text-white/85' : 'text-ink-3'}`}>
+        <p className={`${sansHoraire ? 'text-[10px]' : 'text-xs'} font-medium capitalize ${today ? 'text-sun-soft' : emphasize ? 'text-white/85' : 'text-ink-3'}`}>
           {format(day, 'EEE d', { locale: fr })}
         </p>
         <div className="flex items-center gap-1">
@@ -193,11 +193,11 @@ export function DayCell({ day, sansHoraire, onOpenDay, tint, ruban, rubanCouleur
               return (
                 <div key={t.id} className="relative h-5">
                   <button {...drag} onClick={edit} title={t.title} className="absolute inset-y-0 block"
-                    style={{ left: 0, right: openRight ? -14 : 0, background: `${fill}c2`, ...rad }} />
+                    style={{ left: 0, right: openRight ? -9 : 0, background: `${fill}c2`, ...rad }} />
                   {debutLigne && (
-                    <span className={`pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center overflow-hidden whitespace-nowrap px-1.5 text-[10px] font-medium leading-none text-ink ${vacation ? 'line-through' : ''}`}
-                      style={{ width: `calc(${n * 100}% + ${(n - 1) * 14}px)` }}>
-                      <span className="truncate">{sansHeure(t.title)}</span>
+                    <span className={`pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center overflow-hidden whitespace-nowrap px-1.5 text-[9px] font-medium leading-none text-ink ${vacation ? 'line-through' : ''}`}
+                      style={{ width: `calc(${n * 100}% + ${(n - 1) * 9}px)` }}>
+                      <span className="overflow-hidden text-clip">{sansHeure(t.title)}</span>
                     </span>
                   )}
                 </div>
@@ -289,7 +289,7 @@ export function DayCell({ day, sansHoraire, onOpenDay, tint, ruban, rubanCouleur
                 </button>
               )}
               <button onClick={() => onEdit(t)} className={`text-left ${fit ? '' : 'min-w-0 flex-1'}`} title={t.is_recurring ? recurrenceLabel(t.recurrence_rule) : t.title}>
-                <span className={`${sansHoraire ? 'text-[10px]' : 'text-[11px]'} ${remplir ? 'leading-[15px]' : 'leading-tight'} ${fit ? 'whitespace-nowrap' : 'block truncate'} ${struck ? 'text-ink-3 line-through' : 'text-ink'}`}>
+                <span className={`${sansHoraire ? 'text-[9px]' : 'text-[11px]'} ${remplir ? 'leading-[15px]' : 'leading-tight'} ${fit ? 'whitespace-nowrap' : sansHoraire ? 'block overflow-hidden whitespace-nowrap text-clip' : 'block truncate'} ${struck ? 'text-ink-3 line-through' : 'text-ink'}`}>
                   {checkMass && <Church size={9} className="mr-0.5 inline text-[#a78bfa]" />}
                   {project && <IconeProjet project={project} size={11} className="mr-1 align-[-1px]" />}
                   {t.notable && <Star size={9} className="mr-0.5 inline text-sun" />}{sansHoraire ? sansHeure(t.title) : t.title}

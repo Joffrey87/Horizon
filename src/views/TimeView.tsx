@@ -228,19 +228,19 @@ function FourWeeks({ anchor, focus, fenetre, onOpenDay, onEdit, onCreate, onStep
       {/* Les lignes ont la même hauteur, sauf celle dont le contenu en demande plus :
           elle prend ce qu'il lui faut, les autres se partagent le reste. Tous les
           évènements restent visibles (le défilement n'est qu'un dernier recours). */}
-      <div className="grid h-full gap-1" style={{ gridTemplateRows: `repeat(${weeks.length}, minmax(min-content, 1fr))` }}>
+      <div className="grid h-full border-l border-t border-line-2/50" style={{ gridTemplateRows: `repeat(${weeks.length}, minmax(min-content, 1fr))` }}>
         {weeks.map((days, i) => {
           // Marge droite : une bande teintée par mois sur ses semaines, son nom
           // écrit à la verticale en tête de bande.
           const mg = marge[i]!
           return (
-            <div key={i} className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr)) 18px' }}>
+            <div key={i} className="grid" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr)) 18px' }}>
               {days.map((day) => (
                 <DayCell key={day.toISOString()} day={day} remplir sansHoraire onOpenDay={onOpenDay} tint={teinteMois(day)}
                   onEdit={onEdit} onCreate={onCreate} onStep={onStep} onMove={onMove} />
               ))}
               <div className="relative" aria-hidden>
-                <div className={`absolute inset-x-0 bottom-0 ${mg.debut ? 'top-0 rounded-t-lg' : '-top-1'} ${mg.fin ? 'rounded-b-lg' : ''}`}
+                <div className={`absolute inset-x-0 bottom-0 ${mg.debut ? 'top-0 rounded-t-lg' : 'top-0'} ${mg.fin ? 'rounded-b-lg' : ''}`}
                   style={{ background: teinteMois(mg.mois) }}>
                   {mg.debut && (
                     <span className="absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap text-[11px] font-bold uppercase tracking-[0.18em] [writing-mode:vertical-rl]"

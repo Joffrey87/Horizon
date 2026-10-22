@@ -98,7 +98,7 @@ export function MoisTelephone({ anchor, fenetre, onShift, onOpenDay }: {
       <div className="grid shrink-0 grid-cols-[repeat(7,minmax(0,1fr))_14px] border-b border-line-2/40 text-center text-[10px] uppercase tracking-wide text-ink-3">
         {['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'].map((j) => <span key={j} className="py-0.5">{j}</span>)}
       </div>
-      <div ref={zoneRef} className="grid min-h-0 flex-1" style={{ gridTemplateRows: `repeat(${semaines.length}, minmax(0, 1fr))` }}>
+      <div ref={zoneRef} className="grid min-h-0 flex-1 border-l border-line-2/50" style={{ gridTemplateRows: `repeat(${semaines.length}, minmax(0, 1fr))` }}>
         {semaines.map((jours, i) => (
           <div key={i} className="grid min-h-0 grid-cols-[repeat(7,minmax(0,1fr))_14px]">
             {jours.map((jour) => {
@@ -111,16 +111,16 @@ export function MoisTelephone({ anchor, fenetre, onShift, onOpenDay }: {
                 <button key={jour.toISOString()} type="button" onClick={() => onOpenDay(jour)}
                   aria-label={format(jour, 'EEEE d MMMM', { locale: fr })}
                   style={auj ? undefined : { backgroundColor: teinteMois(jour) }}
-                  className={`relative flex min-h-0 flex-col overflow-hidden border-b border-r border-line-2/30 text-left ${auj ? 'bg-sun/10' : ''} ${rempla ? 'outline outline-1 -outline-offset-1 outline-dashed outline-[#ef4444]/80' : ''}`}>
-                  <span className={`flex shrink-0 items-baseline gap-0.5 px-0.5 text-[12px] leading-[17px] ${auj ? 'font-semibold text-sun-soft' : 'text-ink-2'}`}>
+                  className={`relative flex min-h-0 flex-col overflow-hidden border-b border-r border-line-2/50 text-left ${auj ? 'bg-sun/10' : ''} ${rempla ? 'outline outline-1 -outline-offset-1 outline-dashed outline-[#ef4444]/80' : ''}`}>
+                  <span className={`flex shrink-0 items-baseline gap-0.5 px-0.5 text-[11px] leading-[17px] ${auj ? 'font-semibold text-sun-soft' : 'text-ink-2'}`}>
                     {format(jour, 'd')}
                                       </span>
                   {montrees.map((l) => (
                     <span key={l.cle} style={{ background: `${l.couleur}${l.bande ? 'cc' : '55'}`, height: LIGNE }}
-                      className={`flex shrink-0 items-center gap-0.5 overflow-hidden whitespace-nowrap px-0.5 text-[9px] leading-[14px] text-white ${
+                      className={`flex shrink-0 items-center gap-0.5 overflow-hidden whitespace-nowrap px-0.5 text-[8px] leading-[14px] text-white ${
                         l.bande ? '' : 'mt-px rounded-[2px]'} ${l.fait ? 'line-through opacity-60' : ''}`}>
                       {l.icone === 'messe' && <Church size={9} className="shrink-0" />}
-                      <span className="truncate">{l.texte}</span>
+                      <span className="overflow-hidden text-clip">{l.texte}</span>
                     </span>
                   ))}
                   {trop && <span className="px-0.5 text-[10px] leading-[14px] text-ink-3">+{lignes.length - montrees.length}</span>}
