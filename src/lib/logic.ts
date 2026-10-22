@@ -898,3 +898,10 @@ export function revisionWeek(now = new Date()): { sunday: string; days: string[]
   const days = Array.from({ length: 6 }, (_, i) => iso(addDays(sunday, i - 6)))
   return { sunday: iso(sunday), days }
 }
+
+/** Titre sans l'heure de tête (« 8h30 - Anglais » → « Anglais », « 18h10 🛫 Départ » → « 🛫 Départ »).
+ *  Pour l'affichage seulement : le titre stocké garde son heure. */
+export function sansHeure(title: string): string {
+  const out = title.replace(/^\s*\d{1,2}[h:]\d{0,2}(?:\s*[-–—>→]\s*\d{1,2}[h:]\d{0,2})?\s*(?:[-–—:·|]\s*)?/i, '')
+  return out.trim() ? out : title
+}

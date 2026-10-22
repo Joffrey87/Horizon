@@ -1,10 +1,10 @@
 import { useContext, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { addMonths, format, getISODay, isToday } from 'date-fns'
+import { addDays, addMonths, format, getISODay, isToday } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Plus, CheckCircle2, Circle, RotateCw, Layers, Star, Church, AlertTriangle, Check, X } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
-import { compareTasksByTitleTime, iso, tasksForDay, recurrenceLabel, spanPart, birthdaysForDay, isMarketParkingDay, feastOnDay, extractEmojis, firstFridayOrSaturday, chosenMassForDay, todayIso } from '../../lib/logic'
+import { compareTasksByTitleTime, iso, tasksForDay, recurrenceLabel, spanPart, birthdaysForDay, isMarketParkingDay, feastOnDay, extractEmojis, firstFridayOrSaturday, chosenMassForDay, todayIso, sansHeure } from '../../lib/logic'
 import { couleurProjet } from '../../lib/projectIcons'
 import { IconeProjet } from '../../components/IconeProjet'
 import type { CelesteProposal, Step, Task } from '../../lib/types'
@@ -51,8 +51,13 @@ export function RemplaChip({ p }: { p: CelesteProposal }) {
   )
 }
 
-export function DayCell({ day, tint, ruban, rubanCouleur, dim, emphasize, fit, remplir, massCross, onEdit, onCreate, onStep, onMove }: {
-  day: Date; tint?: string; emphasize?: boolean; fit?: boolean
+export function DayCell({ day, sansHoraire, onOpenDay, tint, ruban, rubanCouleur, dim, emphasize, fit, remplir, massCross, onEdit, onCreate, onStep, onMove }: {
+  day: Date
+  /** Vue Mois : titres sans l'heure, bandes multi-jours continues (titre écrit une fois). */
+  sansHoraire?: boolean
+  /** Clic sur le fond de la case : ouvre la fenêtre du jour (sinon : créer). */
+  onOpenDay?: (d: Date) => void
+  tint?: string; emphasize?: boolean; fit?: boolean
   /** Épouse la ligne de la grille (vue Mois) : pas de hauteur minimale, la ligne
    *  grandit avec son contenu — rien n'est jamais coupé. */
   remplir?: boolean
@@ -73,6 +78,7 @@ export function DayCell({ day, tint, ruban, rubanCouleur, dim, emphasize, fit, r
   const all = [...tasksForDay(s.tasks, day)].sort(compareTasksByTitleTime)
   // Évènements multi-jours (vacances…) : bandes continues épinglées en haut ; le reste dans le flux.
   const spans = all.filter((t) => spanPart(t, dayIso) !== 'single')
+    .sort((a, b) => (a.scheduled_date ?? '').localeCompare(b.scheduled_date ?? '') || a.id.localeCompare(b.id))
   const list = all.filter((t) => spanPart(t, dayIso) === 'single')
   const steps = stepsForDay(s.steps, day)
   const birthdays = birthdaysForDay(s.birthdays, day)
@@ -87,7 +93,7 @@ export function DayCell({ day, tint, ruban, rubanCouleur, dim, emphasize, fit, r
   const crossMass = showCross ? chosenMassForDay(s.checks, dayIso) : null
 
   const handleVoid = (e: React.MouseEvent<HTMLElement>) => {
-    if (e.target === e.currentTarget) onCreate(iso(day))
+    if (e.target === e.currentTarget) { if (onOpenDay) onOpenDay(day); else onCreate(iso(day)) }
   }
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault(); setOver(false)
@@ -101,7 +107,7 @@ export function DayCell({ day, tint, ruban, rubanCouleur, dim, emphasize, fit, r
       onDrop={onDrop}
       onClick={handleVoid}
       style={{ backgroundColor: !today && !over ? tint : undefined }}
-      className={`relative flex cursor-pointer flex-col rounded-lg border p-1.5 transition-[colors,opacity] ${remplir ? 'min-h-0' : 'min-h-28'} ${fit ? 'w-max max-w-full' : ''} ${dim && !today ? 'opacity-50 hover:opacity-100' : ''} ${
+      className={`relative flex cursor-pointer flex-col rounded-lg border ${sansHoraire ? 'p-1' : 'p-1.5'} transition-[colors,opacity] ${remplir ? 'min-h-0' : 'min-h-28'} ${fit ? 'w-max max-w-full' : ''} ${dim && !today ? 'opacity-50 hover:opacity-100' : ''} ${
         rempla ? 'border-dashed border-[#ef4444]/80' : today ? 'border-sun/50 bg-sun/5' : over ? 'border-sun/70 bg-sun/10' : 'border-line-2/60 hover:bg-panel-2/40'
       }`}>
       {ruban && (
@@ -177,6 +183,26 @@ export function DayCell({ day, tint, ruban, rubanCouleur, dim, emphasize, fit, r
             const capBg = taperR ? `linear-gradient(to right, ${fill}c2 0%, ${fill}c2 55%, ${fill}a6 100%)`
               : taperL ? `linear-gradient(to left, ${fill}c2 0%, ${fill}c2 55%, ${fill}a6 100%)`
                 : `${fill}c2`
+            if (sansHoraire) {
+              // Façon Google : une barre pleine continue, le titre écrit une seule fois
+              // (au début de la bande, ou au lundi si elle vient de la semaine d'avant).
+              const debutLigne = part === 'start' || weekStart
+              const finTitre = t.end_date ?? dayIso
+              let n = 1
+              for (let k = getISODay(day) + 1; k <= 7; k++) { if (iso(addDays(day, k - getISODay(day))) <= finTitre) n++; else break }
+              return (
+                <div key={t.id} className="relative h-5">
+                  <button {...drag} onClick={edit} title={t.title} className="absolute inset-y-0 block"
+                    style={{ left: 0, right: openRight ? -14 : 0, background: `${fill}c2`, ...rad }} />
+                  {debutLigne && (
+                    <span className={`pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center overflow-hidden whitespace-nowrap px-1.5 text-[10px] font-medium leading-none text-ink ${vacation ? 'line-through' : ''}`}
+                      style={{ width: `calc(${n * 100}% + ${(n - 1) * 14}px)` }}>
+                      <span className="truncate">{sansHeure(t.title)}</span>
+                    </span>
+                  )}
+                </div>
+              )
+            }
             return (
               <div key={t.id} className="relative h-5">
                 {!cap ? (
@@ -266,7 +292,7 @@ export function DayCell({ day, tint, ruban, rubanCouleur, dim, emphasize, fit, r
                 <span className={`text-[11px] ${remplir ? 'leading-[15px]' : 'leading-tight'} ${fit ? 'whitespace-nowrap' : 'block truncate'} ${struck ? 'text-ink-3 line-through' : 'text-ink'}`}>
                   {checkMass && <Church size={9} className="mr-0.5 inline text-[#a78bfa]" />}
                   {project && <IconeProjet project={project} size={11} className="mr-1 align-[-1px]" />}
-                  {t.notable && <Star size={9} className="mr-0.5 inline text-sun" />}{t.title}
+                  {t.notable && <Star size={9} className="mr-0.5 inline text-sun" />}{sansHoraire ? sansHeure(t.title) : t.title}
                 </span>
               </button>
             </div>

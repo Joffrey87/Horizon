@@ -1,18 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  eachDayOfInterval, endOfMonth, endOfWeek, format, getISOWeek, isToday, startOfMonth, startOfWeek,
+  eachDayOfInterval, endOfMonth, endOfWeek, format, isToday, startOfMonth, startOfWeek,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Church } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import {
-  birthdaysForDay, compareTasksByTitleTime, feastOnDay, firstFridayOrSaturday, iso, spanPart, tasksForDay, todayIso,
+  birthdaysForDay, compareTasksByTitleTime, feastOnDay, firstFridayOrSaturday, iso, sansHeure, spanPart, tasksForDay, todayIso,
 } from '../../lib/logic'
-import { Modal } from '../../components/ui'
-import type { Step, Task } from '../../lib/types'
-import { DayCell } from './DayCell'
+import type { Task } from '../../lib/types'
 import { couleurMois, margeMois, semainesFenetre, teinteMois } from './molette'
-import { EVENT_DEFAULT_COLOR, remplaProposeOn, stepsForDay, type MoveFn } from './partage'
+import { EVENT_DEFAULT_COLOR, remplaProposeOn, stepsForDay } from './partage'
 
 /** Vue Mois pour téléphone : le mois ENTIER sur un écran, façon agenda de poche.
  *  Chaque semaine est une ligne qui se partage la hauteur ; dans chaque jour, des
@@ -24,12 +22,10 @@ const ENTETE = 17 // numéro du jour
 
 type Ligne = { cle: string; texte: string; couleur: string; bande?: boolean; fait?: boolean; icone?: 'messe' | 'fete' }
 
-export function MoisTelephone({ anchor, fenetre, onShift, onEdit, onCreate, onStep, onMove }: {
-  anchor: Date; fenetre?: Date | null; onShift: (dir: 1 | -1) => void
-  onEdit: (t: Task) => void; onCreate: (d: string) => void; onStep: (st: Step) => void; onMove: MoveFn
+export function MoisTelephone({ anchor, fenetre, onShift, onOpenDay }: {
+  anchor: Date; fenetre?: Date | null; onShift: (dir: 1 | -1) => void; onOpenDay: (d: Date) => void
 }) {
   const s = useHorizon()
-  const [ouvert, setOuvert] = useState<Date | null>(null)
   const zoneRef = useRef<HTMLDivElement>(null)
   const [hauteur, setHauteur] = useState(0)
 
@@ -69,7 +65,7 @@ export function MoisTelephone({ anchor, fenetre, onShift, onEdit, onCreate, onSt
       const part = spanPart(t, d)
       // Le titre s'écrit au début de la bande, et à chaque lundi pour rester lisible.
       const titre = part === 'start' || jour.getDay() === 1
-      out.push({ cle: t.id, texte: titre ? t.title : '', couleur: couleurDe(t), bande: true })
+      out.push({ cle: t.id, texte: titre ? sansHeure(t.title) : '', couleur: couleurDe(t), bande: true })
     }
     const fete = s.settings?.catholic_feasts !== false ? feastOnDay(jour) : null
     if (fete) out.push({ cle: 'fete', texte: fete, couleur: '#f59e0b', icone: 'fete' })
@@ -79,10 +75,10 @@ export function MoisTelephone({ anchor, fenetre, onShift, onEdit, onCreate, onSt
       out.push({ cle: `b${b.id}`, texte: `🎂 ${b.name}`, couleur: '#ec7f97' })
     }
     for (const st of stepsForDay(s.steps, jour)) {
-      out.push({ cle: st.id, texte: st.title, couleur: '#378add' })
+      out.push({ cle: st.id, texte: st.title, couleur: '#a78bfa' })
     }
     for (const t of simples) {
-      out.push({ cle: t.id, texte: t.title, couleur: couleurDe(t), fait: !t.is_recurring && t.status === 'fait' })
+      out.push({ cle: t.id, texte: sansHeure(t.title), couleur: couleurDe(t), fait: !t.is_recurring && t.status === 'fait' })
     }
     return out
   }
@@ -99,12 +95,12 @@ export function MoisTelephone({ anchor, fenetre, onShift, onEdit, onCreate, onSt
 
   return (
     <div className="flex h-full flex-col" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <div className="grid shrink-0 grid-cols-[repeat(7,minmax(0,1fr))_18px] border-b border-line-2/40 text-center text-[10px] uppercase tracking-wide text-ink-3">
+      <div className="grid shrink-0 grid-cols-[repeat(7,minmax(0,1fr))_14px] border-b border-line-2/40 text-center text-[10px] uppercase tracking-wide text-ink-3">
         {['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'].map((j) => <span key={j} className="py-0.5">{j}</span>)}
       </div>
       <div ref={zoneRef} className="grid min-h-0 flex-1" style={{ gridTemplateRows: `repeat(${semaines.length}, minmax(0, 1fr))` }}>
         {semaines.map((jours, i) => (
-          <div key={i} className="grid min-h-0 grid-cols-[repeat(7,minmax(0,1fr))_18px]">
+          <div key={i} className="grid min-h-0 grid-cols-[repeat(7,minmax(0,1fr))_14px]">
             {jours.map((jour) => {
               const auj = isToday(jour)
               const lignes = lignesDuJour(jour)
@@ -112,14 +108,13 @@ export function MoisTelephone({ anchor, fenetre, onShift, onEdit, onCreate, onSt
               const montrees = trop ? lignes.slice(0, Math.max(0, maxLignes - 1)) : lignes
               const rempla = remplaProposeOn(s.celesteProposals, iso(jour))
               return (
-                <button key={jour.toISOString()} type="button" onClick={() => setOuvert(jour)}
+                <button key={jour.toISOString()} type="button" onClick={() => onOpenDay(jour)}
                   aria-label={format(jour, 'EEEE d MMMM', { locale: fr })}
                   style={auj ? undefined : { backgroundColor: teinteMois(jour) }}
                   className={`relative flex min-h-0 flex-col overflow-hidden border-b border-r border-line-2/30 text-left ${auj ? 'bg-sun/10' : ''} ${rempla ? 'outline outline-1 -outline-offset-1 outline-dashed outline-[#ef4444]/80' : ''}`}>
                   <span className={`flex shrink-0 items-baseline gap-0.5 px-0.5 text-[13px] leading-[17px] ${auj ? 'font-semibold text-sun-soft' : 'text-ink-2'}`}>
                     {format(jour, 'd')}
-                    {jour.getDay() === 1 && <sup className="text-[8px] text-ink-3">{getISOWeek(jour)}</sup>}
-                  </span>
+                                      </span>
                   {montrees.map((l) => (
                     <span key={l.cle} style={{ background: `${l.couleur}${l.bande ? 'cc' : '55'}`, height: LIGNE }}
                       className={`flex shrink-0 items-center gap-0.5 overflow-hidden whitespace-nowrap px-0.5 text-[10px] leading-[14px] text-white ${
@@ -144,16 +139,6 @@ export function MoisTelephone({ anchor, fenetre, onShift, onEdit, onCreate, onSt
         ))}
       </div>
 
-      {/* Détail du jour : la même carte que sur ordinateur, avec ajout et édition. */}
-      {ouvert && (
-        <Modal open onClose={() => setOuvert(null)} title={format(ouvert, 'EEEE d MMMM', { locale: fr })} compact>
-          <DayCell day={ouvert} emphasize massCross
-            onEdit={(t) => { setOuvert(null); onEdit(t) }}
-            onCreate={(d) => { setOuvert(null); onCreate(d) }}
-            onStep={(st) => { setOuvert(null); onStep(st) }}
-            onMove={onMove} />
-        </Modal>
-      )}
     </div>
   )
 }

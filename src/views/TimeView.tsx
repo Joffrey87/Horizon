@@ -18,6 +18,7 @@ import { NotesSemaine } from './temps/NotesSemaine'
 import { MoisTelephone } from './temps/MoisTelephone'
 import { NavPeriode, type VueTemps } from './temps/NavPeriode'
 import { SelecteurVue } from './temps/SelecteurVue'
+import { JourFenetre } from './temps/JourFenetre'
 import { useMediaQuery } from '../lib/useMediaQuery'
 import { MultiMonth } from './temps/VuesLongues'
 import { couleurMois, margeMois, moisMajoritaire, semainesFenetre, teinteMois, useMolette } from './temps/molette'
@@ -50,6 +51,7 @@ export function TimeView() {
   const [createDate, setCreateDate] = useState<string | null>(null)
   const [overrideScheduled, setOverrideScheduled] = useState<string | undefined>(undefined)
   const [openStep, setOpenStep] = useState<Step | null>(null)
+  const [jourOuvert, setJourOuvert] = useState<Date | null>(null)
   const [massPick, setMassPick] = useState<{ date: string; label: string } | null>(null)
   // Téléphone : le mois entier tient sur l'écran (vue agenda de poche).
   const telephone = useMediaQuery('(max-width: 767px)')
@@ -148,8 +150,8 @@ export function TimeView() {
               </EmptyState>
             )}
             {agendaRelie && <>
-            {view === '4sem' && !moisTel && <FourWeeks anchor={anchor} focus={focus} fenetre={fenetre} {...common} />}
-            {moisTel && <MoisTelephone anchor={anchor} fenetre={fenetre} onShift={pas} {...common} />}
+            {view === '4sem' && !moisTel && <FourWeeks anchor={anchor} focus={focus} fenetre={fenetre} onOpenDay={setJourOuvert} {...common} />}
+            {moisTel && <MoisTelephone anchor={anchor} fenetre={fenetre} onShift={pas} onOpenDay={setJourOuvert} {...common} />}
             {/* Semaine : la grille prend toute la hauteur (jours entiers). */}
             {view === 'semaine' && (
               <div className="flex h-full min-h-[340px] md:min-h-0">
@@ -165,6 +167,11 @@ export function TimeView() {
               écran, n'en a pas. */}
           {!lecture && agendaRelie && <NotesSemaine lignes={telephone ? 3 : 4} />}
       </MassPickCtx.Provider>
+
+      {jourOuvert && (
+        <JourFenetre day={jourOuvert} onDay={setJourOuvert} onClose={() => setJourOuvert(null)} lecture={lecture}
+          onEdit={common.onEdit} onCreate={common.onCreate} onStep={(st) => { setJourOuvert(null); common.onStep(st) }} />
+      )}
 
       {massPick && <MassPicker pick={massPick} onClose={() => setMassPick(null)} />}
 
@@ -189,8 +196,8 @@ function debutGrille(anchor: Date, focus?: Date | null): Date {
       : startOfWeek(startOfMonth(anchor), { weekStartsOn: 1 })
 }
 
-function FourWeeks({ anchor, focus, fenetre, onEdit, onCreate, onStep, onMove }: {
-  anchor: Date; focus?: Date | null; fenetre?: Date | null
+function FourWeeks({ anchor, focus, fenetre, onOpenDay, onEdit, onCreate, onStep, onMove }: {
+  anchor: Date; focus?: Date | null; fenetre?: Date | null; onOpenDay: (d: Date) => void
   onEdit: (t: Task) => void; onCreate: (d: string) => void; onStep: (st: Step) => void; onMove: MoveFn
 }) {
   // Mois en cours : la grille démarre sur la SEMAINE DU JOUR (pas de semaines déjà
@@ -221,22 +228,22 @@ function FourWeeks({ anchor, focus, fenetre, onEdit, onCreate, onStep, onMove }:
       {/* Les lignes ont la même hauteur, sauf celle dont le contenu en demande plus :
           elle prend ce qu'il lui faut, les autres se partagent le reste. Tous les
           évènements restent visibles (le défilement n'est qu'un dernier recours). */}
-      <div className="grid h-full gap-1.5" style={{ gridTemplateRows: `repeat(${weeks.length}, minmax(min-content, 1fr))` }}>
+      <div className="grid h-full gap-1" style={{ gridTemplateRows: `repeat(${weeks.length}, minmax(min-content, 1fr))` }}>
         {weeks.map((days, i) => {
           // Marge droite : une bande teintée par mois sur ses semaines, son nom
           // écrit à la verticale en tête de bande.
           const mg = marge[i]!
           return (
-            <div key={i} className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr)) 28px' }}>
+            <div key={i} className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, minmax(0, 1fr)) 18px' }}>
               {days.map((day) => (
-                <DayCell key={day.toISOString()} day={day} remplir tint={teinteMois(day)}
+                <DayCell key={day.toISOString()} day={day} remplir sansHoraire onOpenDay={onOpenDay} tint={teinteMois(day)}
                   onEdit={onEdit} onCreate={onCreate} onStep={onStep} onMove={onMove} />
               ))}
               <div className="relative" aria-hidden>
-                <div className={`absolute inset-x-0 bottom-0 ${mg.debut ? 'top-0 rounded-t-lg' : '-top-1.5'} ${mg.fin ? 'rounded-b-lg' : ''}`}
+                <div className={`absolute inset-x-0 bottom-0 ${mg.debut ? 'top-0 rounded-t-lg' : '-top-1'} ${mg.fin ? 'rounded-b-lg' : ''}`}
                   style={{ background: teinteMois(mg.mois) }}>
                   {mg.debut && (
-                    <span className="absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap text-[13px] font-bold uppercase tracking-[0.2em] [writing-mode:vertical-rl]"
+                    <span className="absolute left-1/2 top-2 -translate-x-1/2 whitespace-nowrap text-[11px] font-bold uppercase tracking-[0.18em] [writing-mode:vertical-rl]"
                       style={{ color: couleurMois(mg.mois) }}>{mg.nom}</span>
                   )}
                 </div>
