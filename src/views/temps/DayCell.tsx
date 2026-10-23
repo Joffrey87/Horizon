@@ -251,7 +251,7 @@ export function DayCell({ day, sansHoraire, onOpenDay, tint, ruban, rubanCouleur
           <button key={st.id} draggable onDragStart={dragData('step', st.id)}
             onClick={(e) => { e.stopPropagation(); onStep(st) }}
             title={`Étape : ${st.title}`}
-            className={`flex w-full items-center gap-1 truncate rounded bg-info/15 px-1 ${remplir ? 'py-px' : 'py-0.5'} text-left text-[10px] text-[#6ea8ee] transition-colors hover:bg-info/25`}>
+            className={`flex w-full items-center gap-1 truncate rounded bg-info/15 px-1 ${remplir ? 'py-px' : 'py-0.5'} text-left text-[10px] text-[#6fcf97] transition-colors hover:bg-info/25`}>
             <Layers size={10} className="shrink-0" />
             <span className="truncate font-medium">{st.title}</span>
           </button>

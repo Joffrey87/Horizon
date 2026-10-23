@@ -60,8 +60,7 @@ export function ResumeView() {
   const [detail, setDetail] = useState<'reste' | 'epargne' | null>(null)
 
   // Mêmes chiffres que le Budget : un seul calcul (tuilesMois.ts), capital de prêt compté en épargne et non en dépense.
-  const { s, capital, aVenir, epPrevues, listeEp, budgetDepenses, reelDepenses, resteTuile, epargne } = useTuilesMois()
-  const epargnees = epargne - capital
+  const { s, capitalRetire, aVenir, epPrevues, listeEp, budgetDepenses, reelDepenses, resteTuile, epargne } = useTuilesMois()
   const resteValable = resteTuile !== null
   const aPayer = aVenir.total + epPrevues.total
 
@@ -91,13 +90,7 @@ export function ResumeView() {
               {resteTuile === null ? '—' : euros(Math.abs(resteTuile))}
             </p>
             <p className="text-[11px] leading-snug text-ink-3 lg:text-xs">
-              {resteTuile === null ? 'budget : vue Foyer' : (
-                <>
-                  budget {euros(budgetDepenses)}
-                  <br />− {euros(reelDepenses)} dépensé
-                  {aPayer > 0.5 && <><br />− {euros(aPayer)} à venir</>}
-                </>
-              )}
+              {resteTuile === null ? 'budget : vue Foyer' : aPayer > 0.5 ? `${euros(aPayer)} dépenses à venir` : ' '}
             </p>
           </button>
         )}
@@ -106,14 +99,10 @@ export function ResumeView() {
           className="card px-3 py-3 text-left">
           <p className="block-title">Épargné</p>
           <p className="my-1 whitespace-nowrap text-[28px] font-bold tabular-nums text-sun-soft lg:text-4xl">{euros(epargne)}</p>
-          <p className="text-[11px] leading-snug text-ink-3 lg:text-xs">
-            {capital > 0.5 && <>dont <b className="font-semibold text-ink-2">{euros(capital)}</b><br />de capital remboursé<br />+ </>}
-            <b className="font-semibold text-ink-2">{euros(epargnees)}</b> d’épargne
-          </p>
         </button>
         {detail === 'reste' && resteTuile !== null && (
           <div className="col-span-2 flex justify-center">
-            <DetailReste budget={budgetDepenses} depense={reelDepenses} aVenir={aVenir} epargnes={epPrevues} capital={capital} resteTuile={resteTuile} />
+            <DetailReste budget={budgetDepenses} depense={reelDepenses} aVenir={aVenir} epargnes={epPrevues} capital={capitalRetire} resteTuile={resteTuile} />
           </div>
         )}
         {detail === 'epargne' && <div className={`flex justify-center ${vue ? '' : 'col-span-2'}`}><DetailEpargne liste={listeEp} /></div>}

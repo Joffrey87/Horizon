@@ -1,9 +1,9 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowRight, ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import {
-  NON_CLASSE, aplatirGroupes, decaleMois, detailLigne, entreesPrevues, euros, grouperParIntitule, libelleMois, type GroupeIntitules, type LigneBudget,
+  NON_CLASSE, aplatirGroupes, decaleMois, detailLigne, entreesPrevues, euros, fondLigne, grouperParIntitule, libelleMois, type GroupeIntitules, type LigneBudget,
 } from '../../lib/finances'
 import type { FinTransaction } from '../../lib/types'
 import { EmptyState, ProgressBar } from '../../components/ui'
@@ -31,6 +31,7 @@ export function BudgetView() {
   const transactions = useHorizon((s) => s.finTransactions)
   const lines = useHorizon((s) => s.finLines)
   const setFinBudget = useHorizon((s) => s.setFinBudget)
+  const setFinBudgetMois = useHorizon((s) => s.setFinBudgetMois)
   const idx = useIndex()
   const [depli, setDepli] = useState<Depli>(null)
   // Pastille Détails d'une ligne du tableau : toutes ses catégories ouvertes sur leurs groupes (1) ou leurs opérations (2).
@@ -55,7 +56,7 @@ export function BudgetView() {
   // Vue partagée : les budgets et le prévisionnel restent ceux du propriétaire.
   const modifiable = !useVue()
 
-  const { s, depenses, epargnes, capital, capitalMois, aVenir, epPrevues, listeEp, budgetDepenses, reelDepenses, resteTuile, epargne } = useTuilesMois()
+  const { s, depenses, epargnes, capitalRetire, capitalMois, aVenir, epPrevues, listeEp, budgetDepenses, reelDepenses, resteTuile, epargne } = useTuilesMois()
   const prevues = useMemo(() => entreesPrevues({ mois, transactions, idx, filtre }), [mois, transactions, idx, filtre])
   const foyer = filtre === 'foyer'
   const suivant = decaleMois(mois, 1)
@@ -94,7 +95,7 @@ export function BudgetView() {
     const editable = !!l.ligne && foyer && modifiable
     return (
       <Fragment key={l.cle}>
-        <tr className="cursor-pointer border-t border-line/60 hover:bg-panel-2/50" style={l.ligne?.color ? { background: l.ligne.color } : undefined}
+        <tr className="cursor-pointer border-t border-line/60 hover:bg-panel-2/50" style={fondLigne(l.ligne) ? { background: fondLigne(l.ligne)! } : undefined}
           onClick={(e) => { if (!(e.target as HTMLElement).closest('button, input, a')) basculer(l.cle, 'mois') }}>
           <td className="py-2 pr-2">
             <div className="flex items-center justify-between gap-2">
@@ -114,7 +115,7 @@ export function BudgetView() {
           </td>
           <td className="w-44 px-2">
             <BarreBudget reel={l.reel} budget={l.budget} depasse={depasse} onClic={() => basculer(l.cle, 'mois')}
-              edition={editable ? { mois, onSave: (v) => void setFinBudget(l.ligne!.id, 'budget', `${mois}-01`, v) } : undefined} />
+              edition={editable ? { mois, onSave: (v) => void setFinBudgetMois(l.ligne!.id, mois, v) } : undefined} />
           </td>
           <td className={`px-2 text-right tabular-nums ${depasse ? 'text-[#eda145]' : 'text-ink-2'}`}>
             {ecart !== null ? (depasse ? `+${euros(-ecart)} au-delà` : euros(ecart))
@@ -186,19 +187,18 @@ export function BudgetView() {
               <Tuile compacte titre={resteTuile !== null && resteTuile < 0 ? 'Au-delà du budget' : 'Reste'}
                 valeur={resteTuile === null ? '—' : euros(Math.abs(resteTuile))} ton={resteTuile !== null && resteTuile < 0 ? 'warn' : undefined}
                 detail={resteTuile === null ? 'budget : vue Foyer' : aVenir.total + epPrevues.total > 0.5
-                  ? <span>après {euros(aVenir.total + epPrevues.total)} à venir</span>
+                  ? <span>{euros(aVenir.total + epPrevues.total)} dépenses à venir</span>
                   : undefined} />
             </button>
             <button type="button" data-testid="tuile-epargne" aria-expanded={detailTuile === 'epargne'}
               onClick={() => setDetailTuile(detailTuile === 'epargne' ? null : 'epargne')}
               title="Voir les épargnes du mois" className="rounded-[inherit] text-left">
-              <Tuile compacte titre="Épargné" valeur={euros(epargne)}
-                detail={capital > 0.5 ? <span>dont {euros(capital)} de capital remboursé</span> : undefined} />
+              <Tuile compacte titre="Épargné" valeur={euros(epargne)} />
             </button>
           </div>
 
           {detailTuile === 'reste' && resteTuile !== null && (
-            <DetailReste budget={budgetDepenses} depense={reelDepenses} aVenir={aVenir} epargnes={epPrevues} capital={capital} resteTuile={resteTuile} />
+            <DetailReste budget={budgetDepenses} depense={reelDepenses} aVenir={aVenir} epargnes={epPrevues} capital={capitalRetire} resteTuile={resteTuile} />
           )}
           {detailTuile === 'epargne' && <DetailEpargne liste={listeEp} />}
 
@@ -280,7 +280,8 @@ export function BudgetView() {
 /**
  * Barre d'atteinte du budget. Au survol : « Réel / Budget » avec les deux montants.
  * Un clic épingle la bulle (utile au doigt) et appelle `onClic` (ouvrir la catégorie) ;
- * si `edition`, un clic sur le montant du budget dans la bulle permet de le changer.
+ * si `edition`, un clic sur la barre ouvre directement un champ pour changer le budget de CE MOIS seulement
+ * (Entrée valide, Échap annule, champ vide = retour au budget par défaut).
  * Sans budget (ou budget à 0), pas de barre : le réel s'écrit en discret à sa place.
  * La bulle est rendue hors du tableau (portail) pour ne pas être rognée par son défilement.
  */
@@ -294,7 +295,12 @@ function BarreBudget({ reel, budget, depasse, edition, onClic, discret = false }
   const [epingle, setEpingle] = useState(false)
   const [saisie, setSaisie] = useState(false)
   const [texte, setTexte] = useState('')
+  /** Vrai dès que la saisie est validée ou annulée : évite qu'un blur tardif enregistre une seconde fois (ou après Échap). */
+  const clos = useRef(false)
   const aBudget = budget !== null && budget > 0
+  const [largeur, setLargeur] = useState(0)
+  // La bulle reste entièrement dans l'écran (téléphone : la barre est tout à droite).
+  useLayoutEffect(() => { if (pos && bulle.current) setLargeur(bulle.current.offsetWidth) }, [pos, saisie, epingle])
 
   const placer = () => {
     const r = ancre.current?.getBoundingClientRect()
@@ -307,9 +313,9 @@ function BarreBudget({ reel, budget, depasse, edition, onClic, discret = false }
     // Clic ailleurs (après le blur du champ, qui enregistre), Échap ou défilement : on ferme.
     const dehors = (e: MouseEvent) => {
       const t = e.target as Node
-      if (!ancre.current?.contains(t) && !bulle.current?.contains(t)) fermer()
+      if (!ancre.current?.contains(t) && !bulle.current?.contains(t)) fermer()   // le blur du champ a déjà enregistré
     }
-    const touche = (e: KeyboardEvent) => { if (e.key === 'Escape') fermer() }
+    const touche = (e: KeyboardEvent) => { if (e.key === 'Escape') { clos.current = true; fermer() } }
     document.addEventListener('click', dehors)
     document.addEventListener('keydown', touche)
     window.addEventListener('scroll', fermer, true)
@@ -320,11 +326,14 @@ function BarreBudget({ reel, budget, depasse, edition, onClic, discret = false }
     }
   }, [epingle])
 
+  const ouvrirSaisie = () => { clos.current = false; setTexte(budget === null ? '' : String(budget)); setSaisie(true) }
+  const annuler = () => { clos.current = true; fermer() }
   const enregistrer = () => {
-    if (!edition) return
+    if (!edition || clos.current) return
     const t = texte.replace(/\s/g, '').replace(',', '.')
     const v = t === '' ? null : Number(t)
-    if (v !== null && !Number.isFinite(v)) return
+    if (v !== null && (!Number.isFinite(v) || v < 0)) return
+    clos.current = true
     if (v !== budget) edition.onSave(v)
     fermer()
   }
@@ -335,9 +344,11 @@ function BarreBudget({ reel, budget, depasse, edition, onClic, discret = false }
         onMouseEnter={() => { if (!epingle) placer() }} onMouseLeave={() => { if (!epingle) setPos(null) }}
         onClick={() => {
           onClic?.()
-          if (epingle) { fermer(); return }
+          if (epingle) { annuler(); return }
           placer(); setEpingle(true)
+          if (edition) ouvrirSaisie()
         }}
+        title={edition ? 'Cliquer pour changer le budget de ce mois' : undefined}
         aria-label={`Réel ${euros(reel)}${budget !== null ? `, budget ${euros(budget)}` : ''}`}
         className="flex h-6 w-full items-center rounded px-0.5 hover:bg-panel-2/60">
         {aBudget
@@ -345,7 +356,7 @@ function BarreBudget({ reel, budget, depasse, edition, onClic, discret = false }
           : <span className={`tabular-nums ${discret ? '' : 'text-xs text-ink-3'}`}>{euros(reel)}</span>}
       </button>
       {pos && createPortal(
-        <div ref={bulle} role="tooltip" style={{ left: pos.x, top: pos.y - 6 }}
+        <div ref={bulle} role="tooltip" style={{ left: Math.min(Math.max(pos.x, largeur / 2 + 8), window.innerWidth - largeur / 2 - 8), top: pos.y - 6 }}
           className="fixed z-50 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-line-2 bg-panel px-3 py-2 text-xs shadow-lg">
           <p className="text-[10px] uppercase tracking-wider text-ink-3">Réel / Budget</p>
           <p className="mt-0.5 flex items-center gap-1 text-sm font-medium tabular-nums">
@@ -354,18 +365,14 @@ function BarreBudget({ reel, budget, depasse, edition, onClic, discret = false }
             {saisie && edition
               ? <input autoFocus value={texte} onChange={(e) => setTexte(e.target.value)} inputMode="decimal"
                   onFocus={(e) => e.target.select()} onBlur={enregistrer}
-                  onKeyDown={(e) => { if (e.key === 'Enter') enregistrer(); if (e.key === 'Escape') fermer() }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') enregistrer(); if (e.key === 'Escape') annuler() }}
                   className="field !w-24 !px-2 !py-0.5 text-right text-sm tabular-nums" aria-label="Budget" />
-              : epingle && edition
-              ? <button onClick={() => { setTexte(budget === null ? '' : String(budget)); setSaisie(true) }} title="Changer le budget"
-                  className="rounded px-1 decoration-dotted underline-offset-4 hover:underline">
-                  {budget === null ? 'fixer un budget' : aBudget ? euros(budget) : 'sans budget'}
-                </button>
               : <span>{budget === null ? '—' : aBudget ? euros(budget) : 'sans budget'}</span>}
           </p>
           {epingle && edition && (
-            <p className="mt-1 text-[10px] text-ink-3">
-              {saisie ? `À partir de ${libelleMois(edition.mois)} · vide = effacer · Entrée` : 'Clique le budget pour le changer'}
+            <p className="mt-1 text-[10px] leading-snug text-ink-3">
+              <span className="text-ink-2">Pour {libelleMois(edition.mois)} seulement</span><br />
+              Entrée valide · Échap annule · vide = budget par défaut
             </p>
           )}
         </div>,

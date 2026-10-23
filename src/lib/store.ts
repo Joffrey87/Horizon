@@ -8,6 +8,7 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import { capturesEnAttente, depiler } from './capture'
 import { messageFonction } from './functionError'
+import { ecrituresBudgetMois } from './finances'
 import { ecriturePermise, projetsVisibles, tachesVisibles, vueActive } from './partage'
 import type {
   Birthday, CalendarFeed, CelesteProposal, CelesteRules, Check, Domain, FinAccount, FinBudget, FinCategory, FinDca,
@@ -105,6 +106,8 @@ interface HorizonState {
   loadFinances: (force?: boolean) => Promise<void>
   /** Budget (à partir de ce mois) ou prévisionnel (ce mois seul) d'une ligne ; null efface. */
   setFinBudget: (lineId: string, kind: 'budget' | 'prevision', month: string, amount: number | null) => Promise<void>
+  /** Budget d'une ligne pour ce mois seulement (les autres mois et le budget par défaut ne bougent pas). */
+  setFinBudgetMois: (lineId: string, mois: string, amount: number | null) => Promise<void>
   /** Relit les agendas externes : met à jour les évènements déjà acceptés et
    *  remplit `propositionsAgenda` avec les nouveautés — sans rien importer. */
   syncAgenda: () => Promise<{ ok: boolean; propositions?: number; error?: string }>
@@ -570,6 +573,12 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       .select().single()
     if (error || !data) { set({ error: `Budget non enregistré : ${error?.message ?? 'réponse vide'}` }); return }
     set({ finBudgets: [...autres, data as FinBudget] })
+  },
+
+  setFinBudgetMois: async (lineId, mois, amount) => {
+    for (const e of ecrituresBudgetMois({ ligneId: lineId, mois, montant: amount, budgets: get().finBudgets })) {
+      await get().setFinBudget(lineId, 'budget', `${e.mois}-01`, e.montant)
+    }
   },
 
   setApercu: async (partageId) => {

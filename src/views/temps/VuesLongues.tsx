@@ -93,7 +93,7 @@ function MonthColumn({ month, items, onEdit, onStep, onMove }: {
                 style={couleur ? { border: `1.5px solid ${couleur}` } : undefined}
                 className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left text-xs text-ink-2 transition-colors hover:bg-panel-3">
                 <span className="w-9 shrink-0 tabular-nums text-ink-3">{format(parseISO(it.date), 'd MMM', { locale: fr })}</span>
-                {it.kind === 'step' && <Layers size={11} className="shrink-0 text-[#6ea8ee]" />}
+                {it.kind === 'step' && <Layers size={11} className="shrink-0 text-[#6fcf97]" />}
                 {it.kind === 'objective' && <Target size={11} className="shrink-0 text-sun" />}
                 {projet && <IconeProjet project={projet} size={11} />}
                 <span className="truncate">{it.title}</span>

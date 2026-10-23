@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import type { FinAccount, FinBudget, FinEcheance, FinLoan, FinCategory, FinHolding, FinLine, FinPlanned, FinTarget, FinTransaction } from './types'
 import {
-  estEnAttente, NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, capitalRembourse, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, budgetDe, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
+  estEnAttente, NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, capitalRembourse, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, budgetDe, ecrituresBudgetMois, estEpargneComptee, fondLigne, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
   libelleMois, moisEcoules, patrimoine, previsionDe, provision, syntheseMois,
   agregerHorsCapital, capitalDuMois, epargnesPrevues, listeEpargnes,
 } from './finances'
@@ -520,31 +520,50 @@ describe('capital de prêt extrait de la ligne emprunt', () => {
     debit('2026-10-01', 600, 'ECH PRET 222B DU 01/10/26', airbnb.id),           // compte hors budget
     op(joint.id, '2026-10-03', -40, { category_id: loyer.id, label: 'ASSURANCE' }),
   ]
-  const base = { prets, echeances, transactions: tx, idx: idxP, filtre: 'foyer' as const, moisCourant: '2026-10' }
+  const base = { prets, echeances, transactions: tx, idx: idxP, filtre: 'foyer' as const, moisCourant: '2026-10', aujourdhui: '2026-10-20' }
 
   it('retire le capital de la ligne qui porte le prélèvement, borné au montant débité', () => {
     const c = capitalDuMois({ ...base, mois: '2026-10' })
-    expect(c.fait).toBe(852)
+    expect(c.fait).toBe(852 + 500)   // + capital du prêt payé hors budget
     expect(c.extraitParLigne.get(fixes.id)).toBe(852)
     expect(c.prets.find((p) => p.etat === 'fait')?.debite).toBe(1152)
     // Débit plus petit que le capital de l'échéance : on ne retire que ce qui a été débité.
     const partiel = capitalDuMois({ ...base, transactions: [debit('2026-10-01', 400, 'ECH PRET 111A DU 01/10/26')], mois: '2026-10' })
     expect(partiel.fait).toBe(400)
   })
-  it('un prêt payé depuis un compte hors budget n’est ni retiré ni compté', () => {
-    const c = capitalDuMois({ ...base, mois: '2026-10' })
+  it('un prêt payé depuis un compte hors budget compte en épargne sans toucher à aucune ligne', () => {
+    // Prélèvement vu ce mois-ci sur le compte hors budget : fait.
+    const c = capitalDuMois({ ...base, aujourdhui: '2026-10-20', mois: '2026-10' })
     const p = c.prets.find((x) => x.nom.includes('222B'))!
-    expect(p.etat).toBe('hors_budget')
-    expect(p.extrait).toBe(0)
+    expect(p.etat).toBe('fait')
+    expect(p.horsBudget).toBe(true)
     expect(c.horsBudget).toBe(500)
-    expect(c.fait + c.prevu).toBe(852)
+    expect(c.fait).toBe(852 + 500)
+    expect(c.extraitParLigne.size).toBe(1)   // seule la ligne du prêt du budget est allégée
+    const { agregat } = agregerHorsCapital({ ...base, aujourdhui: '2026-10-20' })
+    expect(agregat.get('2026-10')?.lignes.get(fixes.id)).toBeCloseTo(1152 - 852 + 40, 2)
+  })
+  it('hors budget : fait si l’échéance est passée, prévu sinon', () => {
+    const sansDebit = tx.filter((t) => t.account_id !== airbnb.id)
+    const apres = capitalDuMois({ ...base, transactions: [...sansDebit, debit('2026-10-02', 1, 'ECH PRET 222B DU 02/10', airbnb.id)], aujourdhui: '2026-10-20', mois: '2026-10' })
+    expect(apres.prets.find((x) => x.nom.includes('222B'))?.etat).toBe('fait')
+    const avantEcheance = capitalDuMois({ ...base, transactions: [debit('2026-09-01', 600, 'ECH PRET 222B DU 01/09/26', airbnb.id)], aujourdhui: '2026-09-20', moisCourant: '2026-09', mois: '2026-10' })
+    const p = avantEcheance.prets.find((x) => x.nom.includes('222B'))!
+    expect(p.etat).toBe('prevu')
+    expect(avantEcheance.prevu).toBe(500)
+    // Prévu hors budget : listé en « prévu » dans l'Épargné, mais pas retiré du Reste.
+    const ep = (nom: string) => ({ cle: nom, ligne: ligne(nom, { kind: 'epargne' }), budget: 0, reel: 0, precedent: 0, moyenne3: 0, prevision: null, previsionSaisie: false })
+    const l = listeEpargnes({ mois: '2026-10', moisCourant: '2026-09', lignes: [ep('Matelas')], capital: avantEcheance })
+    expect(l.lignes.map((x) => [x.nom, x.montant, x.etat])).toContainEqual([expect.stringContaining('222B'), 500, 'prevu'])
+    expect(epargnesPrevues({ mois: '2026-10', moisCourant: '2026-09', lignes: [ep('Matelas')], capital: avantEcheance }).total).toBe(0)
   })
   it('le capital pas encore débité est prévu (mois courant ou futur), pas dans un mois passé', () => {
     const futur = capitalDuMois({ ...base, mois: '2026-11' })
-    expect(futur.prevu).toBe(854)
+    expect(futur.prevu).toBe(854 + 501)
     expect(futur.fait).toBe(0)
     const sansDebitOct = capitalDuMois({ ...base, transactions: tx.filter((t) => t.date !== '2026-10-01' || t.account_id === airbnb.id), mois: '2026-10' })
     expect(sansDebitOct.prevu).toBe(852)
+    expect(sansDebitOct.fait).toBe(500)
     const passe = capitalDuMois({ ...base, moisCourant: '2026-11', transactions: tx.filter((t) => t.date !== '2026-10-01' || t.account_id === airbnb.id), mois: '2026-10' })
     expect(passe.prevu).toBe(0)
   })
@@ -553,7 +572,7 @@ describe('capital de prêt extrait de la ligne emprunt', () => {
     const { agregat, capital } = agregerHorsCapital(base)
     for (const mois of ['2026-09', '2026-10']) {
       const total = (a: typeof avant) => [...(a.get(mois)?.lignes.values() ?? [])].reduce((s, v) => s + v, 0)
-      expect(total(agregat) + (capital.get(mois)?.fait ?? 0)).toBeCloseTo(total(avant), 2)
+      expect(total(agregat) + (capital.get(mois)?.fait ?? 0) - (capital.get(mois)?.horsBudget ?? 0)).toBeCloseTo(total(avant), 2)
     }
     expect(agregat.get('2026-10')?.lignes.get(fixes.id)).toBeCloseTo(1152 - 852 + 40, 2)   // intérêts + assurance restent
     expect(agregat.get('2026-09')?.lignes.get(fixes.id)).toBeCloseTo(1150 - 850, 2)
@@ -589,24 +608,81 @@ describe('épargnes prévues et liste des épargnes', () => {
   it('budget d’épargne restant + capital à venir ; rien pour un mois passé', () => {
     const c = capital([{ etat: 'prevu', prevu: 850, nom: 'Prêt A' }, { etat: 'fait', extrait: 200 }])
     const r = epargnesPrevues({ mois: '2026-10', moisCourant: '2026-10', lignes: lignesB, capital: c })
-    expect(r.details.map((d) => [d.nom, d.montant])).toEqual([['Épargne vacances', 450], ['Capital · Prêt A', 850]])
-    expect(r.total).toBe(1300)
+    expect(r.details.map((d) => [d.nom, d.montant])).toEqual([['Capital · Prêt A', 850]])
+    expect(r.total).toBe(850)
     expect(epargnesPrevues({ mois: '2026-09', moisCourant: '2026-10', lignes: lignesB, capital: c }).total).toBe(0)
   })
-  it('liste : une ligne par épargne, faite / prévue, hors budget pour information et hors totaux', () => {
-    const c = capital([{ etat: 'fait', extrait: 850, nom: 'Prêt A' }, { etat: 'prevu', prevu: 200, nom: 'Prêt B' }, { etat: 'hors_budget', capital: 500, nom: 'Prêt Airbnb' }])
+  it('liste : une ligne par épargne, faite / prévue ; « Épargne vacances » n’en est pas une', () => {
+    const c = capital([{ etat: 'fait', extrait: 850, nom: 'Prêt A' }, { etat: 'prevu', prevu: 200, nom: 'Prêt B' }, { etat: 'fait', horsBudget: true, extrait: 500, capital: 500, nom: 'Prêt Airbnb' }])
     const l = listeEpargnes({ mois: '2026-10', moisCourant: '2026-10', lignes: lignesB, capital: c })
     expect(l.lignes.map((x) => [x.nom, x.montant, x.etat])).toEqual([
-      ['Épargne avenir', 300, 'fait'], ['Épargne vacances', 250, 'fait'], ['Capital · Prêt A', 850, 'fait'],
-      ['Épargne vacances', 450, 'prevu'], ['Capital · Prêt B', 200, 'prevu'], ['Capital · Prêt Airbnb', 500, 'hors_budget'],
+      ['Épargne avenir', 300, 'fait'], ['Capital · Prêt A', 850, 'fait'], ['Capital · Prêt Airbnb', 500, 'fait'],
+      ['Capital · Prêt B', 200, 'prevu'],
     ])
-    expect(l.fait).toBe(1400)
-    expect(l.prevu).toBe(650)
+    expect(l.fait).toBe(1650)
+    expect(l.prevu).toBe(200)
   })
   it('Reste = budget dépenses − dépensé − à venir − épargnes prévues, sans double compte du capital', () => {
     const budgetDep = 6000, reelDep = 5000, aVenir = 100
     const c = capital([{ etat: 'prevu', prevu: 850, nom: 'Prêt A' }])
     const prevues = epargnesPrevues({ mois: '2026-10', moisCourant: '2026-10', lignes: lignesB, capital: c })
-    expect(budgetDep - reelDep - aVenir - prevues.total).toBe(6000 - 5000 - 100 - 450 - 850)
+    expect(budgetDep - reelDep - aVenir - prevues.total).toBe(6000 - 5000 - 100 - 850)
+  })
+})
+
+describe('budget d’un seul mois', () => {
+  const c = ligne('Courses')
+  const bud = (month: string, amount: number, kind: 'budget' | 'prevision' = 'budget') => ({ id: month + amount, user_id: 'u', line_id: c.id, kind, month: `${month}-01`, amount } as unknown as FinBudget)
+  const appliquer = (budgets: FinBudget[], mois: string, montant: number | null) => {
+    let b = budgets
+    for (const e of ecrituresBudgetMois({ ligneId: c.id, mois, montant, budgets })) {
+      b = b.filter((x) => !(x.kind === 'budget' && x.month === `${e.mois}-01`))
+      if (e.montant !== null) b = [...b, bud(e.mois, e.montant)]
+    }
+    return b
+  }
+  const valeurs = (b: FinBudget[]) => ['2026-08', '2026-09', '2026-10', '2026-11', '2026-12'].map((m) => budgetDe(c.id, m, b))
+  it('ne change que ce mois : les suivants gardent leur budget, les précédents aussi', () => {
+    const b = appliquer([bud('2026-01', 700), bud('2026-11', 750)], '2026-10', 900)
+    expect(valeurs(b)).toEqual([700, 700, 900, 750, 750])
+  })
+  it('sans budget ultérieur, fige le mois suivant à l’ancienne valeur', () => {
+    const b = appliquer([bud('2026-01', 700)], '2026-10', 900)
+    expect(valeurs(b)).toEqual([700, 700, 900, 700, 700])
+  })
+  it('sans aucun budget avant : le mois suivant reste « sans budget » (0)', () => {
+    const b = appliquer([], '2026-10', 300)
+    expect(valeurs(b)).toEqual([null, null, 300, 0, 0])
+  })
+  it('vider la surcharge rend le mois au budget par défaut sans bouger les autres', () => {
+    const avant = appliquer([bud('2026-01', 700)], '2026-10', 900)
+    expect(valeurs(appliquer(avant, '2026-10', null))).toEqual([700, 700, 700, 700, 700])
+  })
+  it('ne touche pas au prévisionnel', () => {
+    expect(ecrituresBudgetMois({ ligneId: c.id, mois: '2026-10', montant: 1, budgets: [bud('2026-11', 5, 'prevision')] }).map((e) => e.mois)).toEqual(['2026-11', '2026-10'])
+  })
+})
+
+describe('Épargne vacances n’est pas de l’épargne', () => {
+  it('reconnue par son nom, sans casser les autres épargnes', () => {
+    const l = (name: string, kind: 'depense' | 'epargne' = 'epargne') => ({ name, kind })
+    expect(estEpargneComptee(l('Épargne vacances'))).toBe(false)
+    expect(estEpargneComptee(l('EPARGNE VACANCES'))).toBe(false)
+    expect(estEpargneComptee(l('Épargne avenir'))).toBe(true)
+    expect(estEpargneComptee(l('Matelas sécurité'))).toBe(true)
+    expect(estEpargneComptee(l('Vacances', 'depense'))).toBe(false)
+    expect(estEpargneComptee(null)).toBe(false)
+  })
+})
+
+describe('couleurs des lignes de budget', () => {
+  it('Aménagement vert, Dépenses courantes sable, exceptionnelles taupe ; plus de bleu', () => {
+    const l = (name: string, color: string | null = null) => ({ name, color })
+    expect(fondLigne(l('Aménagement'))).toContain('22, 163, 74')
+    expect(fondLigne(l('Dépenses courantes', 'rgba(1,2,3,.2)'))).toContain('190, 170, 140')
+    expect(fondLigne(l('Dépenses exceptionnelles'))).toContain('150, 125, 105')
+    expect(fondLigne(l('Courses', 'rgba(65, 105, 225, 0.26)'))).toContain('22, 163, 74')
+    expect(fondLigne(l('Courses', 'rgba(245, 158, 11, 0.18)'))).toBe('rgba(245, 158, 11, 0.18)')
+    expect(fondLigne(l('Dons'))).toBeNull()
   })
 })

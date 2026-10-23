@@ -28,7 +28,7 @@ export function DetailReste({ budget, depense, aVenir, epargnes, capital, resteT
       <LigneDetail nom="Déjà dépensé" montant={depense} signe="−" />
       <LigneDetail nom="À venir (récurrentes, courses)" montant={aVenir.total} signe="−" />
       {quelques(aVenir.details).map((d) => <LigneDetail key={d.nom} nom={d.nom} montant={d.montant} sous />)}
-      <LigneDetail nom="Épargnes prévues restantes" montant={epargnes.total} signe="−" />
+      {epargnes.total > 0.5 && <LigneDetail nom="Épargnes prévues restantes" montant={epargnes.total} signe="−" />}
       {quelques(epargnes.details).map((d) => <LigneDetail key={d.nom} nom={d.nom} montant={d.montant} sous />)}
       <LigneDetail fin nom={resteTuile < 0 ? 'Au-delà du budget' : 'Reste'} montant={resteTuile} />
       {capital > 0.5 && (
@@ -40,16 +40,14 @@ export function DetailReste({ budget, depense, aVenir, epargnes, capital, resteT
 
 /** Épargnes du mois, une ligne chacune : faite, prévue (ou prêt payé hors budget, pour information). */
 export function DetailEpargne({ liste }: { liste: ReturnType<typeof listeEpargnes> }) {
-  const badge = (etat: 'fait' | 'prevu' | 'hors_budget') => etat === 'fait'
+  const badge = (etat: 'fait' | 'prevu') => etat === 'fait'
     ? <span className="whitespace-nowrap rounded-full border border-[#4cc79a]/50 px-1.5 text-[10px] uppercase tracking-wider text-[#4cc79a]">fait</span>
-    : etat === 'prevu'
-    ? <span className="whitespace-nowrap rounded-full border border-[#eda145]/50 px-1.5 text-[10px] uppercase tracking-wider text-[#eda145]">prévu</span>
-    : <span title="Payé depuis un compte hors budget : pas compté" className="whitespace-nowrap rounded-full border border-line px-1.5 text-[10px] uppercase tracking-wider text-ink-3">hors budget</span>
+    : <span className="whitespace-nowrap rounded-full border border-[#eda145]/50 px-1.5 text-[10px] uppercase tracking-wider text-[#eda145]">prévu</span>
   return (
     <div data-testid="detail-epargne" className="card mx-auto w-full max-w-md space-y-1 px-4 py-3 text-sm">
       {liste.lignes.length === 0 && <p className="text-ink-3">Aucune épargne ce mois-ci.</p>}
       {liste.lignes.map((l) => (
-        <div key={`${l.nom}-${l.etat}`} className={`flex items-center justify-between gap-3 ${l.etat === 'hors_budget' ? 'text-ink-3' : ''}`}>
+        <div key={`${l.nom}-${l.etat}`} className="flex items-center justify-between gap-3">
           <span className="flex min-w-0 items-center gap-2"><span className="truncate">{l.nom}</span>{badge(l.etat)}</span>
           <span className="shrink-0 tabular-nums">{euros(l.montant)}</span>
         </div>

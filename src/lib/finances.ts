@@ -16,6 +16,7 @@ import type {
   FinTarget, FinTransaction, FinLabel, FinGroup, FinEcheance, FinLoan,
 } from './types'
 import { motifPrelevement } from './prets'
+import { todayIso } from './logic'
 
 export type FiltreTitulaire = 'foyer' | FinOwner
 
@@ -190,6 +191,47 @@ export function budgetDe(ligneId: string, mois: string, budgets: FinBudget[]): n
   return trouve ? Number(trouve.amount) : null
 }
 
+/**
+ * Opérations à écrire pour changer le budget d'une ligne POUR UN SEUL MOIS. Un budget vaut
+ * « à partir de » son mois (budgetDe) : écrire seulement le mois M changerait aussi tous les suivants.
+ * On fige donc d'abord le mois suivant à la valeur qu'il avait (0 = « sans budget » si aucun budget
+ * ne s'appliquait), sauf s'il a déjà son propre budget ; puis on écrit le mois M (null = effacer
+ * la surcharge : le mois reprend le budget par défaut). Les autres mois ne bougent pas.
+ */
+export function ecrituresBudgetMois(opts: {
+  ligneId: string; mois: string; montant: number | null; budgets: FinBudget[]
+}): { mois: string; montant: number | null }[] {
+  const suivant = decaleMois(opts.mois, 1)
+  const ecritures: { mois: string; montant: number | null }[] = []
+  const aSonBudget = opts.budgets.some((b) => b.kind === 'budget' && b.line_id === opts.ligneId && moisDe(b.month) === suivant)
+  if (!aSonBudget) ecritures.push({ mois: suivant, montant: budgetDe(opts.ligneId, suivant, opts.budgets) ?? 0 })
+  ecritures.push({ mois: opts.mois, montant: opts.montant })
+  return ecritures
+}
+
+/**
+ * Fond d'une ligne de budget. Couleurs imposées par nom (choix de Joffrey) : Aménagement vert, Dépenses
+ * courantes sable, Dépenses exceptionnelles taupe. Pour les autres, la couleur enregistrée ; l'ancien
+ * « bleu roi » (plus de bleu dans le design) s'affiche en vert.
+ */
+export function fondLigne(ligne: Pick<FinLine, 'name' | 'color'> | null | undefined): string | null {
+  if (!ligne) return null
+  const nom = normaliserLibelle(ligne.name)
+  if (/^amenagements?$/.test(nom)) return 'rgba(22, 163, 74, 0.20)'
+  if (/^depenses courantes$/.test(nom)) return 'rgba(190, 170, 140, 0.22)'
+  if (/^depenses exceptionnelles$/.test(nom)) return 'rgba(150, 125, 105, 0.26)'
+  if (ligne.color && /65,\s*105,\s*225/.test(ligne.color)) return 'rgba(22, 163, 74, 0.20)'
+  return ligne.color ?? null
+}
+
+/**
+ * Une ligne d'épargne compte comme épargne ici, sauf « Épargne vacances » : c'est de l'argent mis de côté
+ * pour dépenser plus tard dans l'année, pas de l'épargne (ni dans l'Épargné, ni dans le Reste).
+ */
+export function estEpargneComptee<T extends Pick<FinLine, 'name' | 'kind'>>(ligne: T | null | undefined): ligne is T {
+  return ligne?.kind === 'epargne' && !/\bvacances?\b/.test(normaliserLibelle(ligne.name))
+}
+
 /** Prévisionnel d'une ligne pour un mois : celui saisi pour ce mois, sinon le budget. */
 export function previsionDe(ligneId: string, mois: string, budgets: FinBudget[]): { montant: number | null; saisi: boolean } {
   const p = budgets.find((b) => b.kind === 'prevision' && b.line_id === ligneId && moisDe(b.month) === mois)
@@ -286,7 +328,9 @@ export interface CapitalPret {
   prevu: number
   /** Ligne de budget qui porte le débit du prêt (celle dont on retire le capital). */
   ligneId: string | null
-  etat: 'fait' | 'prevu' | 'hors_budget'
+  etat: 'fait' | 'prevu'
+  /** Prêt payé depuis un compte hors budget (ex. compte Airbnb) : le capital compte en épargne, mais aucune ligne n'est touchée. */
+  horsBudget?: boolean
   /** Motif de reconnaissance du prélèvement (loan.debit_match), pour retrouver la charge. */
   motif: string | null
 }
@@ -300,7 +344,7 @@ export interface CapitalMois {
   fait: number
   /** Total des capitaux encore à venir ce mois-ci (épargne prévue). */
   prevu: number
-  /** Capital des prêts payés hors budget (compte Airbnb…) : informatif, jamais compté. */
+  /** Part de `fait` + `prevu` due aux prêts payés hors budget (compte Airbnb…). */
   horsBudget: number
 }
 
@@ -311,6 +355,8 @@ export interface OptionsCapital {
   idx: IndexFinances
   filtre: FiltreTitulaire
   moisCourant: string
+  /** Aujourd'hui (yyyy-MM-dd), pour dire si l'échéance d'un prêt hors budget est passée ; par défaut la date du jour. */
+  aujourdhui?: string
 }
 
 /**
@@ -320,8 +366,9 @@ export interface OptionsCapital {
  *    (borné au montant débité), il ne reste dans la ligne que intérêts, assurance et frais ;
  *  - pas encore débité, mais prêt payé depuis le budget (déjà vu les mois précédents) et mois
  *    courant ou futur → « prévu » ;
- *  - prélevé sur un compte hors budget (ex. compte Airbnb) → « hors budget » : rien à retirer,
- *    et le capital n'entre pas dans l'épargne du budget.
+ *  - prélevé sur un compte hors budget (ex. compte Airbnb) : rien à retirer d'une ligne, mais le
+ *    capital compte en épargne du mois — « fait » si un prélèvement est vu ce mois-ci ou si la date de
+ *    l'échéance est passée, sinon « prévu ».
  */
 export function capitalDuMois(opts: OptionsCapital & { mois: string }): CapitalMois {
   const { mois, idx, filtre } = opts
@@ -339,11 +386,17 @@ export function capitalDuMois(opts: OptionsCapital & { mois: string }): CapitalM
     let ligneVue: string | null = null
     let budgetVu = false
     let horsBudgetVu = false
+    let debiteHors = 0
     if (re) {
       for (const tx of opts.transactions) {
         if (Number(tx.amount) >= 0 || !re.test(tx.label_local ?? tx.label) && !re.test(tx.label)) continue
         const c = classer(tx, idx)
-        if (c.type === 'ignoree' && c.raison === 'compte') { horsBudgetVu = true; continue }
+        if (c.type === 'ignoree' && c.raison === 'compte') {
+          if (!correspond(filtre, titulaireDe(tx, idx))) continue
+          horsBudgetVu = true
+          if (moisDe(tx.date) === mois) debiteHors -= Number(tx.amount)
+          continue
+        }
         if (c.type !== 'ligne' || !correspond(filtre, titulaireDe(tx, idx))) continue
         budgetVu = true
         ligneVue = c.ligne
@@ -360,7 +413,15 @@ export function capitalDuMois(opts: OptionsCapital & { mois: string }): CapitalM
       res.prets.push({ ...base, prevu: capital, ligneId: ligneVue, etat: 'prevu' })
       res.prevu += capital
     } else if (horsBudgetVu && !budgetVu) {
-      res.prets.push({ ...base, etat: 'hors_budget' })
+      const dateEcheance = echeances.map((e) => e.date).sort()[0]!.slice(0, 10)
+      const aujourdhui = opts.aujourdhui ?? todayIso()
+      if (debiteHors > 0.005 || dateEcheance <= aujourdhui) {
+        res.prets.push({ ...base, debite: debiteHors, extrait: capital, etat: 'fait', horsBudget: true })
+        res.fait += capital
+      } else {
+        res.prets.push({ ...base, prevu: capital, etat: 'prevu', horsBudget: true })
+        res.prevu += capital
+      }
       res.horsBudget += capital
     }
   }
@@ -402,29 +463,30 @@ export function epargnesPrevues(opts: {
   if (opts.mois < opts.moisCourant) return { total: 0, details: [] }
   const details: EpargnePrevue[] = []
   for (const l of opts.lignes) {
-    if (l.ligne?.kind !== 'epargne' || l.budget === null) continue
+    if (!estEpargneComptee(l.ligne) || l.budget === null) continue
     const reste = l.budget - l.reel
     if (reste > 0.5) details.push({ nom: l.ligne.name, montant: reste, type: 'ligne' })
   }
   for (const p of opts.capital?.prets ?? []) {
-    if (p.etat === 'prevu' && p.prevu > 0.5) details.push({ nom: `Capital · ${p.nom}`, montant: p.prevu, type: 'capital' })
+    // Un prêt payé hors budget n'est pas retiré du Reste (qui vient du budget) : il figure seulement dans la liste de l'Épargné.
+    if (p.etat === 'prevu' && !p.horsBudget && p.prevu > 0.5) details.push({ nom: `Capital · ${p.nom}`, montant: p.prevu, type: 'capital' })
   }
   return { total: details.reduce((s, d) => s + d.montant, 0), details }
 }
 
-export interface EpargneLigne { nom: string; montant: number; etat: 'fait' | 'prevu' | 'hors_budget'; type: 'ligne' | 'capital' }
+export interface EpargneLigne { nom: string; montant: number; etat: 'fait' | 'prevu'; type: 'ligne' | 'capital' }
 
 /**
  * La liste des épargnes du mois pour l'encart « Épargné » : une ligne par épargne, faite
- * (réelle) ou prévue (reste du budget d'épargne, capital pas encore débité). Les prêts payés
- * hors budget figurent pour information (`hors_budget`) et ne comptent pas dans les totaux.
+ * (réelle) ou prévue (reste du budget d'épargne, capital pas encore débité), y compris le capital
+ * des prêts payés hors budget. « Épargne vacances » n'en fait pas partie (estEpargneComptee).
  */
 export function listeEpargnes(opts: {
   mois: string; moisCourant: string; lignes: LigneBudget[]; capital?: CapitalMois
 }): { lignes: EpargneLigne[]; fait: number; prevu: number } {
   const lignes: EpargneLigne[] = []
   for (const l of opts.lignes) {
-    if (l.ligne?.kind !== 'epargne') continue
+    if (!estEpargneComptee(l.ligne)) continue
     if (Math.abs(l.reel) >= 0.5) lignes.push({ nom: l.ligne.name, montant: l.reel, etat: 'fait', type: 'ligne' })
   }
   for (const p of opts.capital?.prets ?? []) {
@@ -433,8 +495,10 @@ export function listeEpargnes(opts: {
   }
   const prevues = epargnesPrevues(opts)
   for (const d of prevues.details) lignes.push({ nom: d.nom, montant: d.montant, etat: 'prevu', type: d.type })
-  for (const p of opts.capital?.prets ?? []) {
-    if (p.etat === 'hors_budget') lignes.push({ nom: `Capital · ${p.nom}`, montant: p.capital, etat: 'hors_budget', type: 'capital' })
+  if (opts.mois >= opts.moisCourant) {
+    for (const p of opts.capital?.prets ?? []) {
+      if (p.etat === 'prevu' && p.horsBudget && p.prevu > 0.5) lignes.push({ nom: `Capital · ${p.nom}`, montant: p.prevu, etat: 'prevu', type: 'capital' })
+    }
   }
   const somme = (etat: EpargneLigne['etat']) => lignes.filter((x) => x.etat === etat).reduce((s, x) => s + x.montant, 0)
   return { lignes, fait: somme('fait'), prevu: somme('prevu') }
@@ -518,7 +582,7 @@ export function depensesAVenir(opts: {
     .map((g) => {
       const brut = g.parMois.reduce((s, v) => s + v, 0) / 3
       // Échéance de prêt pas encore débitée : on n'en garde que intérêts, assurance et frais.
-      const capital = (opts.capital?.prets ?? []).filter((p) => p.etat === 'prevu' && motifPrelevement(p.motif)?.test(g.exemple))
+      const capital = (opts.capital?.prets ?? []).filter((p) => p.etat === 'prevu' && !p.horsBudget && motifPrelevement(p.motif)?.test(g.exemple))
         .reduce((s, p) => s + p.prevu, 0)
       return { nom: g.nom, montant: Math.max(0, brut - capital) }
     })

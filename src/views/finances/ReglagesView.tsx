@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Plus, Trash2 } from 'luc
 import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { useHorizon } from '../../lib/store'
-import { GENRES, TITULAIRES, budgetDe, categorieEffective, clesGroupe, euros, libelleMois, lignesTriees, normaliserLibelle } from '../../lib/finances'
+import { GENRES, TITULAIRES, budgetDe, categorieEffective, clesGroupe, euros, fondLigne, libelleMois, lignesTriees, normaliserLibelle } from '../../lib/finances'
 import type { FinCategory, FinLine, FinOwner, FinTransaction } from '../../lib/types'
 import { Card } from '../../components/ui'
 import { moisCourant, useArbreCategories, useIndex } from './contexte'
@@ -14,8 +14,9 @@ const COULEURS = [
   { nom: 'Orange', valeur: 'rgba(245, 158, 11, 0.18)' },
   { nom: 'Rose', valeur: 'rgba(236, 72, 153, 0.18)' },
   { nom: 'Violet', valeur: 'rgba(139, 92, 246, 0.20)' },
-  { nom: 'Bleu roi', valeur: 'rgba(65, 105, 225, 0.26)' },
   { nom: 'Vert', valeur: 'rgba(22, 163, 74, 0.20)' },
+  { nom: 'Sable', valeur: 'rgba(190, 170, 140, 0.22)' },
+  { nom: 'Taupe', valeur: 'rgba(150, 125, 105, 0.26)' },
 ]
 
 const ROLES: { value: FinCategory['role']; label: string }[] = [
@@ -146,7 +147,7 @@ function Lignes() {
         {triees.map((l) => (
           <li key={l.id} className="flex items-center gap-2 py-1.5 text-sm">
             <input defaultValue={l.name} aria-label="Nom de la ligne" className="field flex-1 !py-1"
-              style={l.color ? { background: l.color } : undefined}
+              style={fondLigne(l) ? { background: fondLigne(l)! } : undefined}
               onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== l.name) void update('fin_lines', l.id, { name: v }) }} />
             <span className="w-24 shrink-0 text-right text-sm">
               <MontantEditable valeur={budgetDe(l.id, mois, budgets)} vide="budget…"

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
-import { agregerHorsCapital, bilan, euros, libelleMois, moisEcoules } from '../../lib/finances'
+import { agregerHorsCapital, bilan, estEpargneComptee, euros, fondLigne, libelleMois, moisEcoules } from '../../lib/finances'
 import { Card, EmptyState } from '../../components/ui'
 import { FiltreSeg, NavMois, Tuile } from './partage'
 import { moisCourant, useFin, useIndex } from './contexte'
@@ -38,7 +38,7 @@ export function BilanView() {
   // Épargné chaque mois : lignes d'épargne + capital de prêts remboursé (vue Foyer : les prêts sont ceux du foyer).
   const parMois = useMemo(() => b.parMois.map((p, i) => ({
     ...p,
-    epargne: b.lignes.filter((l) => l.ligne?.kind === 'epargne').reduce((s, l) => s + (l.cellules[i]?.reel ?? 0), 0)
+    epargne: b.lignes.filter((l) => estEpargneComptee(l.ligne)).reduce((s, l) => s + (l.cellules[i]?.reel ?? 0), 0)
       + (capital.get(p.mois)?.fait ?? 0),
   })), [b, capital])
 
@@ -121,7 +121,7 @@ export function BilanView() {
           </thead>
           <tbody>
             {b.lignes.map((l) => (
-              <tr key={l.cle} className="border-t border-line/60" style={l.ligne?.color ? { background: l.ligne.color } : undefined}>
+              <tr key={l.cle} className="border-t border-line/60" style={fondLigne(l.ligne) ? { background: fondLigne(l.ligne)! } : undefined}>
                 <td className={`py-1.5 pr-2 ${l.ligne ? '' : 'italic text-ink-2'}`}>{l.ligne?.name ?? 'Non classé'}</td>
                 {l.cellules.map((c) => {
                   const depasse = c.budget !== null && c.budget > 0 && c.reel > c.budget + 0.5

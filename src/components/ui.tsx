@@ -85,7 +85,7 @@ export function Badge({ children, tone = 'neutral' }: {
     good: 'bg-good/15 text-[#4cc79a]',
     warn: 'bg-warn/15 text-[#eda145]',
     bad: 'bg-bad/15 text-[#ec7f97]',
-    info: 'bg-info/15 text-[#6ea8ee]',
+    info: 'bg-info/15 text-[#6fcf97]',
   }
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${tones[tone]}`}>
