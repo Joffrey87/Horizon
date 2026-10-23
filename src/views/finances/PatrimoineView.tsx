@@ -123,7 +123,9 @@ export function PatrimoineView() {
                       </LienFichePret>
                       {a.kind === 'immobilier' || a.kind === 'pret'
                         ? <MontantSaisi compte={a} />
-                        : <span className={`shrink-0 tabular-nums ${Number(a.balance) < 0 ? 'text-ink-2' : ''}`}>{euros(Number(a.balance))}</span>}
+                        : a.subtype === 'virtuel'
+                          ? <span className="shrink-0 text-[11px] text-ink-3" title="Compte virtuel : pas de solde bancaire, seulement les opérations ventilées">virtuel</span>
+                          : <span className={`shrink-0 tabular-nums ${Number(a.balance) < 0 ? 'text-ink-2' : ''}`}>{euros(Number(a.balance))}</span>}
                     </li>
                   ))}
                 </ul>

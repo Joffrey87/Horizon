@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Check, ChevronRight } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
@@ -24,7 +25,17 @@ const moisLong = (m: string) => format(parseISO(`${m}-01`), 'MMM yyyy', { locale
 export function LienFichePret({ compte, children }: { compte: FinAccount; children: React.ReactNode }) {
   const fiche = useHorizon((s) => s.finLoans.find((l) => l.account_id === compte.id))
   const [ouvert, setOuvert] = useState(false)
-  if (!fiche) return <>{children}</>
+  if (!fiche) {
+    // Compte courant / épargne : toucher le compte ouvre ses opérations (tous les mois).
+    if (compte.kind !== 'courant' && compte.kind !== 'epargne') return <>{children}</>
+    return (
+      <Link to={`/finances/operations?compte=${compte.id}`} data-testid={`compte-${compte.id}`}
+        className="group -mx-1 flex min-w-0 flex-1 items-center gap-1 rounded px-1 text-left hover:bg-panel-2" aria-label={`Opérations du compte ${compte.name}`}>
+        <span className="min-w-0 flex-1">{children}</span>
+        <ChevronRight size={14} className="shrink-0 text-ink-3 group-hover:text-ink" />
+      </Link>
+    )
+  }
   return (
     <>
       <button onClick={() => setOuvert(true)} className="group -mx-1 flex min-w-0 flex-1 items-center gap-1 rounded px-1 text-left hover:bg-panel-2"

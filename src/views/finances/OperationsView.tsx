@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Search } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import { NON_CLASSE, classer, correspond, euros, lignesTriees, moisDe, titulaireDe } from '../../lib/finances'
@@ -18,8 +19,9 @@ export function OperationsView() {
   const lines = useHorizon((s) => s.finLines)
   const idx = useIndex()
   const reco = useReconnaissance()
-  const [tousLesMois, setTousLesMois] = useState(false)
-  const [compte, setCompte] = useState('')
+  const [params] = useSearchParams()
+  const [tousLesMois, setTousLesMois] = useState(() => !!params.get('compte'))
+  const [compte, setCompte] = useState(() => params.get('compte') ?? '')
   const [portee, setPortee] = useState<Portee>('budget')
   const [texte, setTexte] = useState('')
   const [limite, setLimite] = useState(PAR_PAGE)
