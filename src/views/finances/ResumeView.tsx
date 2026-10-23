@@ -56,9 +56,9 @@ function CorpsTuile({ t, edition, bureau }: { t: TuileBudget; edition: ReturnTyp
         <p className={`truncate font-semibold text-ink-2 ${bureau ? 'text-[15px]' : 'text-[13px]'}`}>{t.titre}</p>
         <p className={`whitespace-nowrap font-medium tabular-nums text-ink-3 ${bureau ? 'text-[12px]' : 'text-[11.5px]'}`}>
           {t.budget !== null ? (
-            <>{euros(t.depense)} / <MontantBudget montant={t.budget} ajustement={edition.ajustement(t.ligneId)} onOuvrir={ouvrir} discret /></>
+            <>{euros(t.depense)} / <MontantBudget montant={t.budget} ajustement={edition.ajustement(t.ligneId)} onOuvrir={ouvrir} discret pointille /></>
           ) : ouvrir ? (
-            <button type="button" onClick={ouvrir} data-testid="budget-fixer" className="-m-1 p-1 text-sun-soft/80 hover:text-sun-soft">fixer un budget</button>
+            <button type="button" onClick={ouvrir} data-testid="budget-fixer" className="-m-1 p-1 text-sun-soft/80 underline decoration-dotted decoration-sun-soft/60 underline-offset-2 hover:text-sun-soft">fixer un budget</button>
           ) : null}
         </p>
       </div>

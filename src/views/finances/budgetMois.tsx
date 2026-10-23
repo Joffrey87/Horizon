@@ -37,14 +37,14 @@ export function useBudgetMois() {
 
 /**
  * Le montant du budget : un bouton (si `onOuvrir`) qui ouvre la saisie ; ambre et souligné quand le budget
- * est ajusté pour ce mois. Sans budget : `vide`. `discret` : pas de pointillé quand il n'est pas ajusté.
+ * est ajusté pour ce mois. Sans budget : `vide`. `discret` : pas de pointillé quand il n'est pas ajusté. `pointille` (Résumé) : soulignement pointillé fin, ambre si ajusté.
  */
-export function MontantBudget({ montant, ajustement, onOuvrir, vide = '—', className = '', discret = false }: {
-  montant: number | null; ajustement?: Ajustement; onOuvrir?: () => void; vide?: string; className?: string; discret?: boolean
+export function MontantBudget({ montant, ajustement, onOuvrir, vide = '—', className = '', discret = false, pointille = false }: {
+  montant: number | null; ajustement?: Ajustement; onOuvrir?: () => void; vide?: string; className?: string; discret?: boolean; pointille?: boolean
 }) {
   const ajuste = ajustement?.ajuste ?? false
   const texte = montant !== null && montant > 0 ? euros(montant) : vide
-  const classe = `tabular-nums ${ajuste ? CLASSE_AJUSTE : onOuvrir && !discret ? 'decoration-dotted underline-offset-4 underline' : ''} ${className}`
+  const classe = `tabular-nums ${pointille ? (ajuste ? 'font-semibold text-sun underline decoration-dotted decoration-sun underline-offset-2' : 'underline decoration-dotted decoration-ink-3/60 underline-offset-2') : ajuste ? CLASSE_AJUSTE : onOuvrir && !discret ? 'decoration-dotted underline-offset-4 underline' : ''} ${className}`
   const titre = ajuste ? `Ajusté pour ce mois${ajustement?.base ? ` (habituel : ${euros(ajustement.base)})` : ''}` : 'Changer le budget de ce mois'
   return onOuvrir
     ? <button type="button" onClick={onOuvrir} title={titre} data-testid="budget-montant" data-ajuste={ajuste || undefined}
