@@ -3,7 +3,7 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   Home, FolderKanban, ListTodo, Compass, CalendarDays, CalendarRange,
   Repeat, ClipboardCheck, Network, Settings, Plus, LogOut, Menu, ArrowLeft, ShieldCheck, Timer, Newspaper,
-  AlertTriangle, X, RotateCw, ArrowLeftRight, Wallet, Eye, Hourglass, ShoppingCart,
+  AlertTriangle, X, RotateCw, ArrowLeftRight, Wallet, Eye, Hourglass, ShoppingCart, Euro,
 } from 'lucide-react'
 import { useHorizon, vueCourante } from '../lib/store'
 import { ONGLETS_PARTAGE, pageAccueil, routeAutorisee } from '../lib/partage'
@@ -139,10 +139,16 @@ export function Shell({ children }: { children: ReactNode }) {
           </Link>
           {/* Agenda : raccourci vers la liste de courses, à côté du logo. */}
           {caddie && (
-            <Link to={ROUTE_COURSES} onClick={() => setMenuOpen(false)} className="btn-ghost ml-auto p-2"
-              aria-label="Liste de courses" title="Liste de courses">
-              <ShoppingCart size={18} strokeWidth={1.9} />
-            </Link>
+            <div className="ml-auto flex items-center gap-1">
+              <Link to={ROUTE_COURSES} onClick={() => setMenuOpen(false)} className="btn-ghost p-2"
+                aria-label="Liste de courses" title="Liste de courses">
+                <ShoppingCart size={18} strokeWidth={1.9} />
+              </Link>
+              <Link to="/finances" onClick={() => setMenuOpen(false)} className="btn-ghost p-2"
+                aria-label="Résumé des finances" title="Résumé des finances">
+                <Euro size={18} strokeWidth={1.9} />
+              </Link>
+            </div>
           )}
         </div>
 
@@ -231,6 +237,11 @@ export function Shell({ children }: { children: ReactNode }) {
               {caddie && (
                 <Link to={ROUTE_COURSES} className="btn-ghost p-2" aria-label="Liste de courses" title="Liste de courses">
                   <ShoppingCart size={18} strokeWidth={1.9} />
+                </Link>
+              )}
+              {caddie && (
+                <Link to="/finances" className="btn-ghost p-2" aria-label="Résumé des finances" title="Résumé des finances">
+                  <Euro size={18} strokeWidth={1.9} />
                 </Link>
               )}
               {plusEnHaut && <BoutonPlus onClick={() => setCapture(true)} className="btn-sun flex h-9 w-9 shrink-0 items-center justify-center rounded-full p-0 shadow shadow-black/40" />}
