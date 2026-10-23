@@ -42,7 +42,7 @@ export function SemaineBriques({ anchor, onEdit, onCreate, onStep, onMove, onOpe
   const affiches = telephone ? jours.slice(0, 6) : jours
   const dimanche = jours[6]!
   const aDimanche = telephone
-    && tasksForDay(s.tasks, dimanche).length + stepsForDay(s.steps, dimanche).length + birthdaysForDay(s.birthdays, dimanche).length > 0
+    && tasksForDay(s.tasks, dimanche).filter((t) => spanPart(t, iso(dimanche)) === 'single').length + stepsForDay(s.steps, dimanche).length + birthdaysForDay(s.birthdays, dimanche).length > 0
 
   // Téléphone : jamais de défilement. Si une semaine très chargée dépasse la hauteur disponible, les briques se
   // resserrent d'un cran (0 normal → 1 serré : heure sur la ligne du titre → 2 une seule ligne), jusqu'à tenir.
@@ -62,6 +62,7 @@ export function SemaineBriques({ anchor, onEdit, onCreate, onStep, onMove, onOpe
 
   return (
     <Card className="flex min-h-0 min-w-0 flex-1 flex-col !border-line-2/60 !bg-transparent !p-2 max-md:!p-1">
+      <BandeauxSemaine jours={jours} tel={telephone} onEdit={onEdit} />
       <div ref={defile} className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:none]">
         <div className={`grid min-h-full ${telephone ? 'grid-cols-3 gap-1' : 'grid-cols-7 gap-2'}`}
           style={telephone ? { gridTemplateRows: 'repeat(2, minmax(min-content, 1fr))' } : undefined}>
@@ -73,6 +74,48 @@ export function SemaineBriques({ anchor, onEdit, onCreate, onStep, onMove, onOpe
       </div>
       {aDimanche && <LigneDimanche day={dimanche} onOpenDay={onOpenDay} />}
     </Card>
+  )
+}
+
+/** Évènements multi-jours (ex. « Anglais EAO » du lundi au dimanche) : comme en vue Mois, une barre pleine
+ *  continue sur les jours couverts, titre écrit une seule fois ; plus de répétition dans chaque jour.
+ *  Bureau : aligné sur les 7 colonnes. Téléphone (grille 3 × 2) : une frise de 7 jours au-dessus de la grille. */
+function BandeauxSemaine({ jours, tel, onEdit }: { jours: Date[]; tel: boolean; onEdit: (t: Task) => void }) {
+  const s = useHorizon()
+  const debut = iso(jours[0]!), fin = iso(jours[6]!)
+  const multi = s.tasks
+    .filter((t) => t.scheduled_date && t.end_date && t.end_date > t.scheduled_date && t.scheduled_date <= fin && t.end_date >= debut)
+    .sort((a, b) => a.scheduled_date!.localeCompare(b.scheduled_date!) || b.end_date!.localeCompare(a.end_date!) || a.id.localeCompare(b.id))
+  if (multi.length === 0) return null
+  const col = (d: string) => jours.findIndex((j) => iso(j) === d)
+  return (
+    <div className={`mb-1 grid shrink-0 grid-cols-7 ${tel ? 'gap-x-0.5 gap-y-0.5' : 'gap-x-2 gap-y-1'}`} style={{ gridAutoFlow: 'row dense' }}>
+      {multi.map((t) => {
+        const projet = t.project_id ? s.projects.find((p) => p.id === t.project_id) : undefined
+        const domaine = s.domains.find((x) => x.id === (t.domain_id ?? projet?.domain_id))
+        const c = couleurProjet(projet, s.domains) ?? domaine?.color ?? EVENT_DEFAULT_COLOR
+        const avant = t.scheduled_date! < debut, apres = t.end_date! > fin
+        const a = avant ? 0 : col(t.scheduled_date!), b = apres ? 6 : col(t.end_date!)
+        const r = tel ? 7 : 8
+        const plage = `${format(parseISO(t.scheduled_date!), 'd MMM', { locale: fr })} → ${format(parseISO(t.end_date!), 'd MMM', { locale: fr })}`
+        const fait = !t.is_recurring && t.status === 'fait'
+        return (
+          <button key={t.id} draggable={!t.is_recurring} onDragStart={dragData('task', t.id)}
+            onClick={(e) => { e.stopPropagation(); onEdit(t) }} title={`${t.title} · ${plage}`}
+            className={`flex min-w-0 items-center overflow-hidden whitespace-nowrap text-left font-semibold text-ink ${tel ? 'h-[20px] px-1.5 text-[10.5px]' : 'h-6 px-2 text-[12px]'} ${fait ? 'opacity-55 line-through' : ''}`}
+            style={{
+              gridColumn: `${a + 1} / ${b + 2}`, background: `${c}c2`,
+              borderTopLeftRadius: avant ? 0 : r, borderBottomLeftRadius: avant ? 0 : r,
+              borderTopRightRadius: apres ? 0 : r, borderBottomRightRadius: apres ? 0 : r,
+            }}>
+            {avant && <span className="mr-1 opacity-70">‹</span>}
+            {projet && <IconeProjet project={projet} size={tel ? 10 : 12} className="mr-1 shrink-0" />}
+            <span className="min-w-0 overflow-hidden text-clip">{sansHeure(t.title)}</span>
+            {apres && <span className="ml-auto pl-1 opacity-70">›</span>}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -89,8 +132,8 @@ function ColonneJour({ day, mode, niveau, onEdit, onCreate, onStep, onMove, onOp
   // Téléphone : la garde CAPS du jour devient une bande pleine (voir BandeService), pas une brique.
   const bande = tel ? bandeService(s.tasks, d) : null
   const taches = [...tasksForDay(s.tasks, day)]
-    .filter((t) => t.id !== bande?.id)
-    .map((t) => ({ t, span: spanPart(t, d) !== 'single' }))
+    .filter((t) => t.id !== bande?.id && spanPart(t, d) === 'single')   // multi-jours : bandeau en haut de semaine
+    .map((t) => ({ t, span: false }))
     .sort((a, b) => ordreSemaine(a.t, b.t, a.span, b.span))
   const steps = stepsForDay(s.steps, day)
   const anniv = birthdaysForDay(s.birthdays, day)
@@ -185,7 +228,7 @@ function LigneDimanche({ day, onOpenDay }: { day: Date; onOpenDay: (d: Date) => 
   const d = iso(day)
   const bande = bandeService(s.tasks, d)
   const puces: { key: string; heure: string | null; min?: number | null; titre: string; couleur: string }[] = [
-    ...[...tasksForDay(s.tasks, day)].filter((t) => t.id !== bande?.id)
+    ...[...tasksForDay(s.tasks, day)].filter((t) => t.id !== bande?.id && spanPart(t, d) === 'single')
       .map((t) => ({ t, span: spanPart(t, d) !== 'single' }))
       .sort((a, b) => ordreSemaine(a.t, b.t, a.span, b.span))
       .map(({ t }) => {
