@@ -1,26 +1,39 @@
 import { describe, it, expect } from 'vitest'
-import { hauteurBrique, libelleDuree, libelleHeures, notePropre, ordreSemaine } from './semaine'
+import { ECHELLE_TELEPHONE, bandeService, hauteurBrique, libelleDuree, libelleHeures, notePropre, ordreSemaine } from './semaine'
 import type { Task } from './types'
 
 const t = (title: string, extra: Partial<Task> = {}) => ({ id: title, title, duration_min: null, scheduled_date: null, ...extra }) as Task
 
 describe('hauteurBrique', () => {
-  it('bureau : 18 px/h + 40, entre 58 et 150', () => {
+  it('bureau (inchangé) : 18 px/h + 40, entre 58 et 150', () => {
     expect(hauteurBrique(45, 'bureau')).toBe(58)
     expect(hauteurBrique(60, 'bureau')).toBe(58)
     expect(hauteurBrique(150, 'bureau')).toBe(85)
     expect(hauteurBrique(480, 'bureau')).toBe(150)
     expect(hauteurBrique(1440, 'bureau')).toBe(150)
   })
-  it('téléphone : 22 px/h, entre 52 et 200', () => {
-    expect(hauteurBrique(45, 'telephone')).toBe(52)
-    expect(hauteurBrique(300, 'telephone')).toBe(110)
-    expect(hauteurBrique(480, 'telephone')).toBe(176)
-    expect(hauteurBrique(1200, 'telephone')).toBe(200)
+  it('téléphone : de 36 (≤ 1 h) à 88 (8 h) px, plafonné à 88', () => {
+    expect(hauteurBrique(45, 'telephone')).toBe(36)
+    expect(hauteurBrique(300, 'telephone')).toBe(66)
+    expect(hauteurBrique(480, 'telephone')).toBe(88)
+    expect(hauteurBrique(1200, 'telephone')).toBe(88)
+  })
+  it('téléphone : 8 h = la moitié de l’ancienne brique J / S1 (176 px)', () => {
+    expect(hauteurBrique(480, 'telephone')).toBe(176 / 2)
+  })
+  it('téléphone : croissante, jamais au-dessus du plafond ni sous le minimum', () => {
+    let prec = 0
+    for (let d = 0; d <= 1600; d += 15) {
+      const h = hauteurBrique(d, 'telephone')
+      expect(h).toBeGreaterThanOrEqual(prec)
+      expect(h).toBeLessThanOrEqual(ECHELLE_TELEPHONE.max)
+      expect(h).toBeGreaterThanOrEqual(ECHELLE_TELEPHONE.min)
+      prec = h
+    }
   })
   it('sans durée : la hauteur minimale', () => {
     expect(hauteurBrique(null, 'bureau')).toBe(58)
-    expect(hauteurBrique(0, 'telephone')).toBe(52)
+    expect(hauteurBrique(0, 'telephone')).toBe(36)
   })
 })
 
@@ -53,5 +66,31 @@ describe('ordreSemaine', () => {
     const spans = new Set(['Vacances'])
     l.sort((a, b) => ordreSemaine(a, b, spans.has(a.title), spans.has(b.title)))
     expect(l.map((x) => x.title)).toEqual(['Vacances', 'Courses', '9h Sport', '14h Rdv'])
+  })
+})
+
+describe('bandeService', () => {
+  const t = (id: string, title: string, date: string, notes: string | null = 'source:caps') => ({ id, title, notes, scheduled_date: date })
+  it('journée de travail : code + plage', () => {
+    const b = bandeService([t('1', '10h30-18h30 J', '2026-10-19')], '2026-10-19')!
+    expect(b.libelle).toBe('J 10h30–18h30')
+    expect(b.id).toBe('1')
+    expect(b.fond).toBe('#f59e0b')
+  })
+  it('nuit : « Nuit » et fin après minuit', () => {
+    expect(bandeService([t('1', '19h45-6h N', '2026-10-25')], '2026-10-25')!.libelle).toBe('Nuit 19h45–6h')
+  })
+  it('jour sans service, congé ou évènement non CAPS : pas de bande', () => {
+    expect(bandeService([], '2026-10-19')).toBeNull()
+    expect(bandeService([t('1', '6h-14h M1 - Vf', '2026-10-19')], '2026-10-19')).toBeNull()
+    expect(bandeService([t('1', '10h30-18h30 J', '2026-10-19', null)], '2026-10-19')).toBeNull()
+    expect(bandeService([t('1', '10h30-18h30 J', '2026-10-20')], '2026-10-19')).toBeNull()
+  })
+  it('aucune couleur bleue', () => {
+    for (const code of ['M1', 'M2', 'J', 'S1', 'S2', 'N', 'X']) {
+      const { fond } = bandeService([t('1', `6h-14h ${code}`, '2026-10-19')], '2026-10-19')!
+      const [r, , b] = [1, 3, 5].map((i) => parseInt(fond.slice(i, i + 2), 16))
+      expect(b!).toBeLessThan(r!)
+    }
   })
 })
