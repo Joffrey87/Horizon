@@ -13,7 +13,7 @@ import type { Step, Task } from '../lib/types'
 import { MassPickCtx, type Kind, type MoveFn } from './temps/partage'
 import { MassPicker } from './temps/MassPicker'
 import { DayCell } from './temps/DayCell'
-import { WeekHours } from './temps/SemaineHeures'
+import { SemaineBriques } from './temps/SemaineBriques'
 import { NotesSemaine } from './temps/NotesSemaine'
 import { MoisTelephone } from './temps/MoisTelephone'
 import { NavPeriode, type VueTemps } from './temps/NavPeriode'
@@ -152,10 +152,10 @@ export function TimeView() {
             {agendaRelie && <>
             {view === '4sem' && !moisTel && <FourWeeks anchor={anchor} focus={focus} fenetre={fenetre} onOpenDay={setJourOuvert} {...common} />}
             {moisTel && <MoisTelephone anchor={anchor} fenetre={fenetre} onShift={pas} onOpenDay={setJourOuvert} {...common} />}
-            {/* Semaine : la grille prend toute la hauteur (jours entiers). */}
+            {/* Semaine : briques empilées par jour, hauteur selon la durée. */}
             {view === 'semaine' && (
               <div className="flex h-full min-h-[340px] md:min-h-0">
-                <WeekHours anchor={anchor} {...common} />
+                <SemaineBriques anchor={anchor} onOpenDay={setJourOuvert} {...common} />
               </div>
             )}
             {view === 'trimestre' && <MultiMonth anchor={anchor} months={3} {...common} />}
