@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Heart, Plane, ShoppingCart, Sofa, Wallet, Zap, type LucideIcon } from 'lucide-react'
+import { Heart, PiggyBank, Plane, ShoppingCart, Sofa, Wallet, Zap, type LucideIcon } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import { euros } from '../../lib/finances'
 import { COULEURS_ANNEAU, eclaircie, rgba, tuilesBudgets, type TuileBudget } from '../../lib/resume'
@@ -15,6 +15,10 @@ import { useMediaQuery } from '../../lib/useMediaQuery'
 const ICONES: Record<string, LucideIcon> = {
   courses: ShoppingCart, amenagement: Sofa, vacances: Plane, courantes: Wallet, exceptionnelles: Zap, dons: Heart,
 }
+
+/** Cible mensuelle d'Épargne avenir : l'anneau d'« Épargné » est plein à ce montant. */
+export const CIBLE_EPARGNE_AVENIR = 1000
+const estAvenir = (nom?: string | null) => (nom ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes('epargne avenir')
 
 /** Anneau de part consommée (plafonnée à 100 % pour le tracé), l'icône du budget au centre. Aucun chiffre dedans. */
 function Anneau({ ratio, couleur, taille, trait = 4, halo = false, children }: {
@@ -144,7 +148,8 @@ export function ResumeView() {
   const basculerTuile = (cle: string) => setOuvertes((o) => { const n = new Set(o); if (n.has(cle)) n.delete(cle); else n.add(cle); return n })
 
   // Mêmes chiffres que le Budget : un seul calcul (tuilesMois.ts), capital de prêt compté en épargne et non en dépense.
-  const { s, aVenir, epPrevues, listeEp, budgetDepenses, reelDepenses, resteTuile, epargne } = useTuilesMois()
+  const { s, aVenir, epPrevues, listeEp, budgetDepenses, reelDepenses, resteTuile, epargne, epargnes } = useTuilesMois()
+  const avenir = epargnes.filter((l) => estAvenir(l.ligne?.name)).reduce((a, l) => a + l.reel, 0)
   const resteValable = resteTuile !== null
   const edition = useBudgetMois()
   const aPayer = aVenir.total + epPrevues.total
@@ -177,7 +182,14 @@ export function ResumeView() {
       onClick={() => setDetail(detail === 'epargne' ? null : 'epargne')} title="Voir les épargnes du mois"
       className={`${bureau ? 'verre verre-tuile' : 'card px-3 py-3'} text-left`}>
       <p className="block-title">Épargné</p>
-      <p className={`whitespace-nowrap font-bold tabular-nums ${bureau ? 'my-0.5 text-[30px] leading-tight' : 'my-1 text-[28px]'}`} style={{ color: COULEURS_ANNEAU.ok }}>{euros(epargne)}</p>
+      <div className="flex items-center gap-2.5">
+        <span data-testid="anneau-epargne" data-avenir={Math.round(avenir)}>
+          <Anneau ratio={Math.max(0, avenir) / CIBLE_EPARGNE_AVENIR} couleur={COULEURS_ANNEAU.ok} taille={bureau ? 34 : 36} trait={bureau ? 2 : 3} halo={bureau}>
+            <PiggyBank size={bureau ? 15 : 16} style={{ color: COULEURS_ANNEAU.ok }} aria-hidden />
+          </Anneau>
+        </span>
+        <p className={`whitespace-nowrap font-bold tabular-nums ${bureau ? 'my-0.5 text-[30px] leading-tight' : 'my-1 text-[28px]'}`} style={{ color: COULEURS_ANNEAU.ok }}>{euros(epargne)}</p>
+      </div>
     </button>
   )
   const hautDeVue = (
