@@ -58,7 +58,7 @@ export function BudgetView() {
   // Budget d'une ligne pour ce mois seulement (même fenêtre que dans le Résumé).
   const budgetMois = useBudgetMois()
 
-  const { s, depenses, epargnes, capitalRetire, capitalMois, aVenir, epPrevues, listeEp, budgetDepenses, reelDepenses, resteTuile, epargne } = useTuilesMois()
+  const { s, depenses, epargnes, capitalMois, aVenir, epPrevues, listeEp, budgetDepenses, reelDepenses, resteTuile, epargne } = useTuilesMois()
   const prevues = useMemo(() => entreesPrevues({ mois, transactions, idx, filtre }), [mois, transactions, idx, filtre])
   const foyer = filtre === 'foyer'
   const suivant = decaleMois(mois, 1)
@@ -204,12 +204,12 @@ export function BudgetView() {
             <button type="button" data-testid="tuile-epargne" aria-expanded={detailTuile === 'epargne'}
               onClick={() => setDetailTuile(detailTuile === 'epargne' ? null : 'epargne')}
               title="Voir les épargnes du mois" className="rounded-[inherit] text-left">
-              <Tuile compacte titre="Épargné" valeur={euros(epargne)} />
+              <Tuile compacte titre="Épargné" valeur={euros(epargne)} ton="ok" />
             </button>
           </div>
 
           {detailTuile === 'reste' && resteTuile !== null && (
-            <DetailReste budget={budgetDepenses} depense={reelDepenses} aVenir={aVenir} epargnes={epPrevues} capital={capitalRetire} resteTuile={resteTuile} />
+            <DetailReste budget={budgetDepenses} depense={reelDepenses} aVenir={aVenir} epargnes={epPrevues} resteTuile={resteTuile} />
           )}
           {detailTuile === 'epargne' && <DetailEpargne liste={listeEp} />}
 

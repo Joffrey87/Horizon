@@ -42,9 +42,9 @@ export function FiltreSeg({ value, onChange }: { value: FiltreTitulaire; onChang
 
 /** Tuile chiffre clé. `compacte` : tout sur une ligne (titre, détail, montant). */
 export function Tuile({ titre, valeur, detail, ton, compacte = false }: {
-  titre: string; valeur: string; detail?: ReactNode; ton?: 'warn' | 'good'; compacte?: boolean
+  titre: string; valeur: string; detail?: ReactNode; ton?: 'warn' | 'good' | 'ok'; compacte?: boolean
 }) {
-  const couleur = ton === 'warn' ? 'text-[#eda145]' : ton === 'good' ? 'text-[#4cc79a]' : ''
+  const couleur = ton === 'warn' ? 'text-[#eda145]' : ton === 'good' ? 'text-[#4cc79a]' : ton === 'ok' ? 'text-[#86c36b]' : ''
   if (compacte) {
     // Une seule ligne : titre et détail à gauche, montant à droite.
     return (
@@ -60,7 +60,7 @@ export function Tuile({ titre, valeur, detail, ton, compacte = false }: {
   return (
     <div className="card px-4 py-3">
       <p className="block-title">{titre}</p>
-      <p className={`mt-1 text-xl font-semibold tabular-nums ${ton === 'warn' ? 'text-[#eda145]' : ton === 'good' ? 'text-[#4cc79a]' : ''}`}>
+      <p className={`mt-1 text-xl font-semibold tabular-nums ${ton === 'warn' ? 'text-[#eda145]' : ton === 'good' ? 'text-[#4cc79a]' : ton === 'ok' ? 'text-[#86c36b]' : ''}`}>
         {valeur}
       </p>
       {detail && <p className="mt-0.5 text-xs text-ink-3">{detail}</p>}

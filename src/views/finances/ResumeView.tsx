@@ -10,23 +10,26 @@ import { useTuilesMois } from './tuilesMois'
 import { useFin, useVue } from './contexte'
 import { MontantBudget, useBudgetMois } from './budgetMois'
 import { DetailLigne } from './DetailLigne'
+import { useMediaQuery } from '../../lib/useMediaQuery'
 
 const ICONES: Record<string, LucideIcon> = {
   courses: ShoppingCart, amenagement: Sofa, vacances: Plane, courantes: Wallet, exceptionnelles: Zap, dons: Heart,
 }
 
 /** Anneau de part consommée (plafonnée à 100 % pour le tracé), l'icône du budget au centre. Aucun chiffre dedans. */
-function Anneau({ ratio, couleur, taille, children }: { ratio: number | null; couleur: string; taille: number; children: ReactNode }) {
-  const trait = 4
+function Anneau({ ratio, couleur, taille, trait = 4, halo = false, children }: {
+  ratio: number | null; couleur: string; taille: number; trait?: number; halo?: boolean; children: ReactNode
+}) {
   const r = taille / 2 - trait / 2
   const circ = 2 * Math.PI * r
   const trace = ratio === null ? 0 : Math.min(1, ratio) * circ
   return (
     <span className="relative inline-flex shrink-0 items-center justify-center" style={{ width: taille, height: taille }}>
       <svg width={taille} height={taille} viewBox={`0 0 ${taille} ${taille}`} className="absolute inset-0" aria-hidden>
-        <circle cx={taille / 2} cy={taille / 2} r={r} fill="none" stroke="rgba(255,255,255,.10)" strokeWidth={trait} />
+        <circle cx={taille / 2} cy={taille / 2} r={r} fill="none" stroke="rgba(255,255,255,.12)" strokeWidth={trait} />
         <circle cx={taille / 2} cy={taille / 2} r={r} fill="none" stroke={couleur} strokeWidth={trait} strokeLinecap={trace > 0 ? 'round' : 'butt'}
-          strokeDasharray={`${trace.toFixed(1)} ${circ.toFixed(1)}`} transform={`rotate(-90 ${taille / 2} ${taille / 2})`} />
+          strokeDasharray={`${trace.toFixed(1)} ${circ.toFixed(1)}`} transform={`rotate(-90 ${taille / 2} ${taille / 2})`}
+          style={halo && trace > 0 ? { filter: `drop-shadow(0 0 4px ${couleur})` } : undefined} />
       </svg>
       <span className="relative flex">{children}</span>
     </span>
@@ -84,6 +87,51 @@ function TuileBudgetAnneau({ t, edition, ouvert, onBasculer }: {
 }
 
 /**
+ * Version bureau d'une ligne de budget : posée dans un panneau de verre, presque transparente, séparée de la précédente
+ * par un filet. Anneau fin et icône à gauche, nom, puis « restant / budget » à droite. Le clic la déplie (détail par
+ * catégorie) ; le clic sur le montant du budget change celui de ce mois.
+ */
+function LigneVerre({ t, edition, ouvert, onBasculer }: {
+  t: TuileBudget; edition: ReturnType<typeof useBudgetMois>; ouvert: boolean; onBasculer: () => void
+}) {
+  const Icone = ICONES[t.cle] ?? Wallet
+  const depasse = t.ton === 'depasse'
+  const clair = eclaircie(t.rvb, 0.24)
+  const ouvrir = edition.peutModifier && t.ligneId ? () => edition.ouvrir({ id: t.ligneId!, name: t.titre }, t.budget) : undefined
+  const depliable = t.ligneId !== null
+  return (
+    <div data-testid={`tuile-${t.cle}`} data-ton={t.ton} data-ouvert={ouvert || undefined} className="border-t border-white/[.09] first:border-t-0">
+      <div role={depliable ? 'button' : undefined} tabIndex={depliable ? 0 : undefined} aria-expanded={depliable ? ouvert : undefined}
+        onClick={(e) => { if (depliable && !(e.target as HTMLElement).closest('button, a')) onBasculer() }}
+        onKeyDown={(e) => { if (depliable && e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onBasculer() } }}
+        className={`flex h-[72px] items-center gap-[18px] ${depliable ? 'cursor-pointer' : ''}`}>
+        <Anneau ratio={t.ratio} couleur={depasse ? COULEURS_ANNEAU.depasse : clair} taille={40} trait={2} halo>
+          <Icone size={17} color={clair} strokeWidth={1.8} />
+        </Anneau>
+        <p className="min-w-0 flex-1 truncate text-[15px] font-medium text-ink-2">{t.titre}</p>
+        <p className="flex items-baseline gap-1.5 whitespace-nowrap">
+          <b className="text-[22px] font-bold leading-none tabular-nums" style={{ color: t.restant !== null && t.restant < 0 ? COULEURS_ANNEAU.depasse : 'var(--color-ink)' }}>
+            {euros(t.restant ?? t.depense)}
+          </b>
+          {t.budget !== null && (
+            <span className="text-[13px] font-medium text-ink-3">
+              / <MontantBudget montant={t.budget} ajustement={edition.ajustement(t.ligneId)} onOuvrir={ouvrir} discret />
+            </span>
+          )}
+          {t.budget === null && ouvrir && (
+            <button type="button" onClick={ouvrir} data-testid="budget-fixer"
+              className="text-[13px] text-sun underline decoration-dotted underline-offset-4">fixer un budget</button>
+          )}
+        </p>
+      </div>
+      {ouvert && t.ligneId && (
+        <div className="pb-2"><DetailLigne cle={t.ligneId} couleur={clair} /></div>
+      )}
+    </div>
+  )
+}
+
+/**
  * Résumé : l'accueil de l'onglet Finances. Reste et Épargné du mois, puis « Restant » : une tuile à anneau
  * par budget du foyer (Courses, Aménagement, Vacances, Dépenses courantes, exceptionnelles, puis Dons à part).
  * Suit le mois et le filtre Foyer / Commun / Joffrey / Honorine, comme le Budget.
@@ -99,66 +147,99 @@ export function ResumeView() {
   const basculerTuile = (cle: string) => setOuvertes((o) => { const n = new Set(o); if (n.has(cle)) n.delete(cle); else n.add(cle); return n })
 
   // Mêmes chiffres que le Budget : un seul calcul (tuilesMois.ts), capital de prêt compté en épargne et non en dépense.
-  const { s, capitalRetire, aVenir, epPrevues, listeEp, budgetDepenses, reelDepenses, resteTuile, epargne } = useTuilesMois()
+  const { s, aVenir, epPrevues, listeEp, budgetDepenses, reelDepenses, resteTuile, epargne } = useTuilesMois()
   const resteValable = resteTuile !== null
   const edition = useBudgetMois()
   const aPayer = aVenir.total + epPrevues.total
 
+  // Bureau (≥ md, là où la barre latérale est affichée) : panneaux de verre ; téléphone : tuiles teintées.
+  const bureau = useMediaQuery('(min-width: 768px)')
   const tuiles = useMemo(() => tuilesBudgets(s.lignes).filter((t) => !t.absente), [s.lignes])
 
   if (!lines.length) {
     return <EmptyState hint="Crée tes lignes (Frais fixe, Courses…) dans Réglages.">Aucune ligne de budget pour l’instant.</EmptyState>
   }
 
+  const resteBtn = !vue && (
+    <button type="button" data-testid="tuile-reste" aria-expanded={detail === 'reste'} disabled={!resteValable}
+      onClick={() => setDetail(detail === 'reste' ? null : 'reste')} title="Voir le détail du calcul"
+      className={`${bureau ? 'verre verre-tuile' : 'card px-3 py-3'} text-left disabled:cursor-default`}
+      style={bureau ? undefined : { borderColor: 'rgba(245,158,11,.4)', background: 'linear-gradient(135deg, rgba(245,158,11,.14), rgba(25,21,18,.9) 70%)' }}>
+      <p className="block-title">{resteTuile !== null && resteTuile < 0 ? 'Au-delà du budget' : 'Reste'}</p>
+      <p className="my-1 whitespace-nowrap text-[28px] font-bold tabular-nums lg:text-4xl"
+        style={{ color: resteTuile === null ? '#857c6d' : resteTuile < 0 ? COULEURS_ANNEAU.depasse : COULEURS_ANNEAU.ok }}>
+        {resteTuile === null ? '—' : euros(Math.abs(resteTuile))}
+      </p>
+      <p className="text-[11px] leading-snug text-ink-3 lg:text-xs">
+        {resteTuile === null ? 'budget : vue Foyer' : aPayer > 0.5 ? `${euros(aPayer)} dépenses à venir` : ' '}
+      </p>
+    </button>
+  )
+  const epargneBtn = (
+    <button type="button" data-testid="tuile-epargne" aria-expanded={detail === 'epargne'}
+      onClick={() => setDetail(detail === 'epargne' ? null : 'epargne')} title="Voir les épargnes du mois"
+      className={`${bureau ? 'verre verre-tuile' : 'card px-3 py-3'} text-left`}>
+      <p className="block-title">Épargné</p>
+      <p className="my-1 whitespace-nowrap text-[28px] font-bold tabular-nums lg:text-4xl" style={{ color: COULEURS_ANNEAU.ok }}>{euros(epargne)}</p>
+    </button>
+  )
+  const hautDeVue = (
+    <div className={`grid gap-2.5 ${bureau ? 'gap-3' : ''} ${vue ? '' : 'grid-cols-2'}`}>
+      {resteBtn}
+      {epargneBtn}
+      {detail === 'reste' && resteTuile !== null && (
+        <div className="col-span-2 flex justify-center">
+          <DetailReste budget={budgetDepenses} depense={reelDepenses} aVenir={aVenir} epargnes={epPrevues} resteTuile={resteTuile} />
+        </div>
+      )}
+      {detail === 'epargne' && <div className={`flex justify-center ${vue ? '' : 'col-span-2'}`}><DetailEpargne liste={listeEp} /></div>}
+    </div>
+  )
+  const noteFiltre = !foyer && <p className="-mt-1 text-[11px] text-ink-3">Les budgets sont ceux du foyer : ici, ce que {filtre === 'commun' ? 'le compte commun' : filtre === 'joffrey' ? 'Joffrey' : 'Honorine'} a dépensé. Choisis Foyer pour voir le restant.</p>
+  const vide = <p className="py-4 text-center text-sm text-ink-3">Aucune ligne Courses, Aménagement, Vacances, Dons… trouvée dans ton budget.</p>
+  const entete = (
+    <header className="relative flex items-center justify-between gap-1 sm:gap-3 md:grid md:grid-cols-[1fr_auto_1fr]">
+      <div className="md:justify-self-start"><NavMois mois={mois} onChange={setMois} /></div>
+      <span className="max-md:hidden" />
+      <div className="md:justify-self-end"><FiltreSeg value={filtre} onChange={setFiltre} /></div>
+    </header>
+  )
+  const basculer = (t: TuileBudget) => ({ t, edition, ouvert: ouvertes.has(t.cle), onBasculer: () => basculerTuile(t.cle) })
+
+  if (bureau) {
+    const principales = tuiles.filter((t) => !t.separe)
+    const apart = tuiles.filter((t) => t.separe)
+    return (
+      <div className="rise space-y-3">
+        {edition.dialogue}
+        {entete}
+        <div className="mx-auto w-full max-w-[660px] space-y-3">
+          {hautDeVue}
+          <p className="block-title pt-4 text-center !text-[11.5px] !font-medium !tracking-[.3em] !text-[#e6d9bb]">Restant</p>
+          {noteFiltre}
+          {tuiles.length ? (
+            <>
+              {principales.length > 0 && <div className="verre verre-panneau">{principales.map((t) => <LigneVerre key={t.cle} {...basculer(t)} />)}</div>}
+              {apart.length > 0 && <div className="verre verre-panneau !mt-[22px] !py-0">{apart.map((t) => <LigneVerre key={t.cle} {...basculer(t)} />)}</div>}
+            </>
+          ) : vide}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="rise space-y-3">
       {edition.dialogue}
-      <header className="relative flex items-center justify-between gap-1 sm:gap-3 md:grid md:grid-cols-[1fr_auto_1fr]">
-        <div className="md:justify-self-start"><NavMois mois={mois} onChange={setMois} /></div>
-        <span className="max-md:hidden" />
-        <div className="md:justify-self-end"><FiltreSeg value={filtre} onChange={setFiltre} /></div>
-      </header>
-
-      <div className={`grid gap-2.5 ${vue ? '' : 'grid-cols-2'}`}>
-        {!vue && (
-          <button type="button" data-testid="tuile-reste" aria-expanded={detail === 'reste'} disabled={!resteValable}
-            onClick={() => setDetail(detail === 'reste' ? null : 'reste')} title="Voir le détail du calcul"
-            className="card px-3 py-3 text-left disabled:cursor-default"
-            style={{ borderColor: 'rgba(245,158,11,.4)', background: 'linear-gradient(135deg, rgba(245,158,11,.14), rgba(25,21,18,.9) 70%)' }}>
-            <p className="block-title">{resteTuile !== null && resteTuile < 0 ? 'Au-delà du budget' : 'Reste'}</p>
-            <p className="my-1 whitespace-nowrap text-[28px] font-bold tabular-nums lg:text-4xl"
-              style={{ color: resteTuile === null ? '#857c6d' : resteTuile < 0 ? COULEURS_ANNEAU.depasse : COULEURS_ANNEAU.ok }}>
-              {resteTuile === null ? '—' : euros(Math.abs(resteTuile))}
-            </p>
-            <p className="text-[11px] leading-snug text-ink-3 lg:text-xs">
-              {resteTuile === null ? 'budget : vue Foyer' : aPayer > 0.5 ? `${euros(aPayer)} dépenses à venir` : ' '}
-            </p>
-          </button>
-        )}
-        <button type="button" data-testid="tuile-epargne" aria-expanded={detail === 'epargne'}
-          onClick={() => setDetail(detail === 'epargne' ? null : 'epargne')} title="Voir les épargnes du mois"
-          className="card px-3 py-3 text-left">
-          <p className="block-title">Épargné</p>
-          <p className="my-1 whitespace-nowrap text-[28px] font-bold tabular-nums text-sun-soft lg:text-4xl">{euros(epargne)}</p>
-        </button>
-        {detail === 'reste' && resteTuile !== null && (
-          <div className="col-span-2 flex justify-center">
-            <DetailReste budget={budgetDepenses} depense={reelDepenses} aVenir={aVenir} epargnes={epPrevues} capital={capitalRetire} resteTuile={resteTuile} />
-          </div>
-        )}
-        {detail === 'epargne' && <div className={`flex justify-center ${vue ? '' : 'col-span-2'}`}><DetailEpargne liste={listeEp} /></div>}
-      </div>
-
+      {entete}
+      {hautDeVue}
       <p className="block-title pt-1">Restant</p>
-      {!foyer && <p className="-mt-1 text-[11px] text-ink-3">Les budgets sont ceux du foyer : ici, ce que {filtre === 'commun' ? 'le compte commun' : filtre === 'joffrey' ? 'Joffrey' : 'Honorine'} a dépensé. Choisis Foyer pour voir le restant.</p>}
-
+      {noteFiltre}
       {tuiles.length ? (
         <div className="space-y-1.5 lg:space-y-2">
-          {tuiles.map((t) => <TuileBudgetAnneau key={t.cle} t={t} edition={edition} ouvert={ouvertes.has(t.cle)} onBasculer={() => basculerTuile(t.cle)} />)}
+          {tuiles.map((t) => <TuileBudgetAnneau key={t.cle} {...basculer(t)} />)}
         </div>
-      ) : (
-        <p className="py-4 text-center text-sm text-ink-3">Aucune ligne Courses, Aménagement, Vacances, Dons… trouvée dans ton budget.</p>
-      )}
+      ) : vide}
     </div>
   )
 }

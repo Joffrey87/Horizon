@@ -11,9 +11,12 @@ function LigneDetail({ nom, montant, signe, fin = false, sous = false }: { nom: 
   )
 }
 
-/** Détail synthétique de la tuile « Reste » : budget − dépensé − à venir − épargnes prévues = résultat. */
-export function DetailReste({ budget, depense, aVenir, epargnes, capital, resteTuile }: {
-  budget: number; depense: number; capital: number; resteTuile: number
+/**
+ * Détail de la tuile « Reste » : d'abord ce qui est encore à venir (dépenses, épargnes prévues), puis le Reste,
+ * puis en petit le rappel « (Budget − Déjà dépensé) » avec les vrais chiffres du mois.
+ */
+export function DetailReste({ budget, depense, aVenir, epargnes, resteTuile }: {
+  budget: number; depense: number; resteTuile: number
   aVenir: { total: number; details: { nom: string; montant: number }[] }
   epargnes: { total: number; details: { nom: string; montant: number }[] }
 }) {
@@ -24,16 +27,14 @@ export function DetailReste({ budget, depense, aVenir, epargnes, capital, resteT
   }
   return (
     <div data-testid="detail-reste" className="card mx-auto w-full max-w-md space-y-1 px-4 py-3 text-sm">
-      <LigneDetail nom="Budget des dépenses" montant={budget} />
-      <LigneDetail nom="Déjà dépensé" montant={depense} signe="−" />
       <LigneDetail nom="À venir (récurrentes, courses)" montant={aVenir.total} signe="−" />
       {quelques(aVenir.details).map((d) => <LigneDetail key={d.nom} nom={d.nom} montant={d.montant} sous />)}
       {epargnes.total > 0.5 && <LigneDetail nom="Épargnes prévues restantes" montant={epargnes.total} signe="−" />}
       {quelques(epargnes.details).map((d) => <LigneDetail key={d.nom} nom={d.nom} montant={d.montant} sous />)}
       <LigneDetail fin nom={resteTuile < 0 ? 'Au-delà du budget' : 'Reste'} montant={resteTuile} />
-      {capital > 0.5 && (
-        <p className="pt-1 text-[11px] text-ink-3">Le capital remboursé ({euros(capital)}) n’est pas une dépense : il compte en épargne.</p>
-      )}
+      <p data-testid="detail-reste-calcul" className="pt-0.5 text-[11px] text-ink-3">
+        (Budget ({euros(budget)}) - Déjà dépensé ({euros(depense)}))
+      </p>
     </div>
   )
 }
