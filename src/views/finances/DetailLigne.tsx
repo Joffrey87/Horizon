@@ -144,9 +144,9 @@ function MarchandsLecture({ operations, nomCategorie }: { operations: FinTransac
 /**
  * Version LECTURE SEULE du détail (tuiles du Résumé) : catégorie → sous-catégorie et leur somme du mois.
  * Toucher une sous-catégorie (ou une catégorie sans sous-catégorie) montre ses opérations, regroupées par marchand.
- * Aucune édition. `barres` ajoute une barre de part (de `couleur`).
+ * Aucune édition, aucune barre : seulement les sommes.
  */
-export function DetailLigneLecture({ cle, couleur, barres = true }: { cle: string; couleur: string; barres?: boolean }) {
+export function DetailLigneLecture({ cle, couleur, barres = false }: { cle: string; couleur: string; barres?: boolean }) {
   const { mois, filtre } = useFin()
   const transactions = useHorizon((s) => s.finTransactions)
   const idx = useIndex()

@@ -104,7 +104,7 @@ function TuileBudgetAnneau({ t, edition, ouvert, onBasculer }: {
       </div>
       {ouvert && t.ligneId && (
         <div className="max-h-[45vh] overflow-y-auto rounded-b-[14px] border border-t-0 px-3 py-0.5" style={{ borderColor: rgba(t.rvb, 0.28), background: 'rgba(33,28,22,.55)' }}>
-          <DetailLigneLecture cle={t.ligneId} couleur={clair} barres={t.cle !== 'courantes'} />
+          <DetailLigneLecture cle={t.ligneId} couleur={clair} />
         </div>
       )}
     </div>
@@ -126,7 +126,7 @@ function LigneVerre({ t, edition, ouvert, onBasculer }: {
         <CorpsTuile t={t} edition={edition} bureau />
       </div>
       {ouvert && t.ligneId && (
-        <div className="max-h-[45vh] overflow-y-auto pb-2"><DetailLigneLecture cle={t.ligneId} couleur={clair} barres={t.cle !== 'courantes'} /></div>
+        <div className="max-h-[45vh] overflow-y-auto pb-2"><DetailLigneLecture cle={t.ligneId} couleur={clair} /></div>
       )}
     </div>
   )
