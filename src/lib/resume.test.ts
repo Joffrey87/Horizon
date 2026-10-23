@@ -1,0 +1,115 @@
+import { describe, expect, it } from 'vitest'
+import type { FinLine } from './types'
+import type { LigneBudget } from './finances'
+import { PAGES_FINANCES, pagesFinancesVisibles } from './financesNav'
+import { BUDGETS_RESUME, COULEURS_ANNEAU, epargnePrevue, ligneParNom, tonAnneau, tuileBudget, tuilesBudgets } from './resume'
+
+const ligne = (name: string, kind: FinLine['kind'] = 'depense', id = name): FinLine =>
+  ({ id, user_id: 'u', name, kind, color: null, sort_order: 0, created_at: '2026-01-01' })
+const lb = (l: FinLine, budget: number | null, reel: number): LigneBudget =>
+  ({ cle: l.id, ligne: l, budget, reel, precedent: 0, moyenne3: 0, prevision: null, previsionSaisie: false })
+
+describe('couleur de l’anneau', () => {
+  it('vert sous 75 %', () => {
+    expect(tonAnneau(0)).toBe('ok')
+    expect(tonAnneau(0.5)).toBe('ok')
+    expect(tonAnneau(0.7499)).toBe('ok')
+  })
+  it('ambre de 75 % à 100 % inclus', () => {
+    expect(tonAnneau(0.75)).toBe('attention')
+    expect(tonAnneau(0.93)).toBe('attention')
+    expect(tonAnneau(1)).toBe('attention')
+  })
+  it('rouge-orangé au-delà de 100 %', () => {
+    expect(tonAnneau(1.0001)).toBe('depasse')
+    expect(tonAnneau(1.09)).toBe('depasse')
+    expect(tonAnneau(3)).toBe('depasse')
+  })
+  it('neutre sans budget', () => {
+    expect(tonAnneau(null)).toBe('neutre')
+    expect(tonAnneau(Number.NaN)).toBe('neutre')
+  })
+  it('aucun bleu dans la palette', () => {
+    for (const c of Object.values(COULEURS_ANNEAU)) {
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)) as [number, number, number]
+      expect(b).toBeLessThan(Math.max(r, g))
+    }
+  })
+})
+
+describe('recherche d’une ligne de budget par nom', () => {
+  const lignes = [ligne('Frais fixe'), ligne('Courses'), ligne('AMENAGEMENT'), ligne('Dons'), ligne('Dépenses courantes (hors loyer)'),
+    ligne('Épargne Courses', 'epargne'), ligne('Vacances')]
+  it('trouve sans tenir compte de la casse ni des accents', () => {
+    expect(ligneParNom(lignes, ['amenagement'])?.name).toBe('AMENAGEMENT')
+    expect(ligneParNom(lignes, ['courses'])?.name).toBe('Courses')
+  })
+  it('accepte un nom plus long qui contient les mots voulus', () => {
+    expect(ligneParNom(lignes, ['depenses courantes'])?.name).toBe('Dépenses courantes (hors loyer)')
+  })
+  it('préfère le nom exact et ignore les lignes d’épargne', () => {
+    expect(ligneParNom([ligne('Épargne Courses', 'epargne'), ligne('Courses annexes'), ligne('Courses')], ['courses'])?.name).toBe('Courses')
+    expect(ligneParNom([ligne('Courses', 'epargne')], ['courses'])).toBeUndefined()
+  })
+  it('ne confond pas « dons » avec un mot qui le contient', () => {
+    expect(ligneParNom([ligne('Abandons')], ['dons'])).toBeUndefined()
+  })
+  it('absente : undefined, et la tuile est signalée absente', () => {
+    expect(ligneParNom(lignes, ['depenses exceptionnelles'])).toBeUndefined()
+    const t = tuilesBudgets(lignes.map((l) => lb(l, 100, 10)))
+    expect(t.map((x) => x.titre)).toEqual(BUDGETS_RESUME.map((d) => d.titre))
+    expect(t.find((x) => x.cle === 'exceptionnelles')?.absente).toBe(true)
+    expect(t.find((x) => x.cle === 'courses')?.absente).toBe(false)
+    expect(t.find((x) => x.cle === 'courantes')?.budget).toBe(100)
+  })
+})
+
+describe('données d’une tuile', () => {
+  const def = { cle: 'courses', titre: 'Courses' }
+  it('restant, part consommée et ton', () => {
+    const t = tuileBudget(def, lb(ligne('Courses'), 400, 373))
+    expect(t.restant).toBe(27)
+    expect(t.ratio).toBeCloseTo(0.9325)
+    expect(t.ton).toBe('attention')
+  })
+  it('dépassement : restant négatif, ton rouge-orangé', () => {
+    const t = tuileBudget(def, lb(ligne('Courses'), 350, 383))
+    expect(t.restant).toBe(-33)
+    expect(t.ton).toBe('depasse')
+  })
+  it('budget absent ou à 0 : pas d’anneau, dépensé seulement', () => {
+    for (const budget of [null, 0]) {
+      const t = tuileBudget(def, lb(ligne('Courses'), budget, 42))
+      expect(t.restant).toBeNull()
+      expect(t.ratio).toBeNull()
+      expect(t.ton).toBe('neutre')
+      expect(t.depense).toBe(42)
+    }
+  })
+  it('remboursement net (dépense négative) : l’anneau reste à 0 %', () => {
+    expect(tuileBudget(def, lb(ligne('Courses'), 100, -20)).ratio).toBe(0)
+  })
+})
+
+describe('épargne prévue', () => {
+  const ep = ligne('Épargne', 'epargne')
+  const lignes = [lb(ep, 300, 100), lb(ligne('Livret', 'epargne'), 50, 80), lb(ligne('Courses'), 400, 0)]
+  it('budget restant des lignes d’épargne, jamais négatif', () => {
+    expect(epargnePrevue({ mois: '2026-10', moisCourant: '2026-10', lignes })).toBe(200)
+  })
+  it('rien pour un mois passé', () => {
+    expect(epargnePrevue({ mois: '2026-09', moisCourant: '2026-10', lignes })).toBe(0)
+  })
+})
+
+describe('navigation Finances', () => {
+  it('Résumé est la première page et la route d’entrée ; Budget garde son nom', () => {
+    expect(PAGES_FINANCES[0]).toMatchObject({ to: '/finances', label: 'Résumé', end: true })
+    expect(PAGES_FINANCES.map((p) => p.label)).toEqual(['Résumé', 'Budget', 'Bilan', 'Opérations', 'Patrimoine', 'Investissements', 'À venir', 'Réglages'])
+    expect(PAGES_FINANCES.find((p) => p.label === 'Budget')?.to).toBe('/finances/budget')
+  })
+  it('Résumé et Budget restent ouverts au partage', () => {
+    const vue = { } as never
+    expect(pagesFinancesVisibles(vue).map((p) => p.label)).toEqual(['Résumé', 'Budget', 'Bilan', 'Patrimoine'])
+  })
+})

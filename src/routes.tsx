@@ -32,6 +32,7 @@ const WorkspaceView = lazy(() => import('./views/WorkspaceView').then((m) => ({ 
 // Finances : tout l'onglet (vues + graphiques) n'est chargé qu'à sa première ouverture.
 const fin = () => import('./views/finances')
 const FinancesLayout = lazy(() => fin().then((m) => ({ default: m.FinancesLayout })))
+const ResumeView = lazy(() => fin().then((m) => ({ default: m.ResumeView })))
 const BudgetView = lazy(() => fin().then((m) => ({ default: m.BudgetView })))
 const BilanView = lazy(() => fin().then((m) => ({ default: m.BilanView })))
 const OperationsView = lazy(() => fin().then((m) => ({ default: m.OperationsView })))
@@ -59,7 +60,8 @@ export function AppRoutes() {
       <Route path="/planification" element={<PlanningView />} />
       <Route path="/habitudes" element={<HabitsView />} />
       <Route path="/finances" element={<Suspense fallback={<Chargement />}><FinancesLayout /></Suspense>}>
-        <Route index element={<BudgetView />} />
+        <Route index element={<ResumeView />} />
+        <Route path="budget" element={<BudgetView />} />
         <Route path="bilan" element={<BilanView />} />
         <Route path="operations" element={<OperationsView />} />
         <Route path="patrimoine" element={<PatrimoineView />} />

@@ -25,7 +25,7 @@ describe('vue active', () => {
 describe('pages et écritures', () => {
   it('n’ouvre que Temps et budget / bilan / patrimoine', () => {
     const p = partage()
-    expect(['/temps', '/temps/2026-10-09', '/finances', '/finances/bilan', '/finances/patrimoine'].every((c) => routeAutorisee(c, p))).toBe(true)
+    expect(['/temps', '/temps/2026-10-09', '/finances', '/finances/budget', '/finances/bilan', '/finances/patrimoine'].every((c) => routeAutorisee(c, p))).toBe(true)
     expect(['/', '/finances/operations', '/finances/reglages', '/parametres', '/projets'].some((c) => routeAutorisee(c, p))).toBe(false)
     expect(pageAccueil(p)).toBe('/finances')
     expect(pageAccueil(partage({ onglets: ['temps'] }))).toBe('/temps')
