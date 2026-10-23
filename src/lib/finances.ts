@@ -702,6 +702,37 @@ export function detailLigne(opts: {
   return [...groupes.values()].sort((a, b) => b.total - a.total)
 }
 
+export interface NoeudCategorie {
+  nom: string
+  total: number
+  /** Sous-catégories (vide pour une catégorie sans sous-catégorie). */
+  enfants: { nom: string; total: number }[]
+}
+
+/**
+ * Regroupe le détail d'une ligne en catégories → sous-catégories, sommes seules (lecture seule du Résumé).
+ * Les groupes « Parent › Enfant » se rangent sous Parent, dont la somme est celle de tous ses enfants (et de ses
+ * propres opérations s'il en a). Une catégorie sans sous-catégorie reste une ligne simple. Tri par somme décroissante.
+ */
+export function hierarchieDetail(groupes: GroupeCategorie[]): NoeudCategorie[] {
+  const parents = new Map<string, { total: number; propre: number; enfants: { nom: string; total: number }[] }>()
+  for (const g of groupes) {
+    const i = g.nom.indexOf(' › ')
+    const parent = i < 0 ? g.nom : g.nom.slice(0, i)
+    let n = parents.get(parent)
+    if (!n) { n = { total: 0, propre: 0, enfants: [] }; parents.set(parent, n) }
+    n.total += g.total
+    if (i < 0) n.propre += g.total
+    else n.enfants.push({ nom: g.court, total: g.total })
+  }
+  return [...parents.entries()].map(([nom, n]) => {
+    const enfants = [...n.enfants]
+    // Opérations rangées directement dans la catégorie parente, à côté de ses sous-catégories.
+    if (enfants.length && Math.abs(n.propre) > 0.005) enfants.push({ nom: 'Autres', total: n.propre })
+    return { nom, total: n.total, enfants: enfants.sort((a, b) => b.total - a.total) }
+  }).sort((a, b) => b.total - a.total)
+}
+
 /** « Parent › Sous-catégorie », ou « Sans catégorie ». */
 export function nomCategorie(cat: FinCategory | undefined, idx: IndexFinances): string {
   if (!cat) return 'Sans catégorie'

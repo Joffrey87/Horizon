@@ -6,7 +6,7 @@ import type { FinAccount, FinBudget, FinEcheance, FinLoan, FinCategory, FinHoldi
 import {
   estEnAttente, NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, capitalRembourse, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, budgetDe, budgetAjuste, ecrituresBudgetMois, estEpargneComptee, fondLigne, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
   libelleMois, moisEcoules, patrimoine, previsionDe, provision, syntheseMois,
-  agregerHorsCapital, capitalDuMois, epargnesPrevues, listeEpargnes,
+  agregerHorsCapital, hierarchieDetail, capitalDuMois, epargnesPrevues, listeEpargnes,
 } from './finances'
 
 let seq = 0
@@ -716,5 +716,23 @@ describe('couleurs des lignes de budget', () => {
     expect(fondLigne(l('Courses', 'rgba(65, 105, 225, 0.26)'))).toContain('22, 163, 74')
     expect(fondLigne(l('Courses', 'rgba(245, 158, 11, 0.18)'))).toBe('rgba(245, 158, 11, 0.18)')
     expect(fondLigne(l('Dons'))).toBeNull()
+  })
+})
+
+describe('hierarchieDetail (détail en lecture seule du Résumé)', () => {
+  const g = (nom: string, total: number) => ({ nom, court: nom.split(' › ').pop()!, total, operations: [] })
+  it('range les sous-catégories sous leur parent, sommes triées', () => {
+    const r = hierarchieDetail([g('Alimentation › Boulangerie', 31), g('Alimentation › Courses', 373), g('Dons', 20)])
+    expect(r.map((n) => [n.nom, n.total])).toEqual([['Alimentation', 404], ['Dons', 20]])
+    expect(r[0]!.enfants).toEqual([{ nom: 'Courses', total: 373 }, { nom: 'Boulangerie', total: 31 }])
+    expect(r[1]!.enfants).toEqual([])
+  })
+  it('les opérations du parent seul deviennent « Autres » quand il a des sous-catégories', () => {
+    const r = hierarchieDetail([g('Maison', 50), g('Maison › Travaux', 100)])
+    expect(r[0]!.total).toBe(150)
+    expect(r[0]!.enfants).toEqual([{ nom: 'Travaux', total: 100 }, { nom: 'Autres', total: 50 }])
+  })
+  it('une catégorie seule reste une ligne simple', () => {
+    expect(hierarchieDetail([g('Vacances', 383)])).toEqual([{ nom: 'Vacances', total: 383, enfants: [] }])
   })
 })

@@ -3,7 +3,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
-import { aplatirGroupes, detailLigne, euros, grouperParIntitule, type GroupeIntitules } from '../../lib/finances'
+import { aplatirGroupes, detailLigne, euros, grouperParIntitule, hierarchieDetail, type GroupeIntitules } from '../../lib/finances'
 import type { FinTransaction } from '../../lib/types'
 import { ProgressBar } from '../../components/ui'
 import { LigneOperation } from './partage'
@@ -28,9 +28,8 @@ export function BoutonDetails({ niveau, onChange }: { niveau: Niveau; onChange: 
 /** Une ligne pour le mois affiché : les totaux par sous-catégorie. Chaque sous-catégorie
  *  s'ouvre sur ses groupes d'intitulés (clic sur le nom ou « Détails »), puis sur toutes
  *  ses opérations (« Détails+ »). `niveauTous` (pastille de la ligne du tableau) règle
- *  toutes les catégories d'un coup ; chacune reste ensuite réglable seule.
- *  Avec `couleur` (tuiles du Résumé) : version épurée — barre de part de cette couleur, ni nombre d'opérations ni « Détails ». */
-export function DetailLigne({ cle, niveauTous = 0, couleur }: { cle: string; niveauTous?: Niveau; couleur?: string }) {
+ *  toutes les catégories d'un coup ; chacune reste ensuite réglable seule. */
+export function DetailLigne({ cle, niveauTous = 0 }: { cle: string; niveauTous?: Niveau }) {
   const { mois, filtre } = useFin()
   const transactions = useHorizon((s) => s.finTransactions)
   const idx = useIndex()
@@ -66,13 +65,13 @@ export function DetailLigne({ cle, niveauTous = 0, couleur }: { cle: string; niv
                   className="flex min-w-0 flex-1 items-center gap-3 text-left">
                   {n ? <ChevronDown size={13} className="shrink-0 text-ink-3" /> : <ChevronRight size={13} className="shrink-0 text-ink-3" />}
                   <span className="min-w-0 flex-1 truncate" title={g.nom}>{g.court}</span>
-                  <span className={couleur ? 'w-14 sm:w-24' : 'hidden w-32 sm:block'}>
-                    {total > 0 && g.total > 0 && <ProgressBar value={(g.total / total) * 100} color={couleur ?? 'var(--color-teal)'} />}
+                  <span className="hidden w-32 sm:block">
+                    {total > 0 && g.total > 0 && <ProgressBar value={(g.total / total) * 100} color="var(--color-teal)" />}
                   </span>
-                  {!couleur && <span className="w-16 text-right text-xs text-ink-3">{g.operations.length} op.</span>}
-                  <span className={`text-right font-medium tabular-nums ${couleur ? 'w-16' : 'w-24'}`}>{euros(g.total)}</span>
+                  <span className="w-16 text-right text-xs text-ink-3">{g.operations.length} op.</span>
+                  <span className="w-24 text-right font-medium tabular-nums">{euros(g.total)}</span>
                 </button>
-                {!couleur && <BoutonDetails niveau={n} onChange={(v) => regler(g.nom, v)} />}
+                <BoutonDetails niveau={n} onChange={(v) => regler(g.nom, v)} />
               </div>
               {n > 0 && (
                 <div className="mb-2 ml-5 border-l border-line/60 pl-3">
@@ -84,6 +83,43 @@ export function DetailLigne({ cle, niveauTous = 0, couleur }: { cle: string; niv
         })}
       </ul>
     </div>
+  )
+}
+
+/**
+ * Version LECTURE SEULE du détail (tuiles du Résumé) : uniquement catégorie → sous-catégorie et leur somme du mois.
+ * Rien de cliquable (ni dépliage, ni « Détails », ni liste d'opérations, donc aucun changement de catégorie).
+ * `barres` ajoute, sous chaque nom, une barre de part (de `couleur`) ; sans, seulement le nom et la somme.
+ */
+export function DetailLigneLecture({ cle, couleur, barres = true }: { cle: string; couleur: string; barres?: boolean }) {
+  const { mois, filtre } = useFin()
+  const transactions = useHorizon((s) => s.finTransactions)
+  const idx = useIndex()
+  const noeuds = useMemo(() => hierarchieDetail(detailLigne({ cle, mois, transactions, idx, filtre })), [cle, mois, transactions, idx, filtre])
+  if (!noeuds.length) return <p className="py-2 text-xs text-ink-3">Aucune dépense ce mois-ci</p>
+  const total = noeuds.reduce((s, n) => s + n.total, 0)
+  const part = (v: number, base: number) => barres && base > 0 && v > 0 ? (
+    <span className="w-14 sm:w-24"><ProgressBar value={(v / base) * 100} color={couleur} /></span>
+  ) : barres ? <span className="w-14 sm:w-24" /> : null
+  return (
+    <ul data-testid="detail-lecture" className="divide-y divide-line/40">
+      {noeuds.map((n) => (
+        <li key={n.nom}>
+          <div className="flex items-center gap-3 py-1.5 text-sm">
+            <span className="min-w-0 flex-1 truncate" title={n.nom}>{n.nom}</span>
+            {part(n.enfants.length ? 0 : n.total, total)}
+            <span className="w-16 text-right font-medium tabular-nums">{euros(n.total)}</span>
+          </div>
+          {n.enfants.map((e) => (
+            <div key={e.nom} data-testid="detail-sous-categorie" className="flex items-center gap-3 py-1 pl-4 text-[13px] text-ink-2">
+              <span className="min-w-0 flex-1 truncate" title={`${n.nom} › ${e.nom}`}>{e.nom}</span>
+              {part(e.total, total)}
+              <span className="w-16 text-right tabular-nums">{euros(e.total)}</span>
+            </div>
+          ))}
+        </li>
+      ))}
+    </ul>
   )
 }
 
