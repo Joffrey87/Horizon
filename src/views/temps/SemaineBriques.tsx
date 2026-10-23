@@ -49,15 +49,16 @@ export function SemaineBriques({ anchor, onEdit, onCreate, onStep, onMove, onOpe
   const [niveau, setNiveau] = useState<Niveau>(0)
   const defile = useRef<HTMLDivElement>(null)
   useLayoutEffect(() => { setNiveau(0) }, [anchor, s.tasks, s.steps, s.birthdays, telephone])
+  const [taille, setTaille] = useState(0)   // change à chaque redimensionnement : on re-mesure
   useEffect(() => {
-    const raz = () => setNiveau(0)
+    const raz = () => { setNiveau(0); setTaille((n) => n + 1) }
     window.addEventListener('resize', raz)
     return () => window.removeEventListener('resize', raz)
   }, [])
   useLayoutEffect(() => {
     const el = defile.current
     if (telephone && el && el.scrollHeight > el.clientHeight + 1 && niveau < 2) setNiveau((n) => (n < 2 ? ((n + 1) as Niveau) : n))
-  })
+  }, [niveau, taille, anchor, s.tasks, s.steps, s.birthdays, telephone])
 
   return (
     <Card className="flex min-h-0 min-w-0 flex-1 flex-col !border-line-2/60 !bg-transparent !p-2 max-md:!p-1">
