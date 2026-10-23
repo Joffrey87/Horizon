@@ -37,29 +37,19 @@ export function useBudgetMois() {
 
 /**
  * Le montant du budget : un bouton (si `onOuvrir`) qui ouvre la saisie ; ambre et souligné quand le budget
- * est ajusté pour ce mois. Sans budget : `vide`.
+ * est ajusté pour ce mois. Sans budget : `vide`. `discret` : pas de pointillé quand il n'est pas ajusté.
  */
-export function MontantBudget({ montant, ajustement, onOuvrir, vide = '—', className = '' }: {
-  montant: number | null; ajustement?: Ajustement; onOuvrir?: () => void; vide?: string; className?: string
+export function MontantBudget({ montant, ajustement, onOuvrir, vide = '—', className = '', discret = false }: {
+  montant: number | null; ajustement?: Ajustement; onOuvrir?: () => void; vide?: string; className?: string; discret?: boolean
 }) {
   const ajuste = ajustement?.ajuste ?? false
   const texte = montant !== null && montant > 0 ? euros(montant) : vide
-  const classe = `tabular-nums ${ajuste ? CLASSE_AJUSTE : onOuvrir ? 'decoration-dotted underline-offset-4 underline' : ''} ${className}`
+  const classe = `tabular-nums ${ajuste ? CLASSE_AJUSTE : onOuvrir && !discret ? 'decoration-dotted underline-offset-4 underline' : ''} ${className}`
   const titre = ajuste ? `Ajusté pour ce mois${ajustement?.base ? ` (habituel : ${euros(ajustement.base)})` : ''}` : 'Changer le budget de ce mois'
   return onOuvrir
     ? <button type="button" onClick={onOuvrir} title={titre} data-testid="budget-montant" data-ajuste={ajuste || undefined}
         className={`-m-1 rounded p-1 ${classe}`}>{texte}</button>
     : <span data-testid="budget-montant" data-ajuste={ajuste || undefined} title={ajuste ? titre : undefined} className={classe}>{texte}</span>
-}
-
-/** Courte légende sous un budget ajusté ; rien s'il ne l'est pas. */
-export function LegendeAjuste({ ajustement, className = '' }: { ajustement: Ajustement; className?: string }) {
-  if (!ajustement.ajuste) return null
-  return (
-    <span data-testid="legende-ajuste" className={`block text-[10px] leading-tight text-sun ${className}`}>
-      ajusté pour ce mois{ajustement.base ? ` · habituel ${euros(ajustement.base)}` : ''}
-    </span>
-  )
 }
 
 /**

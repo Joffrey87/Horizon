@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { FinLine } from './types'
 import type { LigneBudget } from './finances'
 import { PAGES_FINANCES, pagesFinancesVisibles } from './financesNav'
-import { BUDGETS_RESUME, COULEURS_ANNEAU, ligneParNom, tonAnneau, tuileBudget, tuilesBudgets } from './resume'
+import { BUDGETS_RESUME, COULEURS_ANNEAU, eclaircie, ligneParNom, rgba, tonAnneau, tuileBudget, tuilesBudgets } from './resume'
 
 const ligne = (name: string, kind: FinLine['kind'] = 'depense', id = name): FinLine =>
   ({ id, user_id: 'u', name, kind, color: null, sort_order: 0, created_at: '2026-01-01' })
@@ -70,7 +70,7 @@ describe('noms réels des lignes du budget du foyer', () => {
   it('retrouve les six budgets, jamais « Frais fixe » ni une épargne', () => {
     const t = tuilesBudgets(lignes)
     expect(t.every((x) => !x.absente)).toBe(true)
-    expect(t.map((x) => x.titre)).toEqual(['Courses', 'Aménagement', 'Vacances', 'Dons', 'Dépenses courantes', 'Dépenses exceptionnelles'])
+    expect(t.map((x) => x.titre)).toEqual(['Courses', 'Aménagement', 'Vacances', 'Dépenses courantes', 'Dépenses exceptionnelles', 'Dons'])
   })
 })
 
@@ -110,5 +110,30 @@ describe('navigation Finances', () => {
   it('Résumé et Budget restent ouverts au partage', () => {
     const vue = { } as never
     expect(pagesFinancesVisibles(vue).map((p) => p.label)).toEqual(['Résumé', 'Budget', 'Bilan', 'Patrimoine'])
+  })
+})
+
+describe('tuiles du Résumé (maquette C)', () => {
+  it('ordre : Courses, Aménagement, Vacances, courantes, exceptionnelles, puis Dons à part', () => {
+    expect(BUDGETS_RESUME.map((d) => d.cle)).toEqual(['courses', 'amenagement', 'vacances', 'courantes', 'exceptionnelles', 'dons'])
+    expect(BUDGETS_RESUME.filter((d) => d.separe).map((d) => d.cle)).toEqual(['dons'])
+  })
+  it('aucune teinte bleue (teinte hors de 190°–250°)', () => {
+    for (const { rvb: [r, g, b] } of BUDGETS_RESUME) {
+      const max = Math.max(r, g, b), min = Math.min(r, g, b)
+      if (max === min) continue
+      const h = max === r ? (((g - b) / (max - min)) * 60 + 360) % 360 : max === g ? ((b - r) / (max - min)) * 60 + 120 : ((r - g) / (max - min)) * 60 + 240
+      expect(h < 190 || h > 250).toBe(true)
+    }
+  })
+  it('rgba et éclaircie', () => {
+    expect(rgba([10, 20, 30], 0.5)).toBe('rgba(10,20,30,0.5)')
+    expect(eclaircie([0, 0, 0], 0.5)).toMatch(/^rgb\(128,128,128\)$|^rgb\(127,127,127\)$/)
+  })
+  it('la tuile porte la couleur et le drapeau « séparé »', () => {
+    const t = tuilesBudgets([lb(ligne('Dons'), 300, 30)]).find((x) => x.cle === 'dons')!
+    expect(t.separe).toBe(true)
+    expect(t.rvb).toEqual(BUDGETS_RESUME.find((d) => d.cle === 'dons')!.rvb)
+    expect(t.ligneId).toBe('Dons')
   })
 })

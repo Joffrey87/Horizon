@@ -25,15 +25,24 @@ export function tonAnneau(ratio: number | null): TonAnneau {
   return 'ok'
 }
 
-/** Les six budgets de la page, dans l'ordre d'affichage, avec les noms acceptés pour la ligne du foyer. */
-export const BUDGETS_RESUME: { cle: string; titre: string; noms: string[] }[] = [
-  { cle: 'courses', titre: 'Courses', noms: ['courses', 'course'] },
-  { cle: 'amenagement', titre: 'Aménagement', noms: ['amenagement', 'amenagements'] },
-  { cle: 'vacances', titre: 'Vacances', noms: ['vacances', 'vacance'] },
-  { cle: 'dons', titre: 'Dons', noms: ['dons', 'don'] },
-  { cle: 'courantes', titre: 'Dépenses courantes', noms: ['depenses courantes', 'depense courante', 'courantes'] },
-  { cle: 'exceptionnelles', titre: 'Dépenses exceptionnelles', noms: ['depenses exceptionnelles', 'depense exceptionnelle', 'exceptionnelles'] },
+/**
+ * Les six budgets de la page, dans l'ordre d'affichage, avec les noms acceptés pour la ligne du foyer et la couleur
+ * (RVB) de la tuile : ambre, vert, violet, sable, taupe, rose — jamais de bleu. Les Dons sont séparés du reste par un espace.
+ */
+export const BUDGETS_RESUME: { cle: string; titre: string; noms: string[]; rvb: [number, number, number]; separe?: boolean }[] = [
+  { cle: 'courses', titre: 'Courses', noms: ['courses', 'course'], rvb: [245, 158, 11] },
+  { cle: 'amenagement', titre: 'Aménagement', noms: ['amenagement', 'amenagements'], rvb: [22, 163, 74] },
+  { cle: 'vacances', titre: 'Vacances', noms: ['vacances', 'vacance'], rvb: [139, 92, 246] },
+  { cle: 'courantes', titre: 'Dépenses courantes', noms: ['depenses courantes', 'depense courante', 'courantes'], rvb: [190, 170, 140] },
+  { cle: 'exceptionnelles', titre: 'Dépenses exceptionnelles', noms: ['depenses exceptionnelles', 'depense exceptionnelle', 'exceptionnelles'], rvb: [150, 125, 105] },
+  { cle: 'dons', titre: 'Dons', noms: ['dons', 'don'], rvb: [236, 72, 153], separe: true },
 ]
+
+/** Couleur de la tuile avec transparence (fond, bordure). */
+export const rgba = (rvb: readonly [number, number, number], a: number) => `rgba(${rvb[0]},${rvb[1]},${rvb[2]},${a})`
+/** Couleur de l'anneau et de l'icône : celle de la tuile, éclaircie (lisible sur le fond teinté). */
+export const eclaircie = (rvb: readonly [number, number, number], k = 0.27) =>
+  `rgb(${rvb.map((v) => Math.round(v + (255 - v) * k)).join(',')})`
 
 const mots = (s: string) => normaliserLibelle(s).split(/[^a-z0-9]+/).filter(Boolean)
 
@@ -59,6 +68,9 @@ export function ligneParNom<T extends Pick<FinLine, 'name' | 'kind'>>(lignes: T[
 export interface TuileBudget {
   cle: string
   titre: string
+  /** Couleur de la tuile (RVB) et tuile séparée du groupe (Dons). */
+  rvb: [number, number, number]
+  separe: boolean
   /** Id de la ligne de budget du foyer (pour changer son budget du mois) ; null si introuvable. */
   ligneId: string | null
   /** Ligne introuvable dans le budget du foyer. */
@@ -67,18 +79,20 @@ export interface TuileBudget {
   depense: number
   /** Budget − dépensé (négatif : dépassé) ; null sans budget. */
   restant: number | null
-  /** Part consommée, 0,93 = 93 % ; null sans budget. */
+  /** Part consommée (0,93 = 93 % du budget) ; null sans budget. Sert au tracé de l'anneau, jamais affichée. */
   ratio: number | null
   ton: TonAnneau
 }
 
 /** Données d'une tuile : le budget n'existe que dans la vue Foyer (voir syntheseMois). */
-export function tuileBudget(def: { cle: string; titre: string }, ligne: LigneBudget | undefined): TuileBudget {
-  if (!ligne) return { ...def, ligneId: null, absente: true, budget: null, depense: 0, restant: null, ratio: null, ton: 'neutre' }
+export function tuileBudget(def: { cle: string; titre: string; rvb?: [number, number, number]; separe?: boolean }, ligne: LigneBudget | undefined): TuileBudget {
+  const { rvb = [190, 170, 140] as [number, number, number], separe = false, ...id } = def
+  const base = { ...id, rvb, separe }
+  if (!ligne) return { ...base, ligneId: null, absente: true, budget: null, depense: 0, restant: null, ratio: null, ton: 'neutre' }
   const budget = ligne.budget !== null && ligne.budget > 0 ? ligne.budget : null
   const ratio = budget !== null ? Math.max(0, ligne.reel) / budget : null
   return {
-    ...def, ligneId: ligne.ligne?.id ?? null, absente: false, budget, depense: ligne.reel,
+    ...base, ligneId: ligne.ligne?.id ?? null, absente: false, budget, depense: ligne.reel,
     restant: budget !== null ? budget - ligne.reel : null, ratio, ton: tonAnneau(ratio),
   }
 }
