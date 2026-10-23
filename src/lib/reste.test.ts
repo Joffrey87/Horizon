@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { FinAccount, FinPlanned, FinResteAjustement, FinTransaction } from './types'
 import { indexer } from './finances'
-import { calculerReste, detecterRecurrentes, estCompteReste } from './reste'
+import { calculerReste, detecterRecurrentes, estCompteReste, nomCourtCompte } from './reste'
 
 let seq = 0
 const id = () => `r${++seq}`
@@ -41,6 +41,37 @@ const histo = [
 describe('estCompteReste', () => {
   it('Boursorama + carte Crypto.com, ni autre banque ni placements', () => {
     expect(comptes.filter(estCompteReste).map((a) => a.id)).toEqual([joint.id, carte.id])
+  })
+})
+
+describe('synthèse des comptes (noms courts, Honorine)', () => {
+  const base = { transactions: [] as FinTransaction[], planned: [] as FinPlanned[], ajustements: [] as FinResteAjustement[], aujourdhui: '2026-10-23' }
+  const joffrey = compte({ name: 'Compte Joffrey', balance: 100 })
+  const jointN = compte({ name: 'Compte Joint', balance: 233.26 })
+  const crypto = compte({ name: 'Carte Crypto', institution: 'Crypto.com', source: 'crypto', subtype: 'carte', balance: 567.78 })
+  const epargnes = ['Epargne', 'Epargne urgence', 'Epargne Avenir'].map((name) => compte({ name, kind: 'epargne', balance: 5000 }))
+  it('noms courts dans l’ordre Joffrey, Joint, Crypto, sans l’épargne', () => {
+    const accounts = [crypto, ...epargnes, jointN, joffrey]
+    const r = calculerReste({ ...base, accounts, idx: indexer(accounts, [], []) })
+    expect(r.comptes.map((c) => c.court)).toEqual(['Joffrey', 'Joint', 'Crypto'])
+    expect(r.solde).toBeCloseTo(901.04, 2)
+  })
+  it('Honorine reste absente tant que son compte n’existe pas, puis entre automatiquement dans le RESTE', () => {
+    const sans = [joffrey, jointN, crypto]
+    expect(calculerReste({ ...base, accounts: sans, idx: indexer(sans, [], []) }).comptes.some((c) => c.court === 'Honorine')).toBe(false)
+    const honorine = compte({ name: 'Honorine', institution: 'Crédit Agricole', balance: 50 })
+    const avec = [honorine, ...sans]
+    const r = calculerReste({ ...base, accounts: avec, idx: indexer(avec, [], []) })
+    expect(r.comptes.map((c) => c.court)).toEqual(['Joffrey', 'Joint', 'Crypto', 'Honorine'])
+    expect(r.solde).toBeCloseTo(951.04, 2)
+    expect(r.reste).toBeCloseTo(951.04, 2)
+  })
+  it('un compte Honorine archivé ou d’épargne n’est pas compté', () => {
+    expect(estCompteReste(compte({ name: 'Honorine', archived: true }))).toBe(false)
+    expect(estCompteReste(compte({ name: 'Epargne Honorine', kind: 'epargne' }))).toBe(false)
+  })
+  it('nomCourtCompte', () => {
+    expect([joffrey, jointN, crypto].map(nomCourtCompte)).toEqual(['Joffrey', 'Joint', 'Crypto'])
   })
 })
 

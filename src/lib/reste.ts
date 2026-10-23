@@ -8,10 +8,24 @@
 import type { FinAccount, FinPlanned, FinResteAjustement, FinTransaction } from './types'
 import { classer, cleGroupe, decaleMois, moisDe, nomLisible, normaliserLibelle, type IndexFinances } from './finances'
 
-/** Un compte entre dans le RESTE : compte courant Boursorama ou carte Crypto.com. */
+/** Compte d'Honorine : n'existe pas encore ; dès qu'un compte courant à son nom apparaît, il compte. */
+const estCompteHonorine = (a: FinAccount) => a.kind === 'courant' && !a.archived && /honorine/i.test(a.name)
+
+/** Un compte entre dans le RESTE : compte courant Boursorama, carte Crypto.com ou compte Honorine (jamais l'épargne). */
 export const estCompteReste = (a: FinAccount) =>
-  a.kind === 'courant' && !a.archived && a.in_budget
-  && (/bours/i.test(a.institution ?? '') || (a.source === 'crypto' && a.subtype === 'carte'))
+  estCompteHonorine(a)
+  || (a.kind === 'courant' && !a.archived && a.in_budget
+    && (/bours/i.test(a.institution ?? '') || (a.source === 'crypto' && a.subtype === 'carte')))
+
+/** Nom court pour la synthèse « Joffrey + Joint + Crypto + Honorine ». */
+export function nomCourtCompte(a: FinAccount): string {
+  if (/honorine/i.test(a.name)) return 'Honorine'
+  if (a.source === 'crypto' || /crypto/i.test(a.name) || /crypto/i.test(a.institution ?? '')) return 'Crypto'
+  if (/joint/i.test(a.name)) return 'Joint'
+  if (/joffrey/i.test(a.name)) return 'Joffrey'
+  return a.name.replace(/^(compte|carte)\s+/i, '').trim() || a.name
+}
+const RANG_COURT: Record<string, number> = { Joffrey: 0, Joint: 1, Crypto: 2, Honorine: 3 }
 
 export interface Recurrente {
   cle: string
@@ -25,7 +39,7 @@ export interface Recurrente {
 }
 
 export interface ResteCalcul {
-  comptes: { id: string; nom: string; solde: number }[]
+  comptes: { id: string; nom: string; court: string; solde: number }[]
   solde: number
   enAttente: number                     // sorties en attente (déjà dans le solde), positif
   recurrentes: Recurrente[]             // toutes, y compris celles que l'on a exclues
@@ -141,7 +155,9 @@ export function calculerReste(opts: {
   const finMois = `${mois}-${String(dernierJour(mois)).padStart(2, '0')}`
   const concernes = opts.accounts.filter(estCompteReste)
   const ids = new Set(concernes.map((a) => a.id))
-  const comptes = concernes.map((a) => ({ id: a.id, nom: a.name, solde: Number(a.balance) }))
+  const comptes = concernes
+    .map((a) => ({ id: a.id, nom: a.name, court: nomCourtCompte(a), solde: Number(a.balance) }))
+    .sort((a, b) => (RANG_COURT[a.court] ?? 9) - (RANG_COURT[b.court] ?? 9))
   const solde = comptes.reduce((s, c) => s + c.solde, 0)
   const enAttente = opts.transactions
     .filter((t) => t.pending && ids.has(t.account_id) && Number(t.amount) < 0)

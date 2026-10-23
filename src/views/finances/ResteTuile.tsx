@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Eye, EyeOff, Plus, Trash2, X } from 'lucide-react'
+import { CalendarDays, Eye, EyeOff, Plus, Trash2, X } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import { euros } from '../../lib/finances'
 import { calculerReste, type Recurrente } from '../../lib/reste'
@@ -12,8 +12,8 @@ const jourMois = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 const libelleFin = (iso: string) => `${Number(iso.slice(8, 10))}/${iso.slice(5, 7)}`
 
 /**
- * Tuile « RESTE » : solde actuel des comptes courants (Boursorama + carte Crypto.com)
- * moins les dépenses à venir d'ici la fin du mois. Un clic ouvre le détail : soldes,
+ * Tuile « RESTE » : solde actuel des comptes courants (Boursorama + carte Crypto.com, + Honorine dès que son compte existe)
+ * moins les dépenses à venir d'ici la fin du mois. Un clic ouvre le détail : synthèse des soldes,
  * récurrentes détectées (excluables / ajustables) et dépenses prévues à la main.
  */
 export function ResteTuile() {
@@ -47,6 +47,7 @@ function DetailReste({ r, aujourdhui, onClose }: { r: ReturnType<typeof calculer
   const [titre, setTitre] = useState('')
   const [montant, setMontant] = useState('')
   const [date, setDate] = useState(aujourdhui)
+  const dateRef = useRef<HTMLInputElement>(null)
 
   const regler = (x: Recurrente, valeurs: { ignore?: boolean; montant?: number | null }) => {
     const existant = ajustements.find((a) => a.cle === x.cle)
@@ -73,17 +74,12 @@ function DetailReste({ r, aujourdhui, onClose }: { r: ReturnType<typeof calculer
           <button onClick={onClose} className="btn-ghost p-1.5" aria-label="Fermer"><X size={16} /></button>
         </header>
 
-        <section className="mb-4">
-          <p className="block-title mb-1">Solde actuel</p>
-          {r.comptes.map((c) => (
-            <div key={c.id} className="flex items-baseline justify-between gap-3 py-0.5 text-sm">
-              <span className="min-w-0 truncate text-ink-2">{c.nom}</span>
-              <span className="tabular-nums">{euros(c.solde, true)}</span>
-            </div>
-          ))}
-          <div className="mt-1 flex items-baseline justify-between border-t border-line pt-1 text-sm font-medium">
-            <span>Total</span><span className="tabular-nums">{euros(r.solde, true)}</span>
-          </div>
+        <section className="mb-4" aria-label="Soldes des comptes comptés">
+          <p className="text-sm tabular-nums text-ink-2">
+            {r.comptes.map((c, i) => (
+              <span key={c.id}>{i > 0 && <span className="text-ink-3"> + </span>}{c.court} <span className="text-ink">{euros(c.solde)}</span></span>
+            ))}
+          </p>
           {r.enAttente > 0.005 && (
             <p className="mt-1 text-[11px] text-ink-3">
               Dont {euros(r.enAttente, true)} d'opérations en attente, déjà retirées du solde (non comptées deux fois).
@@ -133,13 +129,17 @@ function DetailReste({ r, aujourdhui, onClose }: { r: ReturnType<typeof calculer
               <button onClick={() => void remove('fin_planned', p.id)} className="btn-ghost p-1" title="Supprimer" aria-label={`Supprimer ${p.title}`}><Trash2 size={13} /></button>
             </div>
           ))}
-          <div className="mt-2 grid grid-cols-[1fr_5.5rem] gap-2 text-sm">
-            <input value={titre} onChange={(e) => setTitre(e.target.value)} placeholder="Libellé (ex. Dentiste)" className="field !py-1.5" aria-label="Libellé" />
-            <input value={montant} onChange={(e) => setMontant(e.target.value)} placeholder="€" inputMode="decimal" className="field !py-1.5" aria-label="Montant" />
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="field !py-1.5" aria-label="Date" />
-            <button onClick={ajouter} className="btn-sun flex items-center justify-center gap-1 px-2 py-1.5" aria-label="Ajouter la dépense prévue"><Plus size={14} /> Ajouter</button>
+          <div className="mt-2 flex items-center gap-1.5 text-sm">
+            <input value={titre} onChange={(e) => setTitre(e.target.value)} placeholder="Libellé" className="field !w-auto !py-1.5 min-w-0 flex-1" aria-label="Libellé" />
+            <input value={montant} onChange={(e) => setMontant(e.target.value)} placeholder="€" inputMode="decimal" className="field !w-16 !py-1.5 shrink-0 !px-2 text-right" aria-label="Montant" />
+            <button type="button" onClick={() => { const el = dateRef.current; if (el) { try { el.showPicker() } catch { el.click() } } }}
+              className="btn-ghost relative flex shrink-0 items-center gap-1 px-1.5 py-1.5 text-xs tabular-nums" title="Choisir la date" aria-label={`Date : ${jourMois(date)}`}>
+              <CalendarDays size={15} /> {jourMois(date)}
+              <input ref={dateRef} type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} tabIndex={-1} aria-label="Date"
+                className="pointer-events-none absolute inset-0 h-full w-full opacity-0 [color-scheme:dark]" />
+            </button>
+            <button onClick={ajouter} className="btn-sun flex h-8 w-8 shrink-0 items-center justify-center !p-0" title="Ajouter la dépense prévue" aria-label="Ajouter la dépense prévue"><Plus size={16} /></button>
           </div>
-          <p className="mt-1 text-[11px] text-ink-3">Une dépense datée après le {libelleFin(r.finMois)} n'entre pas dans le RESTE de ce mois.</p>
         </section>
 
         <footer className="space-y-0.5 border-t border-line pt-2 text-sm">
