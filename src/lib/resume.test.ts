@@ -67,10 +67,10 @@ describe('recherche d’une ligne de budget par nom', () => {
 describe('noms réels des lignes du budget du foyer', () => {
   const noms = ['Dépenses exceptionnelles', 'Dépenses courantes', 'Frais fixe', 'Courses', 'Dons', 'Vacances', 'Aménagement']
   const lignes = [...noms.map((n) => lb(ligne(n), 100, 10)), lb(ligne('Épargne vacances', 'epargne'), 50, 0), lb(ligne('Épargne avenir', 'epargne'), 50, 0)]
-  it('retrouve les six budgets, jamais « Frais fixe » ni une épargne', () => {
+  it('retrouve les sept budgets dont « Frais fixe », jamais une épargne', () => {
     const t = tuilesBudgets(lignes)
     expect(t.every((x) => !x.absente)).toBe(true)
-    expect(t.map((x) => x.titre)).toEqual(['Courses', 'Aménagement', 'Vacances', 'Dépenses courantes', 'Dépenses exceptionnelles', 'Dons'])
+    expect(t.map((x) => x.titre)).toEqual(['Courses', 'Aménagement', 'Vacances', 'Dépenses courantes', 'Dépenses exceptionnelles', 'Frais fixe', 'Dons'])
   })
 })
 
@@ -115,7 +115,7 @@ describe('navigation Finances', () => {
 
 describe('tuiles du Résumé (maquette C)', () => {
   it('ordre : Courses, Aménagement, Vacances, courantes, exceptionnelles, puis Dons à part', () => {
-    expect(BUDGETS_RESUME.map((d) => d.cle)).toEqual(['courses', 'amenagement', 'vacances', 'courantes', 'exceptionnelles', 'dons'])
+    expect(BUDGETS_RESUME.map((d) => d.cle)).toEqual(['courses', 'amenagement', 'vacances', 'courantes', 'exceptionnelles', 'fraisfixe', 'dons'])
     expect(BUDGETS_RESUME.filter((d) => d.separe).map((d) => d.cle)).toEqual(['dons'])
   })
   it('aucune teinte bleue (teinte hors de 190°–250°)', () => {

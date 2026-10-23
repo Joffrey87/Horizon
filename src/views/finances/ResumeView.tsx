@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Heart, PiggyBank, Plane, ShoppingCart, Sofa, Wallet, Zap, type LucideIcon } from 'lucide-react'
+import { Heart, PiggyBank, Receipt, Plane, ShoppingCart, Sofa, Wallet, Zap, type LucideIcon } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import { euros } from '../../lib/finances'
 import { COULEURS_ANNEAU, eclaircie, rgba, tuilesBudgets, type TuileBudget } from '../../lib/resume'
@@ -13,7 +13,7 @@ import { DetailLigneLecture } from './DetailLigne'
 import { useMediaQuery } from '../../lib/useMediaQuery'
 
 const ICONES: Record<string, LucideIcon> = {
-  courses: ShoppingCart, amenagement: Sofa, vacances: Plane, courantes: Wallet, exceptionnelles: Zap, dons: Heart,
+  courses: ShoppingCart, amenagement: Sofa, vacances: Plane, courantes: Wallet, exceptionnelles: Zap, fraisfixe: Receipt, dons: Heart,
 }
 
 /** Cible mensuelle d'Épargne avenir : l'anneau d'« Épargné » est plein à ce montant. */

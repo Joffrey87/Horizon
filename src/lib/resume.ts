@@ -26,8 +26,8 @@ export function tonAnneau(ratio: number | null): TonAnneau {
 }
 
 /**
- * Les six budgets de la page, dans l'ordre d'affichage, avec les noms acceptés pour la ligne du foyer et la couleur
- * (RVB) de la tuile : ambre, vert, violet, sable, taupe, rose — jamais de bleu. Les Dons sont séparés du reste par un espace.
+ * Les sept budgets de la page, dans l'ordre d'affichage, avec les noms acceptés pour la ligne du foyer et la couleur
+ * (RVB) de la tuile : ambre, vert, violet, sable, taupe, olive, rose — jamais de bleu. Les Dons sont séparés du reste par un espace.
  */
 export const BUDGETS_RESUME: { cle: string; titre: string; noms: string[]; rvb: [number, number, number]; separe?: boolean }[] = [
   { cle: 'courses', titre: 'Courses', noms: ['courses', 'course'], rvb: [245, 158, 11] },
@@ -35,6 +35,8 @@ export const BUDGETS_RESUME: { cle: string; titre: string; noms: string[]; rvb: 
   { cle: 'vacances', titre: 'Vacances', noms: ['vacances', 'vacance'], rvb: [139, 92, 246] },
   { cle: 'courantes', titre: 'Dépenses courantes', noms: ['depenses courantes', 'depense courante', 'courantes'], rvb: [190, 170, 140] },
   { cle: 'exceptionnelles', titre: 'Dépenses exceptionnelles', noms: ['depenses exceptionnelles', 'depense exceptionnelle', 'exceptionnelles'], rvb: [150, 125, 105] },
+  // Frais fixe : le réel de la ligne est déjà hors capital des prêts (agregerHorsCapital, compté en épargne).
+  { cle: 'fraisfixe', titre: 'Frais fixe', noms: ['frais fixe', 'frais fixes'], rvb: [132, 140, 90] },
   { cle: 'dons', titre: 'Dons', noms: ['dons', 'don'], rvb: [236, 72, 153], separe: true },
 ]
 
