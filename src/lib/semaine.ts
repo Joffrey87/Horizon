@@ -35,6 +35,13 @@ export function libelleHeures(t: Pick<Task, 'title' | 'duration_min'>): string |
   return t.duration_min ? `${hm(debut)} – ${hm(debut + t.duration_min)}` : hm(debut)
 }
 
+/** Heure courte (téléphone) : 480 → { h: '8h', m: null } ; 510 → { h: '8h', m: '30' } (minutes en exposant). */
+export function heureCourte(min: number): { h: string; m: string | null } {
+  const x = ((Math.round(min) % 1440) + 1440) % 1440
+  const m = x % 60
+  return { h: `${Math.floor(x / 60)}h`, m: m === 0 ? null : String(m).padStart(2, '0') }
+}
+
 /** « 45 min », « 8 h », « 2 h 30 » ; '' sans durée. */
 export function libelleDuree(dureeMin: number | null | undefined): string {
   if (!dureeMin || dureeMin <= 0) return ''

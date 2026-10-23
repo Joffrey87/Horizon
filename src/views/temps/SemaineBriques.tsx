@@ -8,7 +8,7 @@ import {
   birthdaysForDay, chosenMassForDay, extractHourMinute, feastOnDay, firstFridayOrSaturday, isMarketParkingDay,
   iso, sansHeure, spanPart, tasksForDay, todayIso,
 } from '../../lib/logic'
-import { bandeService, hauteurBrique, libelleDuree, libelleHeures, notePropre, ordreSemaine, type ModeSemaine } from '../../lib/semaine'
+import { bandeService, heureCourte, hauteurBrique, libelleDuree, libelleHeures, notePropre, ordreSemaine, type ModeSemaine } from '../../lib/semaine'
 import { couleurProjet } from '../../lib/projectIcons'
 import { Card } from '../../components/ui'
 import { IconeProjet } from '../../components/IconeProjet'
@@ -108,7 +108,8 @@ function ColonneJour({ day, mode, niveau, onEdit, onCreate, onStep, onMove, onOp
   const pastille = today
     ? 'rounded-full bg-gradient-to-br from-[#f59e0b] to-[#ea580c] font-bold text-[#140e05]'
     : 'text-ink'
-  const marqueur = 'flex w-full items-center gap-1 truncate rounded-lg border px-1.5 py-1 text-left text-[10px] font-medium'
+  const coupe = tel ? 'overflow-hidden whitespace-nowrap text-clip' : 'truncate'
+  const marqueur = `flex w-full items-center gap-1 ${coupe} rounded-lg border px-1.5 py-1 text-left text-[10px] font-medium`
 
   return (
     <section
@@ -134,14 +135,14 @@ function ColonneJour({ day, mode, niveau, onEdit, onCreate, onStep, onMove, onOp
           <button onClick={(e) => { e.stopPropagation(); openMassPicker(d, fete) }}
             title={`${fete} — trouver une messe${messeChoisie ? ` : ${messeChoisie}` : ''}`}
             className={`${marqueur} ${messeChoisie ? 'border-good/40 bg-good/15 text-[#4cc79a]' : 'border-sun/40 bg-sun/15 text-sun-soft'}`}>
-            <span className="shrink-0">✝</span><span className="truncate">{fete}</span>
+            <span className="shrink-0">✝</span><span className={coupe}>{fete}</span>
           </button>
         )}
         {messe && (
           <button onClick={(e) => { e.stopPropagation(); openMassPicker(d, messe) }}
             title={`Messe — ${messe}${messeChoisie ? ` : ${messeChoisie}` : ' (cliquer pour choisir)'}`}
             className={`${marqueur} ${messeChoisie ? 'border-good/40 bg-good/15 text-[#4cc79a]' : 'border-[#a78bfa]/40 bg-[#a78bfa]/15 text-[#a78bfa]'}`}>
-            <Church size={10} className="shrink-0" /><span className="truncate">{messeChoisie ?? `Messe · ${messe}`}</span>
+            <Church size={10} className="shrink-0" /><span className={coupe}>{messeChoisie ?? `Messe · ${messe}`}</span>
           </button>
         )}
         {marche && (
@@ -152,13 +153,13 @@ function ColonneJour({ day, mode, niveau, onEdit, onCreate, onStep, onMove, onOp
         )}
         {anniv.map((b) => (
           <div key={b.id} className={`${marqueur} cursor-default border-[#ec7f97]/40 bg-[#ec7f97]/15 text-[#ec7f97]`}>
-            <span className="shrink-0">🎂</span><span className="truncate">{b.name}</span>
+            <span className="shrink-0">🎂</span><span className={coupe}>{b.name}</span>
           </div>
         ))}
         {steps.map((st) => (
           <button key={st.id} draggable onDragStart={dragData('step', st.id)} onClick={(e) => { e.stopPropagation(); onStep(st) }}
             className={`${marqueur} border-[#a78bfa]/40 bg-[#a78bfa]/15 text-[#c4b5fd]`}>
-            <Layers size={10} className="shrink-0" /><span className="truncate">{st.title}</span>
+            <Layers size={10} className="shrink-0" /><span className={coupe}>{st.title}</span>
           </button>
         ))}
         {taches.map(({ t }) => <Brique key={t.id} t={t} jour={d} mode={mode} niveau={niveau} onEdit={onEdit} />)}
@@ -183,7 +184,7 @@ function LigneDimanche({ day, onOpenDay }: { day: Date; onOpenDay: (d: Date) => 
   const s = useHorizon()
   const d = iso(day)
   const bande = bandeService(s.tasks, d)
-  const puces: { key: string; heure: string | null; titre: string; couleur: string }[] = [
+  const puces: { key: string; heure: string | null; min?: number | null; titre: string; couleur: string }[] = [
     ...[...tasksForDay(s.tasks, day)].filter((t) => t.id !== bande?.id)
       .map((t) => ({ t, span: spanPart(t, d) !== 'single' }))
       .sort((a, b) => ordreSemaine(a.t, b.t, a.span, b.span))
@@ -191,7 +192,7 @@ function LigneDimanche({ day, onOpenDay }: { day: Date; onOpenDay: (d: Date) => 
         const projet = t.project_id ? s.projects.find((p) => p.id === t.project_id) : undefined
         const domaine = s.domains.find((x) => x.id === (t.domain_id ?? projet?.domain_id))
         const h = extractHourMinute(t.title)
-        return { key: t.id, heure: h ? `${h.hour}:${String(h.minute).padStart(2, '0')}` : null, titre: sansHeure(t.title),
+        return { key: t.id, heure: h ? `${h.hour}:${String(h.minute).padStart(2, '0')}` : null, min: h ? h.hour * 60 + h.minute : null, titre: sansHeure(t.title),
           couleur: couleurProjet(projet, s.domains) ?? domaine?.color ?? EVENT_DEFAULT_COLOR }
       }),
     ...stepsForDay(s.steps, day).map((st) => ({ key: st.id, heure: null, titre: st.title, couleur: VIOLET })),
@@ -210,8 +211,8 @@ function LigneDimanche({ day, onOpenDay }: { day: Date; onOpenDay: (d: Date) => 
           className="flex min-w-0 items-center gap-1 rounded-lg px-1.5 py-1 text-[10.5px] font-bold leading-tight text-ink"
           style={{ flex: '0 1 auto', background: `linear-gradient(160deg, color-mix(in srgb, ${p.couleur} 38%, ${FOND}), color-mix(in srgb, ${p.couleur} 14%, ${FOND}))`,
             border: `1px solid color-mix(in srgb, ${p.couleur} 55%, transparent)` }}>
-          {p.heure && <span className="shrink-0 text-[8.5px] opacity-80">{p.heure}</span>}
-          <span className="truncate">{p.titre}</span>
+          {p.heure && <span className="shrink-0 text-[8.5px] opacity-80"><HeureTel min={p.min ?? 0} /></span>}
+          <span className="overflow-hidden whitespace-nowrap text-clip">{p.titre}</span>
         </span>
       ))}
     </div>
@@ -226,6 +227,18 @@ function LigneDimanche({ day, onOpenDay }: { day: Date; onOpenDay: (d: Date) => 
       {bande && puces.length > 0 && <div className="flex">{rangee}</div>}
     </button>
   )
+}
+
+/** Téléphone : « 8h », ou « 8h » + minutes en petit exposant (8h³⁰). */
+function HeureTel({ min }: { min: number }) {
+  const { h, m } = heureCourte(min)
+  return <>{h}{m && <sup className="text-[0.6em] align-super leading-none">{m}</sup>}</>
+}
+function PlageTel({ t }: { t: Pick<Task, 'title' | 'duration_min'> }) {
+  const hmn = extractHourMinute(t.title)
+  if (!hmn) return null
+  const d = hmn.hour * 60 + hmn.minute
+  return <><HeureTel min={d} />{t.duration_min ? <> – <HeureTel min={d + t.duration_min} /></> : null}</>
 }
 
 function Brique({ t, jour, mode, niveau, onEdit }: { t: Task; jour: string; mode: ModeSemaine; niveau: Niveau; onEdit: (t: Task) => void }) {
@@ -265,9 +278,9 @@ function Brique({ t, jour, mode, niveau, onEdit }: { t: Task; jour: string; mode
         background: `linear-gradient(160deg, color-mix(in srgb, ${c} 38%, ${FOND}), color-mix(in srgb, ${c} 14%, ${FOND}))`,
         border: checkMass ? `1.5px dashed ${VIOLET}` : `1px solid color-mix(in srgb, ${c} 55%, transparent)`,
       }}>
-      {!compact && <span className={`block shrink-0 font-bold text-ink opacity-90 ${tel ? 'text-[8.5px]' : 'text-[11px]'}`}>{entete}</span>}
-      <span className={`${compact ? '' : 'mt-0.5'} block shrink-0 font-bold text-ink ${uneLigne ? 'truncate' : 'break-words'} ${tel ? 'text-[11px] leading-[1.2]' : 'line-clamp-2 text-[13px] leading-[1.15]'} ${fait ? 'line-through' : ''}`}>
-        {compact && <span className="mr-1 text-[8.5px] font-bold opacity-80">{debut ?? entete}</span>}
+      {!compact && <span className={`block shrink-0 font-bold text-ink opacity-90 ${tel ? 'text-[8.5px]' : 'text-[11px]'}`}>{tel && part === 'single' && aHeure ? <PlageTel t={t} /> : entete}</span>}
+      <span className={`${compact ? '' : 'mt-0.5'} block shrink-0 font-bold text-ink ${uneLigne ? 'overflow-hidden whitespace-nowrap text-clip' : 'break-words'} ${tel ? 'text-[11px] leading-[1.2]' : 'line-clamp-2 text-[13px] leading-[1.15]'} ${fait ? 'line-through' : ''}`}>
+        {compact && <span className="mr-1 text-[8.5px] font-bold opacity-80">{part === 'single' && aHeure ? <PlageTel t={{ title: t.title, duration_min: null }} /> : (debut ?? entete)}</span>}
         {projet && <IconeProjet project={projet} size={tel ? 10 : 12} className="mr-1 align-[-1px]" />}
         {checkMass && <Church size={tel ? 9 : 11} className="mr-0.5 inline" style={{ color: VIOLET }} />}
         {sansHeure(t.title)}

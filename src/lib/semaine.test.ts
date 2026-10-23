@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ECHELLE_TELEPHONE, bandeService, hauteurBrique, libelleDuree, libelleHeures, notePropre, ordreSemaine } from './semaine'
+import { ECHELLE_TELEPHONE, bandeService, hauteurBrique, libelleDuree, libelleHeures, heureCourte, notePropre, ordreSemaine } from './semaine'
 import type { Task } from './types'
 
 const t = (title: string, extra: Partial<Task> = {}) => ({ id: title, title, duration_min: null, scheduled_date: null, ...extra }) as Task
@@ -92,5 +92,17 @@ describe('bandeService', () => {
       const [r, , b] = [1, 3, 5].map((i) => parseInt(fond.slice(i, i + 2), 16))
       expect(b!).toBeLessThan(r!)
     }
+  })
+})
+
+describe('heureCourte (téléphone)', () => {
+  it('heure ronde sans minutes', () => {
+    expect(heureCourte(8 * 60)).toEqual({ h: '8h', m: null })
+    expect(heureCourte(0)).toEqual({ h: '0h', m: null })
+  })
+  it('minutes séparées pour l’exposant', () => {
+    expect(heureCourte(8 * 60 + 30)).toEqual({ h: '8h', m: '30' })
+    expect(heureCourte(9 * 60 + 5)).toEqual({ h: '9h', m: '05' })
+    expect(heureCourte(24 * 60 + 15)).toEqual({ h: '0h', m: '15' })
   })
 })
