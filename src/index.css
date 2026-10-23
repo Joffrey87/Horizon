@@ -169,7 +169,7 @@ input::placeholder, textarea::placeholder { color: var(--color-ink-3); }
   box-shadow: 0 10px 32px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.18);
 }
 .verre-tuile {
-  padding: 12px 20px;
+  padding: 9px 20px;
   border-radius: 16px;
   background: linear-gradient(135deg, rgba(255,255,255,.07), rgba(255,255,255,.02));
 }

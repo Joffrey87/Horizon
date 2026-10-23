@@ -37,48 +37,69 @@ function Anneau({ ratio, couleur, taille, trait = 4, halo = false, children }: {
 }
 
 /**
- * Une tuile de budget : anneau + icône à gauche, nom et « restant / budget » à droite, teintée de la couleur du budget.
- * Toucher la tuile la déplie (détail par catégorie, comme dans le Budget) ; toucher le montant du budget change celui de ce mois.
+ * Contenu commun d'une tuile (téléphone et bureau) : à gauche l'anneau fin avec l'icône, le nom et dessous, petit et gris,
+ * « dépensé / budget » (le budget est cliquable : il change celui de ce mois) ; à droite, alignés à droite, « Reste » en petit
+ * libellé et le montant restant, gros et gras (rouge-orangé au-delà du budget, anneau plein). Sans budget : « fixer un budget ».
  */
-function TuileBudgetAnneau({ t, edition, ouvert, onBasculer }: {
-  t: TuileBudget; edition: ReturnType<typeof useBudgetMois>; ouvert: boolean; onBasculer: () => void
-}) {
+function CorpsTuile({ t, edition, bureau }: { t: TuileBudget; edition: ReturnType<typeof useBudgetMois>; bureau: boolean }) {
   const Icone = ICONES[t.cle] ?? Wallet
   const depasse = t.ton === 'depasse'
   const clair = eclaircie(t.rvb, 0.24)
   const ouvrir = edition.peutModifier && t.ligneId ? () => edition.ouvrir({ id: t.ligneId!, name: t.titre }, t.budget) : undefined
+  const negatif = t.restant !== null && t.restant < 0
+  return (
+    <>
+      <Anneau ratio={t.ratio} couleur={depasse ? COULEURS_ANNEAU.depasse : clair} taille={bureau ? 40 : 46} trait={bureau ? 2 : 3} halo={bureau}>
+        <Icone size={bureau ? 17 : 19} color={clair} strokeWidth={1.8} />
+      </Anneau>
+      <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+        <p className={`truncate font-semibold text-ink-2 ${bureau ? 'text-[15px]' : 'text-[13px]'}`}>{t.titre}</p>
+        <p className={`whitespace-nowrap font-medium tabular-nums text-ink-3 ${bureau ? 'text-[12px]' : 'text-[11.5px]'}`}>
+          {t.budget !== null ? (
+            <>{euros(t.depense)} / <MontantBudget montant={t.budget} ajustement={edition.ajustement(t.ligneId)} onOuvrir={ouvrir} discret /></>
+          ) : ouvrir ? (
+            <button type="button" onClick={ouvrir} data-testid="budget-fixer" className="-m-1 p-1 text-sun-soft/80 hover:text-sun-soft">fixer un budget</button>
+          ) : null}
+        </p>
+      </div>
+      <div className="shrink-0 text-right">
+        <p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">{t.restant === null ? 'Dépensé' : 'Reste'}</p>
+        <b className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[24px]' : 'text-[22px]'}`}
+          style={{ color: negatif ? COULEURS_ANNEAU.depasse : 'var(--color-ink)' }}>
+          {euros(t.restant ?? t.depense)}
+        </b>
+      </div>
+    </>
+  )
+}
+
+/** Poignée de dépliage : toucher la tuile la déplie, sauf si le toucher vise un bouton (montant du budget, fixer un budget). */
+function enTete(depliable: boolean, ouvert: boolean, onBasculer: () => void) {
+  return {
+    role: depliable ? 'button' : undefined,
+    tabIndex: depliable ? 0 : undefined,
+    'aria-expanded': depliable ? ouvert : undefined,
+    onClick: (e: React.MouseEvent) => { if (depliable && !(e.target as HTMLElement).closest('button, a')) onBasculer() },
+    onKeyDown: (e: React.KeyboardEvent) => { if (depliable && e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onBasculer() } },
+  } as const
+}
+
+/** Téléphone : tuile teintée de la couleur du budget ; toucher la déplie (détail par catégorie, comme dans le Budget). */
+function TuileBudgetAnneau({ t, edition, ouvert, onBasculer }: {
+  t: TuileBudget; edition: ReturnType<typeof useBudgetMois>; ouvert: boolean; onBasculer: () => void
+}) {
+  const clair = eclaircie(t.rvb, 0.24)
   const alpha = t.separe ? [0.1, 0.03] : [0.24, 0.06]
   const depliable = t.ligneId !== null
   return (
-    <div data-testid={`tuile-${t.cle}`} data-ton={t.ton} data-ouvert={ouvert || undefined} className={t.separe ? 'mt-3 lg:mt-5' : ''}>
-      <div role={depliable ? 'button' : undefined} tabIndex={depliable ? 0 : undefined} aria-expanded={depliable ? ouvert : undefined}
-        onClick={(e) => { if (depliable && !(e.target as HTMLElement).closest('button, a')) onBasculer() }}
-        onKeyDown={(e) => { if (depliable && e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onBasculer() } }}
-        className={`flex min-h-[62px] items-center gap-3 border px-3.5 py-2 lg:min-h-[72px] lg:gap-[18px] lg:px-[22px] ${depliable ? 'cursor-pointer' : ''} ${ouvert ? 'rounded-t-[14px] border-b-transparent' : 'rounded-[14px]'}`}
+    <div data-testid={`tuile-${t.cle}`} data-ton={t.ton} data-ouvert={ouvert || undefined} className={t.separe ? 'mt-3' : ''}>
+      <div {...enTete(depliable, ouvert, onBasculer)}
+        className={`flex min-h-[64px] items-center gap-3 border px-3.5 py-2 ${depliable ? 'cursor-pointer' : ''} ${ouvert ? 'rounded-t-[14px] border-b-transparent' : 'rounded-[14px]'}`}
         style={{ background: `linear-gradient(100deg, ${rgba(t.rvb, alpha[0]!)}, ${rgba(t.rvb, alpha[1]!)} 80%), #15110e`, borderColor: rgba(t.rvb, 0.28) }}>
-        <Anneau ratio={t.ratio} couleur={depasse ? COULEURS_ANNEAU.depasse : clair} taille={48}>
-          <Icone size={20} color={clair} strokeWidth={1.75} />
-        </Anneau>
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <p className="truncate text-[12.5px] font-medium text-ink-2 lg:text-[14.5px]">{t.titre}</p>
-          <p className="flex items-baseline gap-1 whitespace-nowrap">
-            <b className="text-[19px] font-bold tabular-nums lg:text-[23px]" style={{ color: t.restant !== null && t.restant < 0 ? COULEURS_ANNEAU.depasse : 'var(--color-ink)' }}>
-              {euros(t.restant ?? t.depense)}
-            </b>
-            {t.budget !== null && (
-              <span className="text-[12px] text-ink-3 lg:text-[14px]">
-                / <MontantBudget montant={t.budget} ajustement={edition.ajustement(t.ligneId)} onOuvrir={ouvrir} discret />
-              </span>
-            )}
-            {t.budget === null && ouvrir && (
-              <button type="button" onClick={ouvrir} data-testid="budget-fixer"
-                className="text-[12px] text-sun underline decoration-dotted underline-offset-4 lg:text-[14px]">fixer un budget</button>
-            )}
-          </p>
-        </div>
+        <CorpsTuile t={t} edition={edition} bureau={false} />
       </div>
       {ouvert && t.ligneId && (
-        <div className="rounded-b-[14px] border border-t-0 px-3 py-0.5 lg:px-4" style={{ borderColor: rgba(t.rvb, 0.28), background: 'rgba(33,28,22,.55)' }}>
+        <div className="rounded-b-[14px] border border-t-0 px-3 py-0.5" style={{ borderColor: rgba(t.rvb, 0.28), background: 'rgba(33,28,22,.55)' }}>
           <DetailLigne cle={t.ligneId} couleur={clair} />
         </div>
       )}
@@ -87,42 +108,18 @@ function TuileBudgetAnneau({ t, edition, ouvert, onBasculer }: {
 }
 
 /**
- * Version bureau d'une ligne de budget : posée dans un panneau de verre, presque transparente, séparée de la précédente
- * par un filet. Anneau fin et icône à gauche, nom, puis « restant / budget » à droite. Le clic la déplie (détail par
- * catégorie) ; le clic sur le montant du budget change celui de ce mois.
+ * Bureau : ligne posée dans un panneau de verre, presque transparente, séparée de la précédente par un filet.
+ * Le clic la déplie (détail par catégorie).
  */
 function LigneVerre({ t, edition, ouvert, onBasculer }: {
   t: TuileBudget; edition: ReturnType<typeof useBudgetMois>; ouvert: boolean; onBasculer: () => void
 }) {
-  const Icone = ICONES[t.cle] ?? Wallet
-  const depasse = t.ton === 'depasse'
   const clair = eclaircie(t.rvb, 0.24)
-  const ouvrir = edition.peutModifier && t.ligneId ? () => edition.ouvrir({ id: t.ligneId!, name: t.titre }, t.budget) : undefined
   const depliable = t.ligneId !== null
   return (
     <div data-testid={`tuile-${t.cle}`} data-ton={t.ton} data-ouvert={ouvert || undefined} className="border-t border-white/[.09] first:border-t-0">
-      <div role={depliable ? 'button' : undefined} tabIndex={depliable ? 0 : undefined} aria-expanded={depliable ? ouvert : undefined}
-        onClick={(e) => { if (depliable && !(e.target as HTMLElement).closest('button, a')) onBasculer() }}
-        onKeyDown={(e) => { if (depliable && e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onBasculer() } }}
-        className={`flex h-[72px] items-center gap-[18px] ${depliable ? 'cursor-pointer' : ''}`}>
-        <Anneau ratio={t.ratio} couleur={depasse ? COULEURS_ANNEAU.depasse : clair} taille={40} trait={2} halo>
-          <Icone size={17} color={clair} strokeWidth={1.8} />
-        </Anneau>
-        <p className="min-w-0 flex-1 truncate text-[15px] font-medium text-ink-2">{t.titre}</p>
-        <p className="flex items-baseline gap-1.5 whitespace-nowrap">
-          <b className="text-[22px] font-bold leading-none tabular-nums" style={{ color: t.restant !== null && t.restant < 0 ? COULEURS_ANNEAU.depasse : 'var(--color-ink)' }}>
-            {euros(t.restant ?? t.depense)}
-          </b>
-          {t.budget !== null && (
-            <span className="text-[13px] font-medium text-ink-3">
-              / <MontantBudget montant={t.budget} ajustement={edition.ajustement(t.ligneId)} onOuvrir={ouvrir} discret />
-            </span>
-          )}
-          {t.budget === null && ouvrir && (
-            <button type="button" onClick={ouvrir} data-testid="budget-fixer"
-              className="text-[13px] text-sun underline decoration-dotted underline-offset-4">fixer un budget</button>
-          )}
-        </p>
+      <div {...enTete(depliable, ouvert, onBasculer)} className={`flex h-[68px] items-center gap-[18px] [@media(min-height:840px)]:h-[76px] ${depliable ? 'cursor-pointer' : ''}`}>
+        <CorpsTuile t={t} edition={edition} bureau />
       </div>
       {ouvert && t.ligneId && (
         <div className="pb-2"><DetailLigne cle={t.ligneId} couleur={clair} /></div>
@@ -132,7 +129,7 @@ function LigneVerre({ t, edition, ouvert, onBasculer }: {
 }
 
 /**
- * Résumé : l'accueil de l'onglet Finances. Reste et Épargné du mois, puis « Restant » : une tuile à anneau
+ * Résumé : l'accueil de l'onglet Finances. Reste et Épargné du mois, puis une tuile à anneau
  * par budget du foyer (Courses, Aménagement, Vacances, Dépenses courantes, exceptionnelles, puis Dons à part).
  * Suit le mois et le filtre Foyer / Commun / Joffrey / Honorine, comme le Budget.
  */
@@ -166,7 +163,7 @@ export function ResumeView() {
       className={`${bureau ? 'verre verre-tuile' : 'card px-3 py-3'} text-left disabled:cursor-default`}
       style={bureau ? undefined : { borderColor: 'rgba(245,158,11,.4)', background: 'linear-gradient(135deg, rgba(245,158,11,.14), rgba(25,21,18,.9) 70%)' }}>
       <p className="block-title">{resteTuile !== null && resteTuile < 0 ? 'Au-delà du budget' : 'Reste'}</p>
-      <p className="my-1 whitespace-nowrap text-[28px] font-bold tabular-nums lg:text-4xl"
+      <p className={`whitespace-nowrap font-bold tabular-nums ${bureau ? 'my-0.5 text-[30px] leading-tight' : 'my-1 text-[28px]'}`}
         style={{ color: resteTuile === null ? '#857c6d' : resteTuile < 0 ? COULEURS_ANNEAU.depasse : COULEURS_ANNEAU.ok }}>
         {resteTuile === null ? '—' : euros(Math.abs(resteTuile))}
       </p>
@@ -180,7 +177,7 @@ export function ResumeView() {
       onClick={() => setDetail(detail === 'epargne' ? null : 'epargne')} title="Voir les épargnes du mois"
       className={`${bureau ? 'verre verre-tuile' : 'card px-3 py-3'} text-left`}>
       <p className="block-title">Épargné</p>
-      <p className="my-1 whitespace-nowrap text-[28px] font-bold tabular-nums lg:text-4xl" style={{ color: COULEURS_ANNEAU.ok }}>{euros(epargne)}</p>
+      <p className={`whitespace-nowrap font-bold tabular-nums ${bureau ? 'my-0.5 text-[30px] leading-tight' : 'my-1 text-[28px]'}`} style={{ color: COULEURS_ANNEAU.ok }}>{euros(epargne)}</p>
     </button>
   )
   const hautDeVue = (
@@ -213,14 +210,13 @@ export function ResumeView() {
       <div className="rise space-y-3">
         {edition.dialogue}
         {entete}
-        <div className="mx-auto w-full max-w-[660px] space-y-3">
+        <div className="mx-auto w-full max-w-[660px] space-y-2.5">
           {hautDeVue}
-          <p className="block-title pt-4 text-center !text-[11.5px] !font-medium !tracking-[.3em] !text-[#e6d9bb]">Restant</p>
           {noteFiltre}
           {tuiles.length ? (
             <>
-              {principales.length > 0 && <div className="verre verre-panneau">{principales.map((t) => <LigneVerre key={t.cle} {...basculer(t)} />)}</div>}
-              {apart.length > 0 && <div className="verre verre-panneau !mt-[22px] !py-0">{apart.map((t) => <LigneVerre key={t.cle} {...basculer(t)} />)}</div>}
+              {principales.length > 0 && <div className="verre verre-panneau !py-0.5">{principales.map((t) => <LigneVerre key={t.cle} {...basculer(t)} />)}</div>}
+              {apart.length > 0 && <div className="verre verre-panneau !mt-3 !py-0 [@media(min-height:840px)]:!mt-5">{apart.map((t) => <LigneVerre key={t.cle} {...basculer(t)} />)}</div>}
             </>
           ) : vide}
         </div>
@@ -233,10 +229,9 @@ export function ResumeView() {
       {edition.dialogue}
       {entete}
       {hautDeVue}
-      <p className="block-title pt-1">Restant</p>
       {noteFiltre}
       {tuiles.length ? (
-        <div className="space-y-1.5 lg:space-y-2">
+        <div className="space-y-1.5">
           {tuiles.map((t) => <TuileBudgetAnneau key={t.cle} {...basculer(t)} />)}
         </div>
       ) : vide}
