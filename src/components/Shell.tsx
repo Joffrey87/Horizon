@@ -3,13 +3,14 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   Home, FolderKanban, ListTodo, Compass, CalendarDays, CalendarRange,
   Repeat, ClipboardCheck, Network, Settings, Plus, LogOut, Menu, ArrowLeft, ShieldCheck, Timer, Newspaper,
-  AlertTriangle, X, RotateCw, ArrowLeftRight, Wallet, Eye, Hourglass,
+  AlertTriangle, X, RotateCw, ArrowLeftRight, Wallet, Eye, Hourglass, ShoppingCart,
 } from 'lucide-react'
 import { useHorizon, vueCourante } from '../lib/store'
 import { ONGLETS_PARTAGE, pageAccueil, routeAutorisee } from '../lib/partage'
 import { pagesFinancesVisibles } from '../lib/financesNav'
 import { todayIso, wallpaperOfDay } from '../lib/logic'
-import { QuickCapture } from './QuickCapture'
+import { QuickAdd } from './QuickAdd'
+import { ROUTE_ACCUEIL, ROUTE_COURSES } from '../lib/navigation'
 
 // Agendas externes : on resynchronise au plus une fois par demi-heure. Inutile
 // d'aller plus vite — Google met son propre export iCal en cache.
@@ -17,7 +18,7 @@ const SYNC_KEY = 'horizon.agenda.sync'
 const SYNC_MS = 30 * 60 * 1000
 
 const NAV = [
-  { to: '/', label: 'Accueil', icon: Home },
+  { to: ROUTE_ACCUEIL, label: 'Accueil', icon: Home },
   { to: '/projets', label: 'Projets', icon: FolderKanban },
   { to: '/priorites', label: 'Priorités', icon: ListTodo },
   { to: '/domaines', label: 'Domaines & objectifs', icon: Compass },
@@ -76,14 +77,16 @@ export function Shell({ children }: { children: ReactNode }) {
   const vue = useHorizon((s) => vueCourante(s))
   const apercu = useHorizon((s) => s.apercu)
   const setApercu = useHorizon((s) => s.setApercu)
-  const accueil = vue ? pageAccueil(vue) ?? '/' : '/'
+  const accueil = vue ? pageAccueil(vue) ?? '/' : ROUTE_ACCUEIL
   const nav = vue ? NAV.filter((n) => ONGLETS_PARTAGE.some((o) => vue.onglets.includes(o.cle) && o.route === n.to)) : NAV
   useEffect(() => {
     // L'aperçu montre ce qu'elle verra une fois l'accès validé.
     const v = vue && apercu ? { ...vue, actif: true } : vue
     if (v?.actif && !routeAutorisee(pathname, v)) navigate(pageAccueil(v) ?? '/', { replace: true })
   }, [vue, apercu, pathname, navigate])
-  const pleineLargeur = pathname === '/' || pathname.startsWith('/temps')
+  // Raccourci « Courses » dans l'Agenda (pas en vue partagée : la liste est privée).
+  const caddie = !vue && pathname.startsWith('/temps')
+  const pleineLargeur = pathname === ROUTE_ACCUEIL || pathname.startsWith('/temps')
 
   useEffect(() => {
     if (nbAgendas === 0 || vue) return
@@ -121,12 +124,19 @@ export function Shell({ children }: { children: ReactNode }) {
               <p className="text-sm font-bold tracking-[0.22em]">HORIZON</p>
             </div>
           </Link>
+          {/* Agenda : raccourci vers la liste de courses, à côté du logo. */}
+          {caddie && (
+            <Link to={ROUTE_COURSES} onClick={() => setMenuOpen(false)} className="btn-ghost ml-auto p-2"
+              aria-label="Liste de courses" title="Liste de courses">
+              <ShoppingCart size={18} strokeWidth={1.9} />
+            </Link>
+          )}
         </div>
 
         <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3">
           {nav.map(({ to, label, icon: Icon }) => (
             <Fragment key={to}>
-              <NavLink to={to} end={to === '/'} onClick={() => setMenuOpen(false)}
+              <NavLink to={to} end={to === ROUTE_ACCUEIL} onClick={() => setMenuOpen(false)}
                 className={({ isActive }) =>
                   `flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors ${
                     isActive ? 'bg-panel-3 text-sun-soft' : 'text-ink-2 hover:bg-panel-2 hover:text-ink'
@@ -203,12 +213,20 @@ export function Shell({ children }: { children: ReactNode }) {
                 ))}
               </nav>
             )}
-            <Link to={accueil} aria-label="Retour à l'accueil" className="shrink-0">
-              <span className="block h-8 w-8 overflow-hidden rounded-full ring-1 ring-white/10">
-                <img src="/logo.png" alt="Horizon" className="h-full w-full object-cover"
-                  style={{ transform: 'scale(2.1)', transformOrigin: '50% 41%' }} />
-              </span>
-            </Link>
+            <div className="flex shrink-0 items-center gap-1">
+              {/* Agenda : raccourci vers la liste de courses, à côté du logo qui mène à l'accueil. */}
+              {caddie && (
+                <Link to={ROUTE_COURSES} className="btn-ghost p-2" aria-label="Liste de courses" title="Liste de courses">
+                  <ShoppingCart size={18} strokeWidth={1.9} />
+                </Link>
+              )}
+              <Link to={accueil} aria-label="Retour à l'accueil" className="shrink-0">
+                <span className="block h-8 w-8 overflow-hidden rounded-full ring-1 ring-white/10">
+                  <img src="/logo.png" alt="Horizon" className="h-full w-full object-cover"
+                    style={{ transform: 'scale(2.1)', transformOrigin: '50% 41%' }} />
+                </span>
+              </Link>
+            </div>
           </div>
           {/* ---- Bandeau d'erreur : une panne réseau ou une écriture perdue se voit,
                au lieu de passer pour un compte vide ou un enregistrement réussi. ---- */}
@@ -252,7 +270,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
       {/* ---- Capture rapide : toujours accessible, ne casse pas le focus (pas en vue partagée) ---- */}
       {!vue && (
-        <button onClick={() => setCapture(true)} title="Capturer une idée (sans interrompre)"
+        <button onClick={() => setCapture(true)} title="Ajouter (tâche, idée, achat, rappel, courses)" aria-label="Ajouter"
           className={`btn-sun fixed bottom-6 right-6 z-40 flex h-13 w-13 items-center justify-center rounded-full p-3.5 shadow-lg shadow-black/40 ${
             // Agenda (ordinateur) : plus petit et plus bas, à côté du volet de notes, pour ne pas couvrir la marge des mois.
             pathname.startsWith('/temps') ? 'md:bottom-2 md:h-10 md:w-10 md:p-2.5' : ''}`}>
@@ -260,7 +278,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </button>
       )}
 
-      <QuickCapture open={capture} onClose={() => setCapture(false)} />
+      <QuickAdd open={capture} onClose={() => setCapture(false)} />
     </div>
   )
 }

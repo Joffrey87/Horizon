@@ -23,6 +23,7 @@ import { HeuresControleView } from './views/HeuresControleView'
 import { RemplasView } from './views/RemplasView'
 import { SettingsView } from './views/SettingsView'
 import { CaptureView } from './views/CaptureView'
+import { PAGE_OUVERTURE, ROUTE_ACCUEIL } from './lib/navigation'
 
 // L'espace visuel embarque React Flow (~300 Ko) pour une seule route : il n'est
 // chargé qu'à l'ouverture de /espace, plus au premier écran.
@@ -44,7 +45,8 @@ const Chargement = () => <p className="pt-8 text-center text-sm text-ink-3">Char
 export function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Dashboard />} />
+      <Route path="/" element={<Navigate to={PAGE_OUVERTURE} replace />} />
+      <Route path={ROUTE_ACCUEIL} element={<Dashboard />} />
       <Route path="/projets" element={<ProjectsView />} />
       <Route path="/domaines" element={<DomainsView />} />
       <Route path="/priorites" element={<PrioritiesView />} />
@@ -80,7 +82,7 @@ export function AppRoutes() {
       <Route path="/remplas" element={<RemplasView />} />
       <Route path="/espace" element={<Suspense fallback={<Chargement />}><WorkspaceView /></Suspense>} />
       <Route path="/parametres" element={<SettingsView />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to={PAGE_OUVERTURE} replace />} />
     </Routes>
   )
 }

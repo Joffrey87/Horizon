@@ -12,8 +12,8 @@ const HORIZON_LABEL: Record<ObjectiveHorizon, string> = {
 }
 
 const PALETTE: [string, ...string[]] = [
-  '#d97706', '#0d9488', '#8b5cf6', '#dc4a6b', '#3987e5', '#65a30d',
-  '#eab308', '#06b6d4', '#e0499c', '#ef6f4c',
+  '#d97706', '#16a34a', '#8b5cf6', '#dc4a6b', '#d946ef', '#65a30d',
+  '#eab308', '#c2703d', '#e0499c', '#ef6f4c',
 ]
 
 const fmtTarget = (o: Objective) => {

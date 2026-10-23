@@ -19,13 +19,18 @@ import {
 import { readingOfDay, readingQuote, useMassOfDay } from '../lib/aelf'
 import { Card, Badge, ProgressBar, DomainDot, EmptyState } from '../components/ui'
 import { DomainRadar } from '../components/charts'
+import { ROUTE_ACCUEIL } from '../lib/navigation'
+
+/** Bouton « Cockpit » masqué à la demande (le tiroir et son contenu restent en place).
+ *  Pour le remettre : passer à true. */
+const COCKPIT_VISIBLE = false
 
 const DEFAULT_DOMAINS = [
   { name: 'Professionnel', color: '#d97706', icon: 'briefcase' },
-  { name: 'Santé', color: '#0d9488', icon: 'heart' },
+  { name: 'Santé', color: '#16a34a', icon: 'heart' },
   { name: 'Spiritualité', color: '#8b5cf6', icon: 'flame' },
   { name: 'Famille & Amis', color: '#dc4a6b', icon: 'users' },
-  { name: 'Finances', color: '#3987e5', icon: 'wallet' },
+  { name: 'Finances', color: '#d946ef', icon: 'wallet' },
   { name: 'Personnel', color: '#65a30d', icon: 'sprout' },
 ]
 
@@ -155,7 +160,7 @@ export function Dashboard() {
       id: 'panneau:habitudes',
       titre: 'Habitudes du jour',
       icone: <Repeat size={14} />,
-      accent: '#0d9488',
+      accent: '#16a34a',
       largeur: 250,
       defaut: { x: 500, y: 0 },
       contenu: (
@@ -397,7 +402,7 @@ export function Dashboard() {
               )}
               {alerts.map((a) => (
                 <li key={a.id}>
-                  <Link to={a.link ?? '/'} className="group flex gap-2.5"
+                  <Link to={a.link ?? ROUTE_ACCUEIL} className="group flex gap-2.5"
                     onClick={() => setCockpitOpen(false)}>
                     {a.severity === 'warn'
                       ? <AlertTriangle size={15} className="mt-0.5 shrink-0 text-[#eda145]" />
@@ -441,7 +446,7 @@ export function Dashboard() {
         <div className="relative flex h-full flex-col p-4 lg:p-6">
           {/* ---- Haut : salutation et citation. Tout le reste de la hauteur
                   revient à l'espace de travail. ---- */}
-          <div className="shrink-0 pr-36">
+          <div className={`shrink-0 ${COCKPIT_VISIBLE ? 'pr-36' : ''}`}>
             <h1 className="text-2xl font-semibold text-white drop-shadow-md lg:text-3xl">
               {heroTitle}
             </h1>
@@ -467,13 +472,13 @@ export function Dashboard() {
       {/* Fiche d'un projet, ouverte depuis sa tuile — sans quitter l'accueil. */}
       {ficheProjet && <FicheProjet projectId={ficheProjet} onClose={() => setFicheProjet(null)} />}
 
-      {/* ---- Bouton flottant : ouvre le cockpit ---- */}
-      <button onClick={() => setCockpitOpen(true)}
+      {/* ---- Bouton flottant : ouvre le cockpit (masqué : voir COCKPIT_VISIBLE) ---- */}
+      {COCKPIT_VISIBLE && <button onClick={() => setCockpitOpen(true)}
         aria-label="Ouvrir le cockpit"
         className="fixed right-4 top-4 z-30 flex items-center gap-2 rounded-full border border-white/25 bg-black/55 px-4 py-2.5 text-white shadow-lg shadow-black/40 backdrop-blur-md transition-colors hover:bg-black/75">
         <LayoutDashboard size={16} />
         <span className="text-xs font-semibold uppercase tracking-[0.16em]">Cockpit</span>
-      </button>
+      </button>}
 
       {/* ---- Zone de clic-hors (transparente, laisse voir le paysage) ---- */}
       {cockpitOpen && (

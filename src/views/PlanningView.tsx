@@ -15,7 +15,7 @@ type Mode = 'planifie' | 'ideal'
 type CalView = 'semaine' | 'mois' | 'trimestre' | 'annee'
 
 const QUAD_COLOR: Record<1 | 2 | 3 | 4, string> = {
-  1: '#eda145', 2: '#fbbf24', 3: '#6ea8ee', 4: '#857c6d',
+  1: '#eda145', 2: '#fbbf24', 3: '#c9a37a', 4: '#857c6d',
 }
 const QUAD_LABEL: Record<1 | 2 | 3 | 4, string> = {
   1: 'Important & urgent', 2: 'Important, pas urgent', 3: 'Urgent, peu important', 4: 'Ni urgent ni important',

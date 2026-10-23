@@ -3,6 +3,7 @@ import { ShoppingCart, Plus, Check, Trash2, RotateCcw, Repeat } from 'lucide-rea
 import { useHorizon } from '../lib/store'
 import type { ShoppingItem, ShoppingList, ShoppingSection } from '../lib/types'
 import { Card, Modal, EmptyState, Badge } from '../components/ui'
+import { trouverListeCourses } from '../lib/courses'
 
 const SECTIONS: { key: ShoppingSection; label: string }[] = [
   { key: 'alimentaire', label: 'Alimentaire' },
@@ -34,10 +35,10 @@ export function ListesView() {
   const [tab, setTab] = useState<ShoppingSection>('alimentaire')
   const [creating, setCreating] = useState(false)
 
-  // sélection par défaut = 1re liste
+  // sélection par défaut = la liste « Courses » (raccourci du caddie), sinon la 1re liste
   useEffect(() => {
     if (selectedId && lists.some((l) => l.id === selectedId)) return
-    setSelectedId(lists[0]?.id ?? null)
+    setSelectedId((trouverListeCourses(lists) ?? lists[0])?.id ?? null)
   }, [lists, selectedId])
 
   const selected = lists.find((l) => l.id === selectedId) ?? null

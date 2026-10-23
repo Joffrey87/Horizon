@@ -85,6 +85,8 @@ export interface Task {
   step_id: UUID | null
   domain_id: UUID | null
   title: string
+  /** Type posé par le bouton « + » ; absent/'tache' = tâche ordinaire. */
+  kind?: 'tache' | 'achat' | 'rappel'
   notes: string | null
   status: TaskStatus
   importance: number | null // 1..3

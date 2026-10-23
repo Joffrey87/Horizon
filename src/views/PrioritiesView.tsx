@@ -11,7 +11,7 @@ type Item = { kind: 'idee'; idea: Idea } | { kind: 'tache'; task: Task }
 const QUADRANTS = [
   { q: 1 as const, title: 'Important & urgent', hint: 'À faire', tone: 'text-[#eda145]' },
   { q: 2 as const, title: 'Important, pas urgent', hint: 'À planifier — le cœur du système', tone: 'text-sun-soft' },
-  { q: 3 as const, title: 'Urgent, peu important', hint: 'Vite fait ou délégué', tone: 'text-[#6ea8ee]' },
+  { q: 3 as const, title: 'Urgent, peu important', hint: 'Vite fait ou délégué', tone: 'text-[#c9a37a]' },
   { q: 4 as const, title: 'Ni urgent ni important', hint: 'Abandonner ou différer', tone: 'text-ink-3' },
 ]
 
@@ -75,7 +75,10 @@ export function PrioritiesView() {
           {domain && <DomainDot color={domain.color} size={7} />}
           <span className="min-w-0 flex-1 truncate text-sm text-ink-2">{x.title}</span>
           {project && <ProjectTag name={project.title} color={domain?.color} size="xs" />}
-          <Badge tone={it.kind === 'idee' ? 'sun' : 'info'}>{it.kind}</Badge>
+          {it.kind === 'idee' ? <Badge tone="sun">idée</Badge>
+            : it.task.kind === 'achat' ? <Badge tone="good">achat</Badge>
+            : it.task.kind === 'rappel' ? <Badge tone="warn">rappel</Badge>
+            : <Badge>tâche</Badge>}
         </button>
       </li>
     )

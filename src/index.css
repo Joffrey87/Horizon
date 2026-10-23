@@ -46,10 +46,10 @@
 
   /* Séries de domaines — palette catégorielle validée (mode sombre) */
   --color-dom-1: #d97706;
-  --color-dom-2: #0d9488;
+  --color-dom-2: #16a34a;
   --color-dom-3: #8b5cf6;
   --color-dom-4: #dc4a6b;
-  --color-dom-5: #3987e5;
+  --color-dom-5: #d946ef;
   --color-dom-6: #65a30d;
 
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -165,3 +165,7 @@ input::placeholder, textarea::placeholder { color: var(--color-ink-3); }
 .temps-lecture [aria-label="Marquer fait"],
 .temps-lecture [aria-label="Marquer à faire"] { display: none; }
 .temps-lecture [draggable="true"] { cursor: default; }
+
+/* Feuille du bouton « + » : monte du bas de l'écran. */
+@keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+.sheet-up { animation: sheet-up .22s ease-out both; }
