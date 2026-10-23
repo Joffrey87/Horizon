@@ -13,8 +13,9 @@
 // ================================================================
 import type {
   FinAccount, FinAccountKind, FinAssetClass, FinBudget, FinCategory, FinHolding, FinLine, FinOwner, FinPlanned,
-  FinTarget, FinTransaction, FinLabel, FinGroup, FinEcheance,
+  FinTarget, FinTransaction, FinLabel, FinGroup, FinEcheance, FinLoan,
 } from './types'
+import { motifPrelevement } from './prets'
 
 export type FiltreTitulaire = 'foyer' | FinOwner
 
@@ -268,6 +269,125 @@ export function capitalRembourse(echeances: FinEcheance[], mois: string): number
   return echeances.reduce((s, e) => (moisDe(e.date) === mois ? s + Number(e.capital) : s), 0)
 }
 
+// ---------- Capital de prêt compté en épargne ----------
+
+/** Capital d'un prêt pour un mois : fait (débité dans le budget), prévu (pas encore débité) ou hors budget. */
+export interface CapitalPret {
+  pretId: string
+  nom: string
+  mois: string
+  /** Part de capital de l'échéance du mois (fin_echeances). */
+  capital: number
+  /** Montant réellement débité ce mois-ci dans le budget par ce prêt (échéance entière : capital + intérêts…). */
+  debite: number
+  /** Capital retiré de la ligne de dépenses (fait) : borné au montant réellement débité. */
+  extrait: number
+  /** Capital qui partira encore ce mois-ci (prêt du budget, échéance pas encore débitée). */
+  prevu: number
+  /** Ligne de budget qui porte le débit du prêt (celle dont on retire le capital). */
+  ligneId: string | null
+  etat: 'fait' | 'prevu' | 'hors_budget'
+  /** Motif de reconnaissance du prélèvement (loan.debit_match), pour retrouver la charge. */
+  motif: string | null
+}
+
+export interface CapitalMois {
+  mois: string
+  prets: CapitalPret[]
+  /** Capital déjà retiré des dépenses, par ligne de budget. */
+  extraitParLigne: Map<string, number>
+  /** Total des capitaux faits (comptés en épargne). */
+  fait: number
+  /** Total des capitaux encore à venir ce mois-ci (épargne prévue). */
+  prevu: number
+  /** Capital des prêts payés hors budget (compte Airbnb…) : informatif, jamais compté. */
+  horsBudget: number
+}
+
+export interface OptionsCapital {
+  prets: FinLoan[]
+  echeances: FinEcheance[]
+  transactions: FinTransaction[]
+  idx: IndexFinances
+  filtre: FiltreTitulaire
+  moisCourant: string
+}
+
+/**
+ * Capital de prêt d'un mois, prêt par prêt. Le prélèvement d'un prêt est reconnu à son motif
+ * (`debit_match`) parmi les opérations du budget visibles dans la vue :
+ *  - débité ce mois-ci → « fait » : on retire le capital de la ligne qui porte le prélèvement
+ *    (borné au montant débité), il ne reste dans la ligne que intérêts, assurance et frais ;
+ *  - pas encore débité, mais prêt payé depuis le budget (déjà vu les mois précédents) et mois
+ *    courant ou futur → « prévu » ;
+ *  - prélevé sur un compte hors budget (ex. compte Airbnb) → « hors budget » : rien à retirer,
+ *    et le capital n'entre pas dans l'épargne du budget.
+ */
+export function capitalDuMois(opts: OptionsCapital & { mois: string }): CapitalMois {
+  const { mois, idx, filtre } = opts
+  const res: CapitalMois = { mois, prets: [], extraitParLigne: new Map(), fait: 0, prevu: 0, horsBudget: 0 }
+  for (const pret of opts.prets) {
+    const echeances = opts.echeances.filter((e) => e.account_id === pret.account_id && moisDe(e.date) === mois)
+    if (!echeances.length) continue
+    const capital = echeances.reduce((s, e) => s + Number(e.capital), 0)
+    const re = motifPrelevement(pret.debit_match)
+    const nom = (idx.comptes.get(pret.account_id)?.name ?? 'Prêt').replace(/^pr[eê]t immobilier\s*/i, 'Prêt ')
+    const base = { pretId: pret.id, nom, mois, capital, debite: 0, extrait: 0, prevu: 0, ligneId: null as string | null, motif: pret.debit_match }
+    // Opérations qui portent le prélèvement : compte du budget (ligne) ou hors budget.
+    let debite = 0
+    let ligneId: string | null = null
+    let ligneVue: string | null = null
+    let budgetVu = false
+    let horsBudgetVu = false
+    if (re) {
+      for (const tx of opts.transactions) {
+        if (Number(tx.amount) >= 0 || !re.test(tx.label_local ?? tx.label) && !re.test(tx.label)) continue
+        const c = classer(tx, idx)
+        if (c.type === 'ignoree' && c.raison === 'compte') { horsBudgetVu = true; continue }
+        if (c.type !== 'ligne' || !correspond(filtre, titulaireDe(tx, idx))) continue
+        budgetVu = true
+        ligneVue = c.ligne
+        if (moisDe(tx.date) === mois) { debite -= Number(tx.amount); ligneId = c.ligne }
+      }
+    }
+    const surCompteBudget = (pret.debit_account_ids ?? []).some((id) => idx.comptes.get(id)?.in_budget)
+    if (debite > 0.005) {
+      const extrait = Math.min(capital, debite)
+      res.prets.push({ ...base, debite, extrait, ligneId, etat: 'fait' })
+      res.fait += extrait
+      res.extraitParLigne.set(ligneId!, (res.extraitParLigne.get(ligneId!) ?? 0) + extrait)
+    } else if ((budgetVu || surCompteBudget) && mois >= opts.moisCourant) {
+      res.prets.push({ ...base, prevu: capital, ligneId: ligneVue, etat: 'prevu' })
+      res.prevu += capital
+    } else if (horsBudgetVu && !budgetVu) {
+      res.prets.push({ ...base, etat: 'hors_budget' })
+      res.horsBudget += capital
+    }
+  }
+  return res
+}
+
+/**
+ * Dépenses par ligne sans le capital de prêt (compté en épargne) : agrégat du budget où la part
+ * de capital des prélèvements d'emprunt est retirée de leur ligne, et capital détaillé par mois.
+ * Aucun trou : ce qui sort de la ligne entre dans « épargné », rien d'autre ne change.
+ */
+export function agregerHorsCapital(opts: Omit<OptionsCapital, 'moisCourant'> & { moisCourant: string }): { agregat: Agregat; capital: Map<string, CapitalMois> } {
+  const agregat = agreger(opts.transactions, opts.idx, opts.filtre)
+  const capital = new Map<string, CapitalMois>()
+  const moisConcernes = new Set<string>([...agregat.keys(), opts.moisCourant, decaleMois(opts.moisCourant, 1)])
+  for (const e of opts.echeances) moisConcernes.add(moisDe(e.date))
+  for (const mois of moisConcernes) {
+    const c = capitalDuMois({ ...opts, mois })
+    if (!c.prets.length) continue
+    capital.set(mois, c)
+    const m = agregat.get(mois)
+    if (!m) continue
+    for (const [ligne, montant] of c.extraitParLigne) m.lignes.set(ligne, (m.lignes.get(ligne) ?? 0) - montant)
+  }
+  return { agregat, capital }
+}
+
 // ---------- Entrées prévues ----------
 
 /**
@@ -311,6 +431,8 @@ export function entreesPrevues(opts: {
 export function depensesAVenir(opts: {
   mois: string; moisCourant: string; transactions: FinTransaction[]; idx: IndexFinances
   filtre: FiltreTitulaire; lines: FinLine[]
+  /** Capital de prêt du mois : la part de capital d'une échéance pas encore débitée est de l'épargne prévue, pas une dépense à venir. */
+  capital?: CapitalMois
 }): { total: number; details: { nom: string; montant: number }[] } {
   const vide = { total: 0, details: [] }
   if (opts.mois < opts.moisCourant) return vide
@@ -319,7 +441,7 @@ export function depensesAVenir(opts: {
   const courses = ligneNommee('Courses')
   const precedents = [1, 2, 3].map((n) => decaleMois(opts.mois, -n))
   const rang = new Map(precedents.map((m, i) => [m, i]))
-  const charges = new Map<string, { nom: string; parMois: number[]; ceMois: boolean }>()
+  const charges = new Map<string, { nom: string; parMois: number[]; ceMois: boolean; exemple: string }>()
   const coursesParMois = [0, 0, 0]
   let coursesCeMois = 0
   for (const tx of opts.transactions) {
@@ -333,7 +455,7 @@ export function depensesAVenir(opts: {
       else if (m === opts.mois) coursesCeMois -= Number(tx.amount)
     } else if (c.ligne === fixes && (i !== undefined || m === opts.mois)) {
       const { cle, nom } = cleGroupe(tx.label)
-      const g = charges.get(cle) ?? { nom, parMois: [0, 0, 0], ceMois: false }
+      const g = charges.get(cle) ?? { nom, parMois: [0, 0, 0], ceMois: false, exemple: tx.label_local ?? tx.label }
       if (i !== undefined) g.parMois[i]! -= Number(tx.amount)
       else g.ceMois = true
       charges.set(cle, g)
@@ -341,7 +463,14 @@ export function depensesAVenir(opts: {
   }
   const details = [...charges.values()]
     .filter((g) => !g.ceMois && g.parMois.every((v) => v > 0))
-    .map((g) => ({ nom: g.nom, montant: g.parMois.reduce((s, v) => s + v, 0) / 3 }))
+    .map((g) => {
+      const brut = g.parMois.reduce((s, v) => s + v, 0) / 3
+      // Échéance de prêt pas encore débitée : on n'en garde que intérêts, assurance et frais.
+      const capital = (opts.capital?.prets ?? []).filter((p) => p.etat === 'prevu' && motifPrelevement(p.motif)?.test(g.exemple))
+        .reduce((s, p) => s + p.prevu, 0)
+      return { nom: g.nom, montant: Math.max(0, brut - capital) }
+    })
+    .filter((d) => d.montant > 0.5)
     .sort((a, b) => b.montant - a.montant)
   const coursesRestantes = courses ? Math.max(0, coursesParMois.reduce((s, v) => s + v, 0) / 3 - coursesCeMois) : 0
   if (coursesRestantes > 0.5) details.push({ nom: 'Courses (moyenne 3 mois)', montant: coursesRestantes })

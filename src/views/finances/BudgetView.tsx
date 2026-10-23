@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { ArrowRight, ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import {
-  NON_CLASSE, agreger, aplatirGroupes, capitalRembourse, decaleMois, depensesAVenir, detailLigne, entreesPrevues, euros, grouperParIntitule, libelleMois, syntheseMois, type GroupeIntitules, type LigneBudget,
+  NON_CLASSE, agregerHorsCapital, aplatirGroupes, decaleMois, depensesAVenir, detailLigne, entreesPrevues, euros, grouperParIntitule, libelleMois, syntheseMois, type GroupeIntitules, type LigneBudget,
 } from '../../lib/finances'
 import type { FinTransaction } from '../../lib/types'
 import { EmptyState, ProgressBar } from '../../components/ui'
@@ -30,6 +30,7 @@ export function BudgetView() {
   const lines = useHorizon((s) => s.finLines)
   const budgets = useHorizon((s) => s.finBudgets)
   const echeances = useHorizon((s) => s.finEcheances)
+  const prets = useHorizon((s) => s.finLoans)
   const setFinBudget = useHorizon((s) => s.setFinBudget)
   const idx = useIndex()
   const [depli, setDepli] = useState<Depli>(null)
@@ -55,7 +56,11 @@ export function BudgetView() {
   // Vue partagée : les budgets et le prévisionnel restent ceux du propriétaire.
   const modifiable = !useVue()
 
-  const agregat = useMemo(() => agreger(transactions, idx, filtre), [transactions, idx, filtre])
+  // Le capital des prêts n'est pas une dépense : il est retiré de la ligne qui porte le prélèvement
+  // (il n'y reste que intérêts, assurance et frais) et compté en épargne, une seule fois.
+  const { agregat, capital: capitalParMois } = useMemo(
+    () => agregerHorsCapital({ prets, echeances, transactions, idx, filtre, moisCourant: moisCourant() }),
+    [prets, echeances, transactions, idx, filtre])
   const s = useMemo(() => syntheseMois({ mois, lines, budgets, agregat, filtre }), [mois, lines, budgets, agregat, filtre])
   const prevues = useMemo(() => entreesPrevues({ mois, transactions, idx, filtre }), [mois, transactions, idx, filtre])
   const foyer = filtre === 'foyer'
@@ -66,12 +71,12 @@ export function BudgetView() {
   const depenses = s.lignes.filter((l) => l.ligne?.kind !== 'epargne')
   const epargnes = s.lignes.filter((l) => l.ligne?.kind === 'epargne')
   const somme = (ls: LigneBudget[], f: (l: LigneBudget) => number | null) => ls.reduce((t, l) => t + (f(l) ?? 0), 0)
-  // Reste réaliste : ce qui n'est pas encore dépensé, moins les frais fixes habituels et les courses à venir.
-  const aVenir = useMemo(() => depensesAVenir({ mois, moisCourant: moisCourant(), transactions, idx, filtre, lines }),
-    [mois, transactions, idx, filtre, lines])
+  const capitalMois = capitalParMois.get(mois)
+  const aVenir = useMemo(() => depensesAVenir({ mois, moisCourant: moisCourant(), transactions, idx, filtre, lines, capital: capitalMois }),
+    [mois, transactions, idx, filtre, lines, capitalMois])
   const reste = s.total.budget !== null ? s.total.budget - s.total.reel : null
-  // Épargné : lignes d'épargne + capital de prêt remboursé (vue Foyer : les prêts sont ceux du foyer).
-  const capital = foyer ? capitalRembourse(echeances, mois) : 0
+  // Épargné : lignes d'épargne + capital de prêt remboursé (retiré des dépenses, donc compté une fois).
+  const capital = capitalMois?.fait ?? 0
   // Tuile « Reste » : dépenses seulement (l'épargne n'y entre pas), après ce qui est encore à venir.
   const resteTuile = foyer ? somme(depenses, (l) => l.budget) - somme(depenses, (l) => l.reel) - aVenir.total : null
 
@@ -111,7 +116,14 @@ export function BudgetView() {
             <div className="flex items-center justify-between gap-2">
               <button onClick={() => basculer(l.cle, 'mois')} aria-expanded={ouvert === 'mois'} className="flex items-center gap-1.5 text-left">
                 {ouvert === 'mois' ? <ChevronDown size={14} className="text-ink-3" /> : <ChevronRight size={14} className="text-ink-3" />}
-                <span className={l.ligne ? '' : 'italic text-ink-2'}>{l.ligne?.name ?? 'Non classé'}</span>
+                <span className="flex flex-col">
+                  <span className={l.ligne ? '' : 'italic text-ink-2'}>{l.ligne?.name ?? 'Non classé'}</span>
+                  {(capitalMois?.extraitParLigne.get(l.cle) ?? 0) > 0.5 && (
+                    <span className="text-[10px] leading-tight text-ink-3" title="Le capital des prêts n'est pas une dépense : il est retiré de cette ligne et compté dans l'épargne">
+                      hors {euros(capitalMois!.extraitParLigne.get(l.cle)!)} de capital (compté en épargne)
+                    </span>
+                  )}
+                </span>
               </button>
               <BoutonDetails niveau={ouvert === 'mois' && niveauTous?.cle === l.cle ? niveauTous.n : 0} onChange={(n) => reglerTous(l.cle, n)} />
             </div>

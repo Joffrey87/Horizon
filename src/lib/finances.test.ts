@@ -2,10 +2,11 @@
 // Tests des règles pures de l'onglet Finances (finances.ts). Aucun réseau.
 // ================================================================
 import { describe, it, expect } from 'vitest'
-import type { FinAccount, FinBudget, FinCategory, FinHolding, FinLine, FinPlanned, FinTarget, FinTransaction } from './types'
+import type { FinAccount, FinBudget, FinEcheance, FinLoan, FinCategory, FinHolding, FinLine, FinPlanned, FinTarget, FinTransaction } from './types'
 import {
   estEnAttente, NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, capitalRembourse, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, budgetDe, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
   libelleMois, moisEcoules, patrimoine, previsionDe, provision, syntheseMois,
+  agregerHorsCapital, capitalDuMois,
 } from './finances'
 
 let seq = 0
@@ -494,5 +495,84 @@ describe('opération en attente', () => {
     expect(estEnAttente({ ...base, note: 'En attente de validation' })).toBe(true)
     expect(estEnAttente(base)).toBe(false)
     expect(estEnAttente({ ...base, note: 'Resto en attente' })).toBe(false)
+  })
+})
+
+// ---------- Capital de prêt : retiré de la ligne emprunt, compté en épargne ----------
+
+describe('capital de prêt extrait de la ligne emprunt', () => {
+  const pretCompte = compte({ kind: 'pret', in_budget: false, name: 'PRET IMMOBILIER 111A' })
+  const pretAirbnb = compte({ kind: 'pret', in_budget: false, name: 'PRET IMMOBILIER 222B' })
+  const airbnb = compte({ kind: 'investissement', in_budget: false })
+  const idxP = indexer([joint, perso, pea, pretCompte, pretAirbnb, airbnb], categories, lines)
+  const pret = (account_id: string, debit_match: string): FinLoan => ({ id: id(), account_id, debit_match, debit_account_ids: [] } as unknown as FinLoan)
+  const ech = (account_id: string, date: string, capital: number, interets = 300): FinEcheance =>
+    ({ id: id(), user_id: 'u', account_id, date, capital, interets, assurance: 0, frais: 0, restant_du: null } as unknown as FinEcheance)
+  const prets = [pret(pretCompte.id, 'ECH PRET 111A'), pret(pretAirbnb.id, 'ECH PRET 222B')]
+  const echeances = [
+    ech(pretCompte.id, '2026-09-01', 850), ech(pretCompte.id, '2026-10-01', 852), ech(pretCompte.id, '2026-11-01', 854),
+    ech(pretAirbnb.id, '2026-10-01', 500), ech(pretAirbnb.id, '2026-11-01', 501),
+  ]
+  const debit = (date: string, montant: number, label: string, compteId = perso.id) => op(compteId, date, -montant, { category_id: loyer.id, label })
+  const tx = [
+    debit('2026-09-01', 1150, 'ECH PRET 111A DU 01/09/26'),
+    debit('2026-10-01', 1152, 'ECH PRET 111A DU 01/10/26'),
+    debit('2026-10-01', 600, 'ECH PRET 222B DU 01/10/26', airbnb.id),           // compte hors budget
+    op(joint.id, '2026-10-03', -40, { category_id: loyer.id, label: 'ASSURANCE' }),
+  ]
+  const base = { prets, echeances, transactions: tx, idx: idxP, filtre: 'foyer' as const, moisCourant: '2026-10' }
+
+  it('retire le capital de la ligne qui porte le prélèvement, borné au montant débité', () => {
+    const c = capitalDuMois({ ...base, mois: '2026-10' })
+    expect(c.fait).toBe(852)
+    expect(c.extraitParLigne.get(fixes.id)).toBe(852)
+    expect(c.prets.find((p) => p.etat === 'fait')?.debite).toBe(1152)
+    // Débit plus petit que le capital de l'échéance : on ne retire que ce qui a été débité.
+    const partiel = capitalDuMois({ ...base, transactions: [debit('2026-10-01', 400, 'ECH PRET 111A DU 01/10/26')], mois: '2026-10' })
+    expect(partiel.fait).toBe(400)
+  })
+  it('un prêt payé depuis un compte hors budget n’est ni retiré ni compté', () => {
+    const c = capitalDuMois({ ...base, mois: '2026-10' })
+    const p = c.prets.find((x) => x.nom.includes('222B'))!
+    expect(p.etat).toBe('hors_budget')
+    expect(p.extrait).toBe(0)
+    expect(c.horsBudget).toBe(500)
+    expect(c.fait + c.prevu).toBe(852)
+  })
+  it('le capital pas encore débité est prévu (mois courant ou futur), pas dans un mois passé', () => {
+    const futur = capitalDuMois({ ...base, mois: '2026-11' })
+    expect(futur.prevu).toBe(854)
+    expect(futur.fait).toBe(0)
+    const sansDebitOct = capitalDuMois({ ...base, transactions: tx.filter((t) => t.date !== '2026-10-01' || t.account_id === airbnb.id), mois: '2026-10' })
+    expect(sansDebitOct.prevu).toBe(852)
+    const passe = capitalDuMois({ ...base, moisCourant: '2026-11', transactions: tx.filter((t) => t.date !== '2026-10-01' || t.account_id === airbnb.id), mois: '2026-10' })
+    expect(passe.prevu).toBe(0)
+  })
+  it('aucun double compte, aucun trou : dépenses + capital = dépenses d’avant', () => {
+    const avant = agreger(tx, idxP, 'foyer')
+    const { agregat, capital } = agregerHorsCapital(base)
+    for (const mois of ['2026-09', '2026-10']) {
+      const total = (a: typeof avant) => [...(a.get(mois)?.lignes.values() ?? [])].reduce((s, v) => s + v, 0)
+      expect(total(agregat) + (capital.get(mois)?.fait ?? 0)).toBeCloseTo(total(avant), 2)
+    }
+    expect(agregat.get('2026-10')?.lignes.get(fixes.id)).toBeCloseTo(1152 - 852 + 40, 2)   // intérêts + assurance restent
+    expect(agregat.get('2026-09')?.lignes.get(fixes.id)).toBeCloseTo(1150 - 850, 2)
+    // L'agrégat d'origine n'est pas touché pour les autres vues.
+    expect(avant.get('2026-10')?.lignes.get(fixes.id)).toBeCloseTo(1152 + 40, 2)
+  })
+  it('respecte le filtre de titulaire : le prêt d’un compte de Joffrey n’apparaît pas chez Honorine', () => {
+    const c = capitalDuMois({ ...base, filtre: 'honorine', mois: '2026-10' })
+    expect(c.fait).toBe(0)
+    expect(c.extraitParLigne.size).toBe(0)
+  })
+  it('l’échéance de prêt à venir ne compte pas son capital dans les dépenses à venir', () => {
+    const histo = ['07', '08', '09'].map((m) => debit(`2026-${m}-01`, 1150, `ECH PRET 111A DU 01/${m}/26`))
+    const sansOct = [...histo]
+    const capital = capitalDuMois({ ...base, transactions: sansOct, mois: '2026-10' })
+    expect(capital.prevu).toBe(852)
+    const avec = depensesAVenir({ mois: '2026-10', moisCourant: '2026-10', transactions: sansOct, idx: idxP, filtre: 'foyer', lines, capital })
+    const sans = depensesAVenir({ mois: '2026-10', moisCourant: '2026-10', transactions: sansOct, idx: idxP, filtre: 'foyer', lines })
+    expect(Math.round(sans.total)).toBe(1150)
+    expect(Math.round(avec.total)).toBe(1150 - 852)
   })
 })

@@ -2,10 +2,10 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Eye, EyeOff } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
-import { agreger, bilan, capitalRembourse, euros, libelleMois, moisEcoules } from '../../lib/finances'
+import { agregerHorsCapital, bilan, euros, libelleMois, moisEcoules } from '../../lib/finances'
 import { Card, EmptyState } from '../../components/ui'
 import { FiltreSeg, NavMois, Tuile } from './partage'
-import { useFin, useIndex } from './contexte'
+import { moisCourant, useFin, useIndex } from './contexte'
 import { BarresMois } from './graphiques'
 
 const CLE_TOTAL = 'horizon.finances.bilanTotal'
@@ -28,15 +28,19 @@ export function BilanView() {
   const ouvrirMois = (m: string) => { setMois(m); navigate('/finances') }
   const idx = useIndex()
   const periode = useMemo(() => moisEcoules(mois, 6), [mois])
-  const agregat = useMemo(() => agreger(transactions, idx, filtre), [transactions, idx, filtre])
+  const prets = useHorizon((s) => s.finLoans)
+  // Capital de prêt retiré des lignes de dépenses (compté en épargne), comme dans le Budget.
+  const { agregat, capital } = useMemo(
+    () => agregerHorsCapital({ prets, echeances, transactions, idx, filtre, moisCourant: moisCourant() }),
+    [prets, echeances, transactions, idx, filtre])
   const b = useMemo(() => bilan({ mois: periode, lines, budgets, agregat, filtre }), [periode, lines, budgets, agregat, filtre])
   const foyer = filtre === 'foyer'
   // Épargné chaque mois : lignes d'épargne + capital de prêts remboursé (vue Foyer : les prêts sont ceux du foyer).
   const parMois = useMemo(() => b.parMois.map((p, i) => ({
     ...p,
     epargne: b.lignes.filter((l) => l.ligne?.kind === 'epargne').reduce((s, l) => s + (l.cellules[i]?.reel ?? 0), 0)
-      + (foyer ? capitalRembourse(echeances, p.mois) : 0),
-  })), [b, echeances, foyer])
+      + (capital.get(p.mois)?.fait ?? 0),
+  })), [b, capital])
 
   if (!lines.length) return <EmptyState hint="Crée tes lignes de budget dans Réglages.">Rien à résumer pour l’instant.</EmptyState>
 
