@@ -11,7 +11,7 @@ import { messageFonction } from './functionError'
 import { ecriturePermise, projetsVisibles, tachesVisibles, vueActive } from './partage'
 import type {
   Birthday, CalendarFeed, CelesteProposal, CelesteRules, Check, Domain, FinAccount, FinBudget, FinCategory, FinDca,
-  FinEcheance, FinGroup, FinHolding, FinLabel, FinLine, FinNetworth, FinPlanned, FinTarget, FinTransaction, GospelQuiz, Habit, HabitLog, Idea, Layout,
+  FinEcheance, FinGroup, FinHolding, FinLabel, FinLine, FinNetworth, FinPlanned, FinResteAjustement, FinTarget, FinTransaction, GospelQuiz, Habit, HabitLog, Idea, Layout,
   NewsDigest, NewsKind, NewsTopic, Objective, OlafatcoJob, Partage, Project, PropositionAgenda, Review, Settings, ShoppingItem,
   ShoppingList, Step, Task,
 } from './types'
@@ -22,7 +22,7 @@ type Table =
   | 'news_topics' | 'news_digests' | 'shopping_lists' | 'shopping_items' | 'calendar_feeds'
   | 'celeste_proposals'
   | 'fin_lines' | 'fin_accounts' | 'fin_categories' | 'fin_transactions' | 'fin_budgets' | 'fin_networth'
-  | 'fin_holdings' | 'fin_targets' | 'fin_dca' | 'fin_planned' | 'fin_labels' | 'fin_groups' | 'fin_echeances'
+  | 'fin_holdings' | 'fin_targets' | 'fin_dca' | 'fin_planned' | 'fin_labels' | 'fin_groups' | 'fin_echeances' | 'fin_reste_ajustements'
   | 'partages'
 
 interface HorizonState {
@@ -76,6 +76,7 @@ interface HorizonState {
   finPlanned: FinPlanned[]
   /** Règles d'intitulés locaux (motif → intitulé affiché). */
   finLabels: FinLabel[]
+  finResteAjustements: FinResteAjustement[]
   finGroups: FinGroup[]
   /** Échéances des prêts dont le capital remboursé compte comme épargné. */
   finEcheances: FinEcheance[]
@@ -133,7 +134,7 @@ const COLLECTION: Record<Table, keyof HorizonState> = {
   celeste_proposals: 'celesteProposals',
   fin_lines: 'finLines', fin_accounts: 'finAccounts', fin_categories: 'finCategories',
   fin_transactions: 'finTransactions', fin_budgets: 'finBudgets', fin_networth: 'finNetworth',
-  fin_holdings: 'finHoldings', fin_targets: 'finTargets', fin_dca: 'finDca', fin_planned: 'finPlanned', fin_labels: 'finLabels', fin_groups: 'finGroups', fin_echeances: 'finEcheances',
+  fin_holdings: 'finHoldings', fin_targets: 'finTargets', fin_dca: 'finDca', fin_planned: 'finPlanned', fin_labels: 'finLabels', fin_groups: 'finGroups', fin_echeances: 'finEcheances', fin_reste_ajustements: 'finResteAjustements',
   partages: 'partages',
 }
 
@@ -146,7 +147,7 @@ const LECTURE_SEULE = 'Lecture seule : cette vue partagée ne permet pas de modi
 /** Les vides de l'onglet Finances (état initial et déconnexion). */
 const FIN_VIDE = {
   finLoaded: false, finLines: [], finAccounts: [], finCategories: [], finTransactions: [], finBudgets: [],
-  finNetworth: [], finHoldings: [], finTargets: [], finDca: [], finPlanned: [], finLabels: [], finGroups: [], finEcheances: [],
+  finNetworth: [], finHoldings: [], finTargets: [], finDca: [], finPlanned: [], finLabels: [], finGroups: [], finEcheances: [], finResteAjustements: [],
 }
 
 /** Lit une table en entier : PostgREST plafonne une réponse à 1000 lignes. */
@@ -526,6 +527,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       ['finHoldings', 'fin_holdings', 'value', false], ['finTargets', 'fin_targets', 'asset_class'],
       ['finDca', 'fin_dca', 'sort_order'], ['finPlanned', 'fin_planned', 'due_date'],
       ['finLabels', 'fin_labels', 'pattern'], ['finGroups', 'fin_groups', 'pattern'], ['finEcheances', 'fin_echeances', 'date'],
+      ['finResteAjustements', 'fin_reste_ajustements', 'created_at'],
     ]
     const res = await Promise.all(lectures.map(([, table, ordre, croissant]) => toutLire(table, ordre, croissant)))
     const maj: Partial<HorizonState> = {}

@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import type { FinAccount, FinBudget, FinCategory, FinHolding, FinLine, FinPlanned, FinTarget, FinTransaction } from './types'
 import {
-  NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, capitalRembourse, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, budgetDe, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
+  estEnAttente, NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, capitalRembourse, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, budgetDe, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
   libelleMois, moisEcoules, patrimoine, previsionDe, provision, syntheseMois,
 } from './finances'
 
@@ -484,5 +484,15 @@ describe('dépenses à venir', () => {
     expect(provision(prevue({ due_date: '2026-10-30' }), '2026-10-08').parMois).toBe(600)
     expect(provision(prevue({ due_date: '2026-08-01' }), '2026-10-08').parMois).toBe(600)
     expect(provision(prevue({ done: true }), '2026-10-08').parMois).toBe(0)
+  })
+})
+
+describe('opération en attente', () => {
+  const base = { note: null, pending: false } as unknown as FinTransaction
+  it('reconnaît le drapeau pending ou la note « en attente »', () => {
+    expect(estEnAttente({ ...base, pending: true })).toBe(true)
+    expect(estEnAttente({ ...base, note: 'En attente de validation' })).toBe(true)
+    expect(estEnAttente(base)).toBe(false)
+    expect(estEnAttente({ ...base, note: 'Resto en attente' })).toBe(false)
   })
 })

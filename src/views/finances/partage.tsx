@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, EyeOff, Eye } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
-import { TITULAIRES, categorieEffective, nomCategorie, normaliserLibelle, operationsSemblables, decaleMois, euros, libelleMois, type FiltreTitulaire, type IndexFinances } from '../../lib/finances'
+import { TITULAIRES, categorieEffective, nomCategorie, normaliserLibelle, operationsSemblables, decaleMois, estEnAttente, euros, libelleMois, type FiltreTitulaire, type IndexFinances } from '../../lib/finances'
 import type { FinOwner, FinTransaction } from '../../lib/types'
 import { Modal, Seg } from '../../components/ui'
 import { dateCourte, dateLongue, moisCourant, useArbreCategories, useReconnaissance, useVue } from './contexte'
@@ -148,6 +148,10 @@ export function LigneOperation({ tx, idx, montrerDate = true }: { tx: FinTransac
           {reco.libelle(tx) || '(sans libellé)'}
         </span>
       </button>
+      {estEnAttente(tx) && (
+        <span className="shrink-0 rounded-full border border-sun/40 bg-sun/10 px-2 py-0.5 text-[10px] font-medium text-sun-soft"
+          title="Pas encore comptabilisée par la banque : déjà déduite du solde temps réel">en attente</span>
+      )}
       {edition && <EditeurLibelle tx={tx} onClose={() => setEdition(false)} />}
       <span className={`w-24 shrink-0 text-right font-medium tabular-nums ${Number(tx.amount) > 0 ? 'text-[#4cc79a]' : ''}`}>
         {Number(tx.amount) > 0 ? '+' : ''}{euros(Number(tx.amount), true)}

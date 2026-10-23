@@ -558,6 +558,8 @@ export interface FinTransaction {
   internal: boolean
   excluded: boolean
   note: string | null
+  /** Autorisation carte pas encore comptabilisée par la banque (déjà dans le solde temps réel). */
+  pending?: boolean
   source: string
   external_id: string | null
   created_at: string
@@ -569,6 +571,17 @@ export interface FinLabel {
   user_id: UUID
   pattern: string             // déjà nettoyé (normaliserLibelle)
   label: string
+  created_at: string
+}
+
+/** Correction d'une dépense récurrente détectée pour le « RESTE » (ignorée, ou montant ajusté). */
+export interface FinResteAjustement {
+  id: UUID
+  user_id: UUID
+  cle: string                 // clé de regroupement (cleGroupe)
+  nom: string | null
+  ignore: boolean
+  montant: number | null      // dépense retenue (positive) à la place de celle détectée
   created_at: string
 }
 

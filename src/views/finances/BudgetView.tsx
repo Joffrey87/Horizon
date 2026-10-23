@@ -8,6 +8,7 @@ import {
 import type { FinTransaction } from '../../lib/types'
 import { EmptyState, ProgressBar } from '../../components/ui'
 import { FiltreSeg, LigneOperation, MontantEditable, NavMois, Tuile } from './partage'
+import { ResteTuile } from './ResteTuile'
 import { DetailTroisMois } from './DetailTroisMois'
 import { ChampRecherche, ResultatsRecherche } from './RechercheOperations'
 import { moisCourant, useFin, useIndex, useReconnaissance, useVue } from './contexte'
@@ -182,6 +183,7 @@ export function BudgetView() {
         <>
           {/* Petites tuiles côte à côte, à la largeur de leur contenu, centrées. */}
           <div className="flex flex-wrap justify-center gap-2">
+            <ResteTuile />
             <Tuile compacte titre={resteTuile !== null && resteTuile < 0 ? 'Au-delà du budget' : 'Reste'}
               valeur={resteTuile === null ? '—' : euros(Math.abs(resteTuile))} ton={resteTuile !== null && resteTuile < 0 ? 'warn' : undefined}
               detail={resteTuile === null ? 'budget : vue Foyer' : aVenir.total > 0.5

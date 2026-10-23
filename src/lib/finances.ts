@@ -867,3 +867,8 @@ export function provision(p: FinPlanned, aujourdhui: string): { restant: number;
   const mois = Math.max(0, ecartMois(moisDe(aujourdhui), moisDe(p.due_date)))
   return { restant, mois, parMois: mois > 0 ? restant / mois : restant }
 }
+
+/** Opération « en attente » : marquée par la banque (pending) ou, pour la carte Crypto.com, note « en attente… ». */
+export function estEnAttente(tx: Pick<FinTransaction, 'pending' | 'note'>): boolean {
+  return !!tx.pending || /^\s*en attente/i.test(tx.note ?? '')
+}
