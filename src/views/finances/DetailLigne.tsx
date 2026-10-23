@@ -3,11 +3,11 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
-import { aplatirGroupes, detailLigne, euros, grouperParIntitule, hierarchieDetail, type GroupeIntitules } from '../../lib/finances'
+import { aplatirGroupes, detailLigne, euros, grouperParIntitule, hierarchieDetail, nomLisible, type GroupeCategorie, type GroupeIntitules } from '../../lib/finances'
 import type { FinTransaction } from '../../lib/types'
 import { ProgressBar } from '../../components/ui'
 import { LigneOperation } from './partage'
-import { useFin, useIndex, useReconnaissance } from './contexte'
+import { dateCourte, useFin, useIndex, useReconnaissance } from './contexte'
 
 /** Niveau de détail d'une catégorie : fermée, ses groupes d'intitulés, ou toutes ses opérations. */
 export type Niveau = 0 | 1 | 2
@@ -86,35 +86,117 @@ export function DetailLigne({ cle, niveauTous = 0 }: { cle: string; niveauTous?:
   )
 }
 
+/** Opérations d'un nœud (sous-catégorie, « Autres » = opérations propres du parent, ou catégorie seule). */
+function opsDe(groupes: GroupeCategorie[], parent: string, enfant: string | null): FinTransaction[] {
+  if (enfant === null || enfant === 'Autres') return groupes.find((g) => g.nom === parent)?.operations ?? []
+  return groupes.find((g) => g.nom === `${parent} › ${enfant}`)?.operations ?? []
+}
+
+/** Groupes marchand (lecture seule) : « Carrefour ×6 » repliable, opérations isolées une par une. */
+function MarchandsLecture({ operations, nomCategorie }: { operations: FinTransaction[]; nomCategorie: string }) {
+  const regles = useHorizon((s) => s.finGroups)
+  const reco = useReconnaissance()
+  const [ouverts, setOuverts] = useState<Set<string>>(new Set())
+  const nom = (tx: FinTransaction) => (reco.estLocal(tx) ? reco.libelle(tx) : nomLisible(tx.label)) || '(sans libellé)'
+  const groupes = useMemo(() => aplatirGroupes(
+    grouperParIntitule(operations, regles, (tx) => (reco.estLocal(tx) ? reco.libelle(tx) : null)), nomCategorie),
+  [operations, regles, reco, nomCategorie])
+  const bascule = (k: string) => { const s = new Set(ouverts); if (s.has(k)) s.delete(k); else s.add(k); setOuverts(s) }
+  const m = (v: number) => <span className="shrink-0 tabular-nums">{v < 0 ? '+' : ''}{euros(Math.abs(v))}</span>
+  const op = (tx: FinTransaction) => (
+    <li key={tx.id} className="flex items-baseline gap-3 py-1 text-[12px] text-ink-2">
+      <span className="w-11 shrink-0 tabular-nums text-ink-3">{dateCourte(tx.date)}</span>
+      <span className="min-w-0 flex-1 truncate">{nom(tx)}</span>
+      {m(-Number(tx.amount))}
+    </li>
+  )
+  return (
+    <ul className="py-0.5">
+      {groupes.map((g) => {
+        if (g.operations.length === 1) return op(g.operations[0]!)
+        const ouvert = ouverts.has(g.cle)
+        return (
+          <li key={g.cle}>
+            <button data-testid="souscat-groupe" onClick={() => bascule(g.cle)} aria-expanded={ouvert}
+              className="flex w-full items-baseline gap-3 py-1 text-left text-[12px] text-ink">
+              <span className="w-11 shrink-0 text-ink-3">{ouvert ? <ChevronDown size={12} className="inline" /> : <ChevronRight size={12} className="inline" />}</span>
+              <span className="min-w-0 flex-1 truncate">
+                {g.nom}
+                <span className="ml-1.5 rounded-full bg-[#c9b48a]/20 px-1.5 text-[10px] text-[#d8c7a3]">{g.operations.length}</span>
+              </span>
+              {m(g.total)}
+            </button>
+            {ouvert && (
+              <div className="flex flex-wrap gap-1.5 pb-1.5 pl-14">
+                  {g.operations.map((tx) => (
+                    <span key={tx.id} className="rounded-md bg-[#c9b48a]/10 px-1.5 py-0.5 text-[11px] tabular-nums text-ink-2">
+                      {dateCourte(tx.date)} · {euros(-Number(tx.amount))}
+                    </span>
+                  ))}
+                </div>)}
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
 /**
- * Version LECTURE SEULE du détail (tuiles du Résumé) : uniquement catégorie → sous-catégorie et leur somme du mois.
- * Rien de cliquable (ni dépliage, ni « Détails », ni liste d'opérations, donc aucun changement de catégorie).
- * `barres` ajoute, sous chaque nom, une barre de part (de `couleur`) ; sans, seulement le nom et la somme.
+ * Version LECTURE SEULE du détail (tuiles du Résumé) : catégorie → sous-catégorie et leur somme du mois.
+ * Toucher une sous-catégorie (ou une catégorie sans sous-catégorie) montre ses opérations, regroupées par marchand.
+ * Aucune édition. `barres` ajoute une barre de part (de `couleur`).
  */
 export function DetailLigneLecture({ cle, couleur, barres = true }: { cle: string; couleur: string; barres?: boolean }) {
   const { mois, filtre } = useFin()
   const transactions = useHorizon((s) => s.finTransactions)
   const idx = useIndex()
-  const noeuds = useMemo(() => hierarchieDetail(detailLigne({ cle, mois, transactions, idx, filtre })), [cle, mois, transactions, idx, filtre])
+  const groupes = useMemo(() => detailLigne({ cle, mois, transactions, idx, filtre }), [cle, mois, transactions, idx, filtre])
+  const noeuds = useMemo(() => hierarchieDetail(groupes), [groupes])
+  const [ouvert, setOuvert] = useState<string | null>(null)
   if (!noeuds.length) return <p className="py-2 text-xs text-ink-3">Aucune dépense ce mois-ci</p>
   const total = noeuds.reduce((s, n) => s + n.total, 0)
   const part = (v: number, base: number) => barres && base > 0 && v > 0 ? (
     <span className="w-14 sm:w-24"><ProgressBar value={(v / base) * 100} color={couleur} /></span>
   ) : barres ? <span className="w-14 sm:w-24" /> : null
+
+  const ligne = (k: string, contenu: ReactNode, ops: FinTransaction[], nomCat: string, cls: string, testid?: string) => {
+    const estOuvert = ouvert === k
+    return (
+      <>
+        <button data-testid={testid} onClick={() => setOuvert(estOuvert ? null : k)} aria-expanded={estOuvert}
+          className={`flex w-full items-center gap-3 text-left ${cls} ${estOuvert ? 'text-ink' : ''}`}>
+          {contenu}
+        </button>
+        {estOuvert && (
+          <div className="mb-1.5 ml-2 rounded-lg bg-[#c9b48a]/[0.07] px-2">
+            <MarchandsLecture operations={ops} nomCategorie={nomCat} />
+          </div>
+        )}
+      </>
+    )
+  }
   return (
     <ul data-testid="detail-lecture" className="divide-y divide-line/40">
       {noeuds.map((n) => (
         <li key={n.nom}>
-          <div className="flex items-center gap-3 py-1.5 text-sm">
-            <span className="min-w-0 flex-1 truncate" title={n.nom}>{n.nom}</span>
-            {part(n.enfants.length ? 0 : n.total, total)}
-            <span className="w-16 text-right font-medium tabular-nums">{euros(n.total)}</span>
-          </div>
+          {n.enfants.length
+            ? <div className="flex items-center gap-3 py-1.5 text-sm">
+                <span className="min-w-0 flex-1 truncate" title={n.nom}>{n.nom}</span>
+                {part(0, total)}
+                <span className="w-16 text-right font-medium tabular-nums">{euros(n.total)}</span>
+              </div>
+            : ligne(n.nom + '\u0000', <>
+                <span className="min-w-0 flex-1 truncate" title={n.nom}>{n.nom}</span>
+                {part(n.total, total)}
+                <span className="w-16 text-right font-medium tabular-nums">{euros(n.total)}</span>
+              </>, opsDe(groupes, n.nom, null), n.nom, 'py-1.5 text-sm')}
           {n.enfants.map((e) => (
-            <div key={e.nom} data-testid="detail-sous-categorie" className="flex items-center gap-3 py-1 pl-4 text-[13px] text-ink-2">
-              <span className="min-w-0 flex-1 truncate" title={`${n.nom} › ${e.nom}`}>{e.nom}</span>
-              {part(e.total, total)}
-              <span className="w-16 text-right tabular-nums">{euros(e.total)}</span>
+            <div key={e.nom}>
+              {ligne(n.nom + '\u0000' + e.nom, <>
+                <span className="min-w-0 flex-1 truncate" title={`${n.nom} › ${e.nom}`}>{e.nom}</span>
+                {part(e.total, total)}
+                <span className="w-16 text-right tabular-nums">{euros(e.total)}</span>
+              </>, opsDe(groupes, n.nom, e.nom), e.nom, 'py-1 pl-4 text-[13px] text-ink-2', 'detail-sous-categorie')}
             </div>
           ))}
         </li>
