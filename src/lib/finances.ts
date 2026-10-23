@@ -388,6 +388,58 @@ export function agregerHorsCapital(opts: Omit<OptionsCapital, 'moisCourant'> & {
   return { agregat, capital }
 }
 
+export interface EpargnePrevue { nom: string; montant: number; type: 'ligne' | 'capital' }
+
+/**
+ * Épargnes pas encore faites ce mois-ci : pour chaque ligne d'épargne, le budget restant
+ * (budget − déjà épargné), et le capital des prêts du budget pas encore débité. Un mois passé
+ * n'a plus rien de prévu. Le capital déjà débité n'y est pas : il est retiré des dépenses,
+ * donc compté une seule fois, dans « fait ».
+ */
+export function epargnesPrevues(opts: {
+  mois: string; moisCourant: string; lignes: LigneBudget[]; capital?: CapitalMois
+}): { total: number; details: EpargnePrevue[] } {
+  if (opts.mois < opts.moisCourant) return { total: 0, details: [] }
+  const details: EpargnePrevue[] = []
+  for (const l of opts.lignes) {
+    if (l.ligne?.kind !== 'epargne' || l.budget === null) continue
+    const reste = l.budget - l.reel
+    if (reste > 0.5) details.push({ nom: l.ligne.name, montant: reste, type: 'ligne' })
+  }
+  for (const p of opts.capital?.prets ?? []) {
+    if (p.etat === 'prevu' && p.prevu > 0.5) details.push({ nom: `Capital · ${p.nom}`, montant: p.prevu, type: 'capital' })
+  }
+  return { total: details.reduce((s, d) => s + d.montant, 0), details }
+}
+
+export interface EpargneLigne { nom: string; montant: number; etat: 'fait' | 'prevu' | 'hors_budget'; type: 'ligne' | 'capital' }
+
+/**
+ * La liste des épargnes du mois pour l'encart « Épargné » : une ligne par épargne, faite
+ * (réelle) ou prévue (reste du budget d'épargne, capital pas encore débité). Les prêts payés
+ * hors budget figurent pour information (`hors_budget`) et ne comptent pas dans les totaux.
+ */
+export function listeEpargnes(opts: {
+  mois: string; moisCourant: string; lignes: LigneBudget[]; capital?: CapitalMois
+}): { lignes: EpargneLigne[]; fait: number; prevu: number } {
+  const lignes: EpargneLigne[] = []
+  for (const l of opts.lignes) {
+    if (l.ligne?.kind !== 'epargne') continue
+    if (Math.abs(l.reel) >= 0.5) lignes.push({ nom: l.ligne.name, montant: l.reel, etat: 'fait', type: 'ligne' })
+  }
+  for (const p of opts.capital?.prets ?? []) {
+    const nom = `Capital · ${p.nom}`
+    if (p.etat === 'fait' && p.extrait > 0.005) lignes.push({ nom, montant: p.extrait, etat: 'fait', type: 'capital' })
+  }
+  const prevues = epargnesPrevues(opts)
+  for (const d of prevues.details) lignes.push({ nom: d.nom, montant: d.montant, etat: 'prevu', type: d.type })
+  for (const p of opts.capital?.prets ?? []) {
+    if (p.etat === 'hors_budget') lignes.push({ nom: `Capital · ${p.nom}`, montant: p.capital, etat: 'hors_budget', type: 'capital' })
+  }
+  const somme = (etat: EpargneLigne['etat']) => lignes.filter((x) => x.etat === etat).reduce((s, x) => s + x.montant, 0)
+  return { lignes, fait: somme('fait'), prevu: somme('prevu') }
+}
+
 // ---------- Entrées prévues ----------
 
 /**

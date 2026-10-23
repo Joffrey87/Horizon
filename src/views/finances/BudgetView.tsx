@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { ArrowRight, ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import {
-  NON_CLASSE, agregerHorsCapital, aplatirGroupes, decaleMois, depensesAVenir, detailLigne, entreesPrevues, euros, grouperParIntitule, libelleMois, syntheseMois, type GroupeIntitules, type LigneBudget,
+  NON_CLASSE, agregerHorsCapital, aplatirGroupes, decaleMois, depensesAVenir, detailLigne, entreesPrevues, epargnesPrevues, euros, grouperParIntitule, libelleMois, listeEpargnes, syntheseMois, type GroupeIntitules, type LigneBudget,
 } from '../../lib/finances'
 import type { FinTransaction } from '../../lib/types'
 import { EmptyState, ProgressBar } from '../../components/ui'
@@ -74,11 +74,19 @@ export function BudgetView() {
   const capitalMois = capitalParMois.get(mois)
   const aVenir = useMemo(() => depensesAVenir({ mois, moisCourant: moisCourant(), transactions, idx, filtre, lines, capital: capitalMois }),
     [mois, transactions, idx, filtre, lines, capitalMois])
+  // Épargnes pas encore faites ce mois-ci (budget d'épargne restant, capital de prêt à débiter) : elles partent aussi.
+  const epPrevues = useMemo(() => epargnesPrevues({ mois, moisCourant: moisCourant(), lignes: s.lignes, capital: capitalMois }),
+    [mois, s.lignes, capitalMois])
+  const listeEp = useMemo(() => listeEpargnes({ mois, moisCourant: moisCourant(), lignes: s.lignes, capital: capitalMois }),
+    [mois, s.lignes, capitalMois])
   const reste = s.total.budget !== null ? s.total.budget - s.total.reel : null
   // Épargné : lignes d'épargne + capital de prêt remboursé (retiré des dépenses, donc compté une fois).
   const capital = capitalMois?.fait ?? 0
-  // Tuile « Reste » : dépenses seulement (l'épargne n'y entre pas), après ce qui est encore à venir.
-  const resteTuile = foyer ? somme(depenses, (l) => l.budget) - somme(depenses, (l) => l.reel) - aVenir.total : null
+  // Tuile « Reste » : budget des dépenses − dépensé − dépenses à venir − épargnes prévues restantes.
+  const budgetDepenses = somme(depenses, (l) => l.budget)
+  const reelDepenses = somme(depenses, (l) => l.reel)
+  const resteTuile = foyer ? budgetDepenses - reelDepenses - aVenir.total - epPrevues.total : null
+  const [detailTuile, setDetailTuile] = useState<'reste' | 'epargne' | null>(null)
 
   if (!lines.length) {
     return <EmptyState hint="Crée tes lignes (Frais fixe, Courses…) dans Réglages.">Aucune ligne de budget pour l’instant.</EmptyState>
@@ -196,14 +204,27 @@ export function BudgetView() {
           {/* Petites tuiles côte à côte, à la largeur de leur contenu, centrées. */}
           <div className="flex flex-wrap justify-center gap-2">
             <ResteTuile />
-            <Tuile compacte titre={resteTuile !== null && resteTuile < 0 ? 'Au-delà du budget' : 'Reste'}
-              valeur={resteTuile === null ? '—' : euros(Math.abs(resteTuile))} ton={resteTuile !== null && resteTuile < 0 ? 'warn' : undefined}
-              detail={resteTuile === null ? 'budget : vue Foyer' : aVenir.total > 0.5
-                ? <span title={aVenir.details.map((d) => `${d.nom} : ${euros(d.montant)}`).join('\n')}>après {euros(aVenir.total)} à venir</span>
-                : undefined} />
-            <Tuile compacte titre="Épargné" valeur={euros(somme(epargnes, (l) => l.reel) + capital)}
-              detail={capital > 0.5 ? <span title="Épargne + capital de prêt remboursé ce mois-ci">dont {euros(capital)} de capital remboursé</span> : undefined} />
+            <button type="button" data-testid="tuile-reste" aria-expanded={detailTuile === 'reste'} disabled={resteTuile === null}
+              onClick={() => setDetailTuile(detailTuile === 'reste' ? null : 'reste')}
+              title="Voir le détail du calcul" className="rounded-[inherit] text-left disabled:cursor-default">
+              <Tuile compacte titre={resteTuile !== null && resteTuile < 0 ? 'Au-delà du budget' : 'Reste'}
+                valeur={resteTuile === null ? '—' : euros(Math.abs(resteTuile))} ton={resteTuile !== null && resteTuile < 0 ? 'warn' : undefined}
+                detail={resteTuile === null ? 'budget : vue Foyer' : aVenir.total + epPrevues.total > 0.5
+                  ? <span>après {euros(aVenir.total + epPrevues.total)} à venir</span>
+                  : undefined} />
+            </button>
+            <button type="button" data-testid="tuile-epargne" aria-expanded={detailTuile === 'epargne'}
+              onClick={() => setDetailTuile(detailTuile === 'epargne' ? null : 'epargne')}
+              title="Voir les épargnes du mois" className="rounded-[inherit] text-left">
+              <Tuile compacte titre="Épargné" valeur={euros(somme(epargnes, (l) => l.reel) + capital)}
+                detail={capital > 0.5 ? <span>dont {euros(capital)} de capital remboursé</span> : undefined} />
+            </button>
           </div>
+
+          {detailTuile === 'reste' && resteTuile !== null && (
+            <DetailReste budget={budgetDepenses} depense={reelDepenses} aVenir={aVenir} epargnes={epPrevues} capital={capital} resteTuile={resteTuile} />
+          )}
+          {detailTuile === 'epargne' && <DetailEpargne liste={listeEp} />}
 
           <div className="card overflow-x-auto p-4">
             <table className="w-full min-w-[640px] text-sm">
@@ -510,4 +531,63 @@ function OperationsGroupees({ operations, nomCategorie, toutDeplie }: {
   })
 
   return <ul className="divide-y divide-line/40">{liste(groupes, '', 0)}</ul>
+}
+
+/** Une ligne compacte du détail d'une tuile : libellé à gauche, montant à droite. */
+function LigneDetail({ nom, montant, signe, fin = false, sous = false }: { nom: ReactNode; montant: number; signe?: '−' | '+'; fin?: boolean; sous?: boolean }) {
+  return (
+    <div className={`flex items-baseline justify-between gap-3 ${sous ? 'pl-3 text-xs text-ink-3' : fin ? 'border-t border-line pt-1.5 font-semibold' : ''}`}>
+      <span className="min-w-0 truncate">{nom}</span>
+      <span className="shrink-0 tabular-nums">{signe ? `${signe} ` : ''}{euros(Math.abs(montant))}</span>
+    </div>
+  )
+}
+
+/** Détail synthétique de la tuile « Reste » : budget − dépensé − à venir − épargnes prévues = résultat. */
+function DetailReste({ budget, depense, aVenir, epargnes, capital, resteTuile }: {
+  budget: number; depense: number; capital: number; resteTuile: number
+  aVenir: { total: number; details: { nom: string; montant: number }[] }
+  epargnes: { total: number; details: { nom: string; montant: number }[] }
+}) {
+  const quelques = (ds: { nom: string; montant: number }[]) => {
+    const tete = ds.slice(0, 3)
+    const autres = ds.slice(3).reduce((t, d) => t + d.montant, 0)
+    return autres > 0.5 ? [...tete, { nom: 'Autres', montant: autres }] : tete
+  }
+  return (
+    <div data-testid="detail-reste" className="card mx-auto w-full max-w-md space-y-1 px-4 py-3 text-sm">
+      <LigneDetail nom="Budget des dépenses" montant={budget} />
+      <LigneDetail nom="Déjà dépensé" montant={depense} signe="−" />
+      <LigneDetail nom="À venir (récurrentes, courses)" montant={aVenir.total} signe="−" />
+      {quelques(aVenir.details).map((d) => <LigneDetail key={d.nom} nom={d.nom} montant={d.montant} sous />)}
+      <LigneDetail nom="Épargnes prévues restantes" montant={epargnes.total} signe="−" />
+      {quelques(epargnes.details).map((d) => <LigneDetail key={d.nom} nom={d.nom} montant={d.montant} sous />)}
+      <LigneDetail fin nom={resteTuile < 0 ? 'Au-delà du budget' : 'Reste'} montant={resteTuile} />
+      {capital > 0.5 && (
+        <p className="pt-1 text-[11px] text-ink-3">Le capital remboursé ({euros(capital)}) n’est pas une dépense : il compte en épargne.</p>
+      )}
+    </div>
+  )
+}
+
+/** Épargnes du mois, une ligne chacune : faite, prévue (ou prêt payé hors budget, pour information). */
+function DetailEpargne({ liste }: { liste: ReturnType<typeof listeEpargnes> }) {
+  const badge = (etat: 'fait' | 'prevu' | 'hors_budget') => etat === 'fait'
+    ? <span className="whitespace-nowrap rounded-full border border-[#4cc79a]/50 px-1.5 text-[10px] uppercase tracking-wider text-[#4cc79a]">fait</span>
+    : etat === 'prevu'
+    ? <span className="whitespace-nowrap rounded-full border border-[#eda145]/50 px-1.5 text-[10px] uppercase tracking-wider text-[#eda145]">prévu</span>
+    : <span title="Payé depuis un compte hors budget : pas compté" className="whitespace-nowrap rounded-full border border-line px-1.5 text-[10px] uppercase tracking-wider text-ink-3">hors budget</span>
+  return (
+    <div data-testid="detail-epargne" className="card mx-auto w-full max-w-md space-y-1 px-4 py-3 text-sm">
+      {liste.lignes.length === 0 && <p className="text-ink-3">Aucune épargne ce mois-ci.</p>}
+      {liste.lignes.map((l) => (
+        <div key={`${l.nom}-${l.etat}`} className={`flex items-center justify-between gap-3 ${l.etat === 'hors_budget' ? 'text-ink-3' : ''}`}>
+          <span className="flex min-w-0 items-center gap-2"><span className="truncate">{l.nom}</span>{badge(l.etat)}</span>
+          <span className="shrink-0 tabular-nums">{euros(l.montant)}</span>
+        </div>
+      ))}
+      <LigneDetail fin nom="Total fait" montant={liste.fait} />
+      {liste.prevu > 0.5 && <LigneDetail nom="Encore prévu" montant={liste.prevu} />}
+    </div>
+  )
 }

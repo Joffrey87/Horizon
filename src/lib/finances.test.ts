@@ -6,7 +6,7 @@ import type { FinAccount, FinBudget, FinEcheance, FinLoan, FinCategory, FinHoldi
 import {
   estEnAttente, NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, capitalRembourse, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, budgetDe, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
   libelleMois, moisEcoules, patrimoine, previsionDe, provision, syntheseMois,
-  agregerHorsCapital, capitalDuMois,
+  agregerHorsCapital, capitalDuMois, epargnesPrevues, listeEpargnes,
 } from './finances'
 
 let seq = 0
@@ -574,5 +574,39 @@ describe('capital de prêt extrait de la ligne emprunt', () => {
     const sans = depensesAVenir({ mois: '2026-10', moisCourant: '2026-10', transactions: sansOct, idx: idxP, filtre: 'foyer', lines })
     expect(Math.round(sans.total)).toBe(1150)
     expect(Math.round(avec.total)).toBe(1150 - 852)
+  })
+})
+
+describe('épargnes prévues et liste des épargnes', () => {
+  const capital = (prets: Partial<ReturnType<typeof capitalDuMois>['prets'][number]>[]) => ({
+    mois: '2026-10', extraitParLigne: new Map(), fait: 0, prevu: 0, horsBudget: 0,
+    prets: prets.map((p) => ({ pretId: 'p', nom: 'Prêt X', mois: '2026-10', capital: 0, debite: 0, extrait: 0, prevu: 0, ligneId: null, motif: null, etat: 'fait', ...p })),
+  }) as ReturnType<typeof capitalDuMois>
+  const ep = (nom: string, budget: number | null, reel: number) =>
+    ({ cle: nom, ligne: ligne(nom, { kind: 'epargne' }), budget, reel, precedent: 0, moyenne3: 0, prevision: null, previsionSaisie: false })
+  const lignesB = [ep('Épargne avenir', 300, 300), ep('Épargne vacances', 700, 250), ep('Matelas', 0, 0)]
+
+  it('budget d’épargne restant + capital à venir ; rien pour un mois passé', () => {
+    const c = capital([{ etat: 'prevu', prevu: 850, nom: 'Prêt A' }, { etat: 'fait', extrait: 200 }])
+    const r = epargnesPrevues({ mois: '2026-10', moisCourant: '2026-10', lignes: lignesB, capital: c })
+    expect(r.details.map((d) => [d.nom, d.montant])).toEqual([['Épargne vacances', 450], ['Capital · Prêt A', 850]])
+    expect(r.total).toBe(1300)
+    expect(epargnesPrevues({ mois: '2026-09', moisCourant: '2026-10', lignes: lignesB, capital: c }).total).toBe(0)
+  })
+  it('liste : une ligne par épargne, faite / prévue, hors budget pour information et hors totaux', () => {
+    const c = capital([{ etat: 'fait', extrait: 850, nom: 'Prêt A' }, { etat: 'prevu', prevu: 200, nom: 'Prêt B' }, { etat: 'hors_budget', capital: 500, nom: 'Prêt Airbnb' }])
+    const l = listeEpargnes({ mois: '2026-10', moisCourant: '2026-10', lignes: lignesB, capital: c })
+    expect(l.lignes.map((x) => [x.nom, x.montant, x.etat])).toEqual([
+      ['Épargne avenir', 300, 'fait'], ['Épargne vacances', 250, 'fait'], ['Capital · Prêt A', 850, 'fait'],
+      ['Épargne vacances', 450, 'prevu'], ['Capital · Prêt B', 200, 'prevu'], ['Capital · Prêt Airbnb', 500, 'hors_budget'],
+    ])
+    expect(l.fait).toBe(1400)
+    expect(l.prevu).toBe(650)
+  })
+  it('Reste = budget dépenses − dépensé − à venir − épargnes prévues, sans double compte du capital', () => {
+    const budgetDep = 6000, reelDep = 5000, aVenir = 100
+    const c = capital([{ etat: 'prevu', prevu: 850, nom: 'Prêt A' }])
+    const prevues = epargnesPrevues({ mois: '2026-10', moisCourant: '2026-10', lignes: lignesB, capital: c })
+    expect(budgetDep - reelDep - aVenir - prevues.total).toBe(6000 - 5000 - 100 - 450 - 850)
   })
 })
