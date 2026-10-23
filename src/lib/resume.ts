@@ -1,6 +1,6 @@
 // Sous-onglet Finances « Résumé » : règles pures (testées dans resume.test.ts).
 // Rien ici ne touche aux écrans : couleurs d'anneau, recherche des lignes de budget par nom,
-// données d'une tuile de budget, épargne prévue.
+// données d'une tuile de budget. Reste et Épargné viennent du Budget (views/finances/tuilesMois.ts).
 import type { FinLine } from './types'
 import { normaliserLibelle, type LigneBudget } from './finances'
 
@@ -88,15 +88,4 @@ export function tuilesBudgets(lignes: LigneBudget[]): TuileBudget[] {
     const l = ligneParNom(reelles.map((x) => ({ ...x.ligne, lb: x })), def.noms)
     return tuileBudget(def, l?.lb)
   })
-}
-
-/**
- * Épargne encore à faire ce mois-ci : pour chaque ligne d'épargne, budget − déjà épargné
- * (jamais négatif). Rien pour un mois passé ni hors vue Foyer (pas de budget).
- */
-export function epargnePrevue(opts: { mois: string; moisCourant: string; lignes: LigneBudget[] }): number {
-  if (opts.mois < opts.moisCourant) return 0
-  return opts.lignes
-    .filter((l) => l.ligne?.kind === 'epargne' && l.budget !== null && l.budget > 0)
-    .reduce((s, l) => s + Math.max(0, l.budget! - l.reel), 0)
 }

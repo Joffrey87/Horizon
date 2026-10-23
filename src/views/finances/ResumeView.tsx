@@ -1,13 +1,13 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useHorizon } from '../../lib/store'
-import { agreger, capitalRembourse, euros, syntheseMois } from '../../lib/finances'
-import { calculerReste } from '../../lib/reste'
-import { COULEURS_ANNEAU, epargnePrevue, tuilesBudgets, type TonAnneau, type TuileBudget } from '../../lib/resume'
-import { todayIso } from '../../lib/logic'
+import { euros } from '../../lib/finances'
+import { COULEURS_ANNEAU, tuilesBudgets, type TonAnneau, type TuileBudget } from '../../lib/resume'
 import { EmptyState } from '../../components/ui'
 import { FiltreSeg, NavMois } from './partage'
-import { moisCourant, useFin, useIndex, useVue } from './contexte'
+import { DetailEpargne, DetailReste } from './DetailsTuiles'
+import { useTuilesMois } from './tuilesMois'
+import { useFin, useVue } from './contexte'
 
 /** Sommet de l'anneau : part consommée (plafonnée à 100 % pour le tracé, le texte dit le vrai pourcentage). */
 function Anneau({ ratio, ton, taille }: { ratio: number | null; ton: TonAnneau; taille: number }) {
@@ -55,34 +55,15 @@ function TuileBudgetAnneau({ t }: { t: TuileBudget }) {
 export function ResumeView() {
   const { mois, setMois, filtre, setFiltre } = useFin()
   const vue = useVue()
-  const accounts = useHorizon((s) => s.finAccounts)
-  const transactions = useHorizon((s) => s.finTransactions)
   const lines = useHorizon((s) => s.finLines)
-  const budgets = useHorizon((s) => s.finBudgets)
-  const echeances = useHorizon((s) => s.finEcheances)
-  const planned = useHorizon((s) => s.finPlanned)
-  const ajustements = useHorizon((s) => s.finResteAjustements)
-  const idx = useIndex()
   const foyer = filtre === 'foyer'
-  const courant = moisCourant()
+  const [detail, setDetail] = useState<'reste' | 'epargne' | null>(null)
 
-  const agregat = useMemo(() => agreger(transactions, idx, filtre), [transactions, idx, filtre])
-  const s = useMemo(() => syntheseMois({ mois, lines, budgets, agregat, filtre }), [mois, lines, budgets, agregat, filtre])
-
-  // Épargné : lignes d'épargne du mois + capital de prêt remboursé (les prêts sont ceux du foyer).
-  const epargnees = s.lignes.filter((l) => l.ligne?.kind === 'epargne').reduce((t, l) => t + l.reel, 0)
-  const capital = foyer ? capitalRembourse(echeances, mois) : 0
-  const prevue = foyer ? epargnePrevue({ mois, moisCourant: courant, lignes: s.lignes }) : 0
-
-  // Reste : soldes des comptes comptés (filtrés par titulaire), moins le à venir et l'épargne prévue.
-  // Il décrit aujourd'hui : seulement pour le mois en cours. Les dépenses prévues à la main n'ont pas de titulaire.
-  const aujourdhui = todayIso()
-  const reste = useMemo(() => calculerReste({
-    accounts: foyer ? accounts : accounts.filter((a) => a.owner === filtre),
-    transactions, idx, planned: foyer ? planned : [], ajustements, aujourdhui,
-  }), [accounts, transactions, idx, planned, ajustements, aujourdhui, foyer, filtre])
-  const resteValable = mois === courant && reste.comptes.length > 0
-  const resteNet = reste.reste - prevue
+  // Mêmes chiffres que le Budget : un seul calcul (tuilesMois.ts), capital de prêt compté en épargne et non en dépense.
+  const { s, capital, aVenir, epPrevues, listeEp, budgetDepenses, reelDepenses, resteTuile, epargne } = useTuilesMois()
+  const epargnees = epargne - capital
+  const resteValable = resteTuile !== null
+  const aPayer = aVenir.total + epPrevues.total
 
   const tuiles = useMemo(() => tuilesBudgets(s.lignes).filter((t) => !t.absente), [s.lignes])
 
@@ -100,32 +81,42 @@ export function ResumeView() {
 
       <div className={`grid gap-2.5 ${vue ? '' : 'grid-cols-2'}`}>
         {!vue && (
-          <div data-testid="tuile-reste" className="card px-3 py-3"
+          <button type="button" data-testid="tuile-reste" aria-expanded={detail === 'reste'} disabled={!resteValable}
+            onClick={() => setDetail(detail === 'reste' ? null : 'reste')} title="Voir le détail du calcul"
+            className="card px-3 py-3 text-left disabled:cursor-default"
             style={{ borderColor: 'rgba(245,158,11,.4)', background: 'linear-gradient(135deg, rgba(245,158,11,.14), rgba(25,21,18,.9) 70%)' }}>
-            <p className="block-title">Reste</p>
+            <p className="block-title">{resteTuile !== null && resteTuile < 0 ? 'Au-delà du budget' : 'Reste'}</p>
             <p className="my-1 whitespace-nowrap text-[28px] font-bold tabular-nums lg:text-4xl"
-              style={{ color: resteValable ? (resteNet < 0 ? COULEURS_ANNEAU.depasse : COULEURS_ANNEAU.ok) : '#857c6d' }}>
-              {resteValable ? euros(resteNet) : '—'}
+              style={{ color: resteTuile === null ? '#857c6d' : resteTuile < 0 ? COULEURS_ANNEAU.depasse : COULEURS_ANNEAU.ok }}>
+              {resteTuile === null ? '—' : euros(Math.abs(resteTuile))}
             </p>
             <p className="text-[11px] leading-snug text-ink-3 lg:text-xs">
-              {resteValable ? (
+              {resteTuile === null ? 'budget : vue Foyer' : (
                 <>
-                  solde {euros(reste.solde)}
-                  {reste.aVenir > 0.5 && <><br />− {euros(reste.aVenir)} à venir</>}
-                  {prevue > 0.5 && <><br />− {euros(prevue)} d’épargne prévue</>}
+                  budget {euros(budgetDepenses)}
+                  <br />− {euros(reelDepenses)} dépensé
+                  {aPayer > 0.5 && <><br />− {euros(aPayer)} à venir</>}
                 </>
-              ) : mois !== courant ? 'calculé pour le mois en cours' : 'aucun compte pour ce filtre'}
+              )}
             </p>
-          </div>
+          </button>
         )}
-        <div data-testid="tuile-epargne" className="card px-3 py-3">
+        <button type="button" data-testid="tuile-epargne" aria-expanded={detail === 'epargne'}
+          onClick={() => setDetail(detail === 'epargne' ? null : 'epargne')} title="Voir les épargnes du mois"
+          className="card px-3 py-3 text-left">
           <p className="block-title">Épargné</p>
-          <p className="my-1 whitespace-nowrap text-[28px] font-bold tabular-nums text-sun-soft lg:text-4xl">{euros(epargnees + capital)}</p>
+          <p className="my-1 whitespace-nowrap text-[28px] font-bold tabular-nums text-sun-soft lg:text-4xl">{euros(epargne)}</p>
           <p className="text-[11px] leading-snug text-ink-3 lg:text-xs">
             {capital > 0.5 && <>dont <b className="font-semibold text-ink-2">{euros(capital)}</b><br />de capital remboursé<br />+ </>}
             <b className="font-semibold text-ink-2">{euros(epargnees)}</b> d’épargne
           </p>
-        </div>
+        </button>
+        {detail === 'reste' && resteTuile !== null && (
+          <div className="col-span-2 flex justify-center">
+            <DetailReste budget={budgetDepenses} depense={reelDepenses} aVenir={aVenir} epargnes={epPrevues} capital={capital} resteTuile={resteTuile} />
+          </div>
+        )}
+        {detail === 'epargne' && <div className={`flex justify-center ${vue ? '' : 'col-span-2'}`}><DetailEpargne liste={listeEp} /></div>}
       </div>
 
       <div className="flex items-baseline justify-between gap-2 pt-1">

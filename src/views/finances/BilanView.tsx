@@ -25,7 +25,7 @@ export function BilanView() {
     try { localStorage.setItem(CLE_TOTAL, voirTotal ? '0' : '1') } catch { /* sans mémoire, tant pis */ }
   }
   // Un mois cliqué (en-tête ou barre) ouvre le Budget de ce mois.
-  const ouvrirMois = (m: string) => { setMois(m); navigate('/finances') }
+  const ouvrirMois = (m: string) => { setMois(m); navigate('/finances/budget') }
   const idx = useIndex()
   const periode = useMemo(() => moisEcoules(mois, 6), [mois])
   const prets = useHorizon((s) => s.finLoans)

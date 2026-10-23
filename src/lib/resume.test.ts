@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { FinLine } from './types'
 import type { LigneBudget } from './finances'
 import { PAGES_FINANCES, pagesFinancesVisibles } from './financesNav'
-import { BUDGETS_RESUME, COULEURS_ANNEAU, epargnePrevue, ligneParNom, tonAnneau, tuileBudget, tuilesBudgets } from './resume'
+import { BUDGETS_RESUME, COULEURS_ANNEAU, ligneParNom, tonAnneau, tuileBudget, tuilesBudgets } from './resume'
 
 const ligne = (name: string, kind: FinLine['kind'] = 'depense', id = name): FinLine =>
   ({ id, user_id: 'u', name, kind, color: null, sort_order: 0, created_at: '2026-01-01' })
@@ -64,6 +64,16 @@ describe('recherche d’une ligne de budget par nom', () => {
   })
 })
 
+describe('noms réels des lignes du budget du foyer', () => {
+  const noms = ['Dépenses exceptionnelles', 'Dépenses courantes', 'Frais fixe', 'Courses', 'Dons', 'Vacances', 'Aménagement']
+  const lignes = [...noms.map((n) => lb(ligne(n), 100, 10)), lb(ligne('Épargne vacances', 'epargne'), 50, 0), lb(ligne('Épargne avenir', 'epargne'), 50, 0)]
+  it('retrouve les six budgets, jamais « Frais fixe » ni une épargne', () => {
+    const t = tuilesBudgets(lignes)
+    expect(t.every((x) => !x.absente)).toBe(true)
+    expect(t.map((x) => x.titre)).toEqual(['Courses', 'Aménagement', 'Vacances', 'Dons', 'Dépenses courantes', 'Dépenses exceptionnelles'])
+  })
+})
+
 describe('données d’une tuile', () => {
   const def = { cle: 'courses', titre: 'Courses' }
   it('restant, part consommée et ton', () => {
@@ -88,17 +98,6 @@ describe('données d’une tuile', () => {
   })
   it('remboursement net (dépense négative) : l’anneau reste à 0 %', () => {
     expect(tuileBudget(def, lb(ligne('Courses'), 100, -20)).ratio).toBe(0)
-  })
-})
-
-describe('épargne prévue', () => {
-  const ep = ligne('Épargne', 'epargne')
-  const lignes = [lb(ep, 300, 100), lb(ligne('Livret', 'epargne'), 50, 80), lb(ligne('Courses'), 400, 0)]
-  it('budget restant des lignes d’épargne, jamais négatif', () => {
-    expect(epargnePrevue({ mois: '2026-10', moisCourant: '2026-10', lignes })).toBe(200)
-  })
-  it('rien pour un mois passé', () => {
-    expect(epargnePrevue({ mois: '2026-09', moisCourant: '2026-10', lignes })).toBe(0)
   })
 })
 
