@@ -53,8 +53,8 @@ function CorpsTuile({ t, edition, bureau }: { t: TuileBudget; edition: ReturnTyp
   const negatif = t.restant !== null && t.restant < 0
   return (
     <>
-      <Anneau ratio={t.ratio} couleur={depasse ? COULEURS_ANNEAU.depasse : clair} taille={bureau ? 40 : 46} trait={bureau ? 2 : 3} halo={bureau}>
-        <Icone size={bureau ? 17 : 19} color={clair} strokeWidth={1.8} />
+      <Anneau ratio={t.ratio} couleur={depasse ? COULEURS_ANNEAU.depasse : clair} taille={bureau ? 36 : 38} trait={bureau ? 2 : 3} halo={bureau}>
+        <Icone size={bureau ? 15 : 16} color={clair} strokeWidth={1.8} />
       </Anneau>
       <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
         <p className={`truncate font-semibold text-ink-2 ${bureau ? 'text-[15px]' : 'text-[13px]'}`}>{t.titre}</p>
@@ -68,7 +68,7 @@ function CorpsTuile({ t, edition, bureau }: { t: TuileBudget; edition: ReturnTyp
       </div>
       <div className="shrink-0 text-right">
         <p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">{t.restant === null ? 'Dépensé' : 'Reste'}</p>
-        <b className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[24px]' : 'text-[22px]'}`}
+        <b className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[22px]' : 'text-[20px]'}`}
           style={{ color: negatif ? COULEURS_ANNEAU.depasse : 'var(--color-ink)' }}>
           {euros(t.restant ?? t.depense)}
         </b>
@@ -96,9 +96,9 @@ function TuileBudgetAnneau({ t, edition, ouvert, onBasculer }: {
   const alpha = t.separe ? [0.1, 0.03] : [0.24, 0.06]
   const depliable = t.ligneId !== null
   return (
-    <div data-testid={`tuile-${t.cle}`} data-ton={t.ton} data-ouvert={ouvert || undefined} className={t.separe ? 'mt-3' : ''}>
+    <div data-testid={`tuile-${t.cle}`} data-ton={t.ton} data-ouvert={ouvert || undefined} className={t.separe ? '!mt-2' : ''}>
       <div {...enTete(depliable, ouvert, onBasculer)}
-        className={`flex min-h-[64px] items-center gap-3 border px-3.5 py-2 ${depliable ? 'cursor-pointer' : ''} ${ouvert ? 'rounded-t-[14px] border-b-transparent' : 'rounded-[14px]'}`}
+        className={`flex min-h-[54px] items-center gap-3 border px-3 py-1.5 ${depliable ? 'cursor-pointer' : ''} ${ouvert ? 'rounded-t-[14px] border-b-transparent' : 'rounded-[14px]'}`}
         style={{ background: `linear-gradient(100deg, ${rgba(t.rvb, alpha[0]!)}, ${rgba(t.rvb, alpha[1]!)} 80%), #15110e`, borderColor: rgba(t.rvb, 0.28) }}>
         <CorpsTuile t={t} edition={edition} bureau={false} />
       </div>
@@ -122,7 +122,7 @@ function LigneVerre({ t, edition, ouvert, onBasculer }: {
   const depliable = t.ligneId !== null
   return (
     <div data-testid={`tuile-${t.cle}`} data-ton={t.ton} data-ouvert={ouvert || undefined} className="border-t border-white/[.09] first:border-t-0">
-      <div {...enTete(depliable, ouvert, onBasculer)} className={`flex h-[68px] items-center gap-[18px] [@media(min-height:840px)]:h-[76px] ${depliable ? 'cursor-pointer' : ''}`}>
+      <div {...enTete(depliable, ouvert, onBasculer)} className={`flex h-[58px] items-center gap-4 [@media(min-height:840px)]:h-[64px] ${depliable ? 'cursor-pointer' : ''}`}>
         <CorpsTuile t={t} edition={edition} bureau />
       </div>
       {ouvert && t.ligneId && (
@@ -165,14 +165,14 @@ export function ResumeView() {
   const resteBtn = !vue && (
     <button type="button" data-testid="tuile-reste" aria-expanded={detail === 'reste'} disabled={!resteValable}
       onClick={() => setDetail(detail === 'reste' ? null : 'reste')} title="Voir le détail du calcul"
-      className={`${bureau ? 'verre verre-tuile' : 'card px-3 py-3'} text-left disabled:cursor-default`}
+      className={`${bureau ? 'verre verre-tuile !py-2' : 'card px-3 py-2'} text-left disabled:cursor-default`}
       style={bureau ? undefined : { borderColor: 'rgba(245,158,11,.4)', background: 'linear-gradient(135deg, rgba(245,158,11,.14), rgba(25,21,18,.9) 70%)' }}>
       <p className="block-title">{resteTuile !== null && resteTuile < 0 ? 'Au-delà du budget' : 'Reste'}</p>
-      <p className={`whitespace-nowrap font-bold tabular-nums ${bureau ? 'my-0.5 text-[30px] leading-tight' : 'my-1 text-[28px]'}`}
+      <p className={`whitespace-nowrap font-bold tabular-nums ${bureau ? 'text-[24px] leading-tight' : 'text-[21px] leading-tight'}`}
         style={{ color: resteTuile === null ? '#857c6d' : resteTuile < 0 ? COULEURS_ANNEAU.depasse : COULEURS_ANNEAU.ok }}>
         {resteTuile === null ? '—' : euros(Math.abs(resteTuile))}
       </p>
-      <p className="text-[11px] leading-snug text-ink-3 lg:text-xs">
+      <p className="text-[10.5px] leading-snug text-ink-3">
         {resteTuile === null ? 'budget : vue Foyer' : aPayer > 0.5 ? `${euros(aPayer)} dépenses à venir` : ' '}
       </p>
     </button>
@@ -180,15 +180,15 @@ export function ResumeView() {
   const epargneBtn = (
     <button type="button" data-testid="tuile-epargne" aria-expanded={detail === 'epargne'}
       onClick={() => setDetail(detail === 'epargne' ? null : 'epargne')} title="Voir les épargnes du mois"
-      className={`${bureau ? 'verre verre-tuile' : 'card px-3 py-3'} text-left`}>
+      className={`${bureau ? 'verre verre-tuile !py-2' : 'card px-3 py-2'} text-left`}>
       <p className="block-title">Épargné</p>
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2">
         <span data-testid="anneau-epargne" data-avenir={Math.round(avenir)}>
-          <Anneau ratio={Math.max(0, avenir) / CIBLE_EPARGNE_AVENIR} couleur={COULEURS_ANNEAU.ok} taille={bureau ? 34 : 36} trait={bureau ? 2 : 3} halo={bureau}>
-            <PiggyBank size={bureau ? 15 : 16} style={{ color: COULEURS_ANNEAU.ok }} aria-hidden />
+          <Anneau ratio={Math.max(0, avenir) / CIBLE_EPARGNE_AVENIR} couleur={COULEURS_ANNEAU.ok} taille={bureau ? 28 : 26} trait={2} halo={bureau}>
+            <PiggyBank size={bureau ? 13 : 12} style={{ color: COULEURS_ANNEAU.ok }} aria-hidden />
           </Anneau>
         </span>
-        <p className={`whitespace-nowrap font-bold tabular-nums ${bureau ? 'my-0.5 text-[30px] leading-tight' : 'my-1 text-[28px]'}`} style={{ color: COULEURS_ANNEAU.ok }}>{euros(epargne)}</p>
+        <p className={`whitespace-nowrap font-bold tabular-nums ${bureau ? 'text-[24px] leading-tight' : 'text-[21px] leading-tight'}`} style={{ color: COULEURS_ANNEAU.ok }}>{euros(epargne)}</p>
       </div>
     </button>
   )
@@ -207,7 +207,7 @@ export function ResumeView() {
   const noteFiltre = !foyer && <p className="-mt-1 text-[11px] text-ink-3">Les budgets sont ceux du foyer : ici, ce que {filtre === 'commun' ? 'le compte commun' : filtre === 'joffrey' ? 'Joffrey' : 'Honorine'} a dépensé. Choisis Foyer pour voir le restant.</p>
   const vide = <p className="py-4 text-center text-sm text-ink-3">Aucune ligne Courses, Aménagement, Vacances, Dons… trouvée dans ton budget.</p>
   const entete = (
-    <header className="relative flex items-center justify-between gap-1 sm:gap-3 md:grid md:grid-cols-[1fr_auto_1fr]">
+    <header className="relative flex items-center justify-between gap-1 text-[13px] sm:gap-3 md:grid md:grid-cols-[1fr_auto_1fr] [&_button]:!py-0.5 [&_svg]:!h-3.5 [&_svg]:!w-3.5">
       <div className="md:justify-self-start"><NavMois mois={mois} onChange={setMois} /></div>
       <span className="max-md:hidden" />
       <div className="md:justify-self-end"><FiltreSeg value={filtre} onChange={setFiltre} /></div>
@@ -219,7 +219,7 @@ export function ResumeView() {
     const principales = tuiles.filter((t) => !t.separe)
     const apart = tuiles.filter((t) => t.separe)
     return (
-      <div className="rise space-y-3">
+      <div className="rise space-y-2">
         {edition.dialogue}
         {entete}
         <div className="mx-auto w-full max-w-[660px] space-y-2.5">
@@ -237,13 +237,13 @@ export function ResumeView() {
   }
 
   return (
-    <div className="rise space-y-3">
+    <div className="rise space-y-2">
       {edition.dialogue}
       {entete}
       {hautDeVue}
       {noteFiltre}
       {tuiles.length ? (
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           {tuiles.map((t) => <TuileBudgetAnneau key={t.cle} {...basculer(t)} />)}
         </div>
       ) : vide}

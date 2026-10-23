@@ -294,7 +294,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </div>
 
       {/* ---- Capture rapide : toujours accessible, ne casse pas le focus (pas en vue partagée) ---- */}
-      {!vue && !plusEnHaut && (
+      {!vue && !plusEnHaut && pathname !== '/finances' && (
         <button onClick={() => setCapture(true)} title="Ajouter (tâche, idée, achat, rappel, courses)" aria-label="Ajouter"
           className={`btn-sun fixed bottom-6 right-6 z-40 flex h-13 w-13 items-center justify-center rounded-full p-3.5 shadow-lg shadow-black/40 ${
             // Agenda (ordinateur) : plus petit et plus bas, à côté du volet de notes, pour ne pas couvrir la marge des mois.
