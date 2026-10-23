@@ -1,5 +1,6 @@
 // Point d'entrée de l'onglet Finances, chargé à la demande (voir routes.tsx).
 export { FinancesLayout } from './FinancesLayout'
+export { ResumeView } from './ResumeView'
 export { BudgetView } from './BudgetView'
 export { BilanView } from './BilanView'
 export { OperationsView } from './OperationsView'

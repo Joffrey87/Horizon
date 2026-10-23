@@ -15,8 +15,8 @@ export const ONGLETS_PARTAGE: { cle: OngletPartage; label: string; route: string
   { cle: 'temps', label: 'Agenda', route: '/temps' },
 ]
 
-/** Pages de Finances ouvertes au partage (budget, bilan, patrimoine). */
-export const FINANCES_PARTAGEES = ['/finances', '/finances/bilan', '/finances/patrimoine']
+/** Pages de Finances ouvertes au partage (résumé, budget, bilan, patrimoine). */
+export const FINANCES_PARTAGEES = ['/finances', '/finances/budget', '/finances/bilan', '/finances/patrimoine']
 
 /** Tables qu'un membre peut modifier (s'il peut ranger les opérations). */
 const MODIFIABLES = ['fin_transactions', 'fin_labels', 'fin_groups']
