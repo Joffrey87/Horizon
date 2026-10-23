@@ -5,6 +5,7 @@ import { COMPOSANTES, GENRES, TITULAIRES, compositionPatrimoine, euros, patrimoi
 import type { FinAccount, FinAccountKind } from '../../lib/types'
 import { Card, EmptyState, Seg } from '../../components/ui'
 import { MontantEditable, Tuile } from './partage'
+import { LienFichePret } from './FichePret'
 import { useVue } from './contexte'
 import { CourbeComposition } from './graphiques'
 import { format, parseISO, subMonths } from 'date-fns'
@@ -111,13 +112,15 @@ export function PatrimoineView() {
                 <ul className="divide-y divide-line/40">
                   {g.comptes.map((a) => (
                     <li key={a.id} className="flex items-center justify-between gap-3 py-1.5 text-sm">
-                      <span className="min-w-0">
-                        <span className="block truncate">{a.name}</span>
-                        <span className="block text-[11px] text-ink-3">
-                          {[a.institution, TITULAIRES[a.owner], a.in_budget ? 'dans le budget' : null].filter(Boolean).join(' · ')}
-                          {a.kind === 'immobilier' && <DateAchat compte={a} />}
+                      <LienFichePret compte={a}>
+                        <span className="min-w-0">
+                          <span className="block truncate">{a.name}</span>
+                          <span className="block text-[11px] text-ink-3">
+                            {[a.institution, TITULAIRES[a.owner], a.in_budget ? 'dans le budget' : null].filter(Boolean).join(' · ')}
+                            {a.kind === 'immobilier' && <DateAchat compte={a} />}
+                          </span>
                         </span>
-                      </span>
+                      </LienFichePret>
                       {a.kind === 'immobilier' || a.kind === 'pret'
                         ? <MontantSaisi compte={a} />
                         : <span className={`shrink-0 tabular-nums ${Number(a.balance) < 0 ? 'text-ink-2' : ''}`}>{euros(Number(a.balance))}</span>}

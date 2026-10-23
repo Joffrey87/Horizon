@@ -219,7 +219,7 @@ describe('intitulés locaux', () => {
 })
 
 describe('capital remboursé', () => {
-  const ech = (date: string, capital: number) => ({ id: id(), user_id: 'u', account_id: 'p', date, capital, interets: 10, created_at: '' })
+  const ech = (date: string, capital: number) => ({ id: id(), user_id: 'u', account_id: 'p', date, capital, interets: 10, assurance: 0, frais: 0, restant_du: null, rang: null, source: 'pdf', created_at: '' })
   it('somme la part de capital des échéances du mois (différé : 0)', () => {
     const e = [ech('2026-09-01', 850), ech('2026-09-05', 207), ech('2026-10-01', 852), ech('2026-04-01', 0)]
     expect(capitalRembourse(e, '2026-09')).toBe(1057)

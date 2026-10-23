@@ -612,7 +612,45 @@ export interface FinEcheance {
   date: string
   capital: number
   interets: number
+  /** Assurance comprise dans l'échéance. */
+  assurance: number
+  /** Frais de dossier / garantie prélevés avec cette échéance. */
+  frais: number
+  /** Capital restant dû après cette échéance (null : à recalculer). */
+  restant_du: number | null
+  rang: number | null
+  /** 'pdf' (tableau officiel), 'estime' (recalculé), 'finary'. */
+  source: string
   created_at: string
+}
+
+/** D'où vient une information d'une fiche de prêt. */
+export type OriginePret = 'manual' | 'finary' | 'estimated' | 'pdf'
+
+/** Fiche d'un prêt (1:1 avec un compte de type 'pret') : conditions du contrat. */
+export interface FinLoan {
+  id: UUID
+  user_id: UUID
+  account_id: UUID
+  lender: string | null
+  contract_ref: string | null
+  loan_type: string | null
+  start_date: string | null
+  duration_months: number | null
+  borrowed_capital: number | null
+  rate_nominal: number | null          // en %
+  rate_taeg: number | null
+  monthly_payment: number | null       // hors assurance
+  insurance_monthly: number | null     // assurance comprise dans l'échéance
+  insurance_extra: number | null       // assurance prélevée à part
+  fees: number | null
+  /** Motif (regex, insensible à la casse) des libellés des prélèvements réels. */
+  debit_match: string | null
+  debit_account_ids: UUID[]
+  notes: string | null
+  origins: Record<string, OriginePret>
+  created_at: string
+  updated_at: string
 }
 
 export interface FinNetworth {
