@@ -7,6 +7,7 @@ import { useHorizon } from '../../lib/store'
 import { birthdaysForDay, compareTasksByTitleTime, extractHourMinute, feastOnDay, iso, sansHeure, spanPart, tasksForDay } from '../../lib/logic'
 import type { Step, Task } from '../../lib/types'
 import { EVENT_DEFAULT_COLOR, stepsForDay } from './partage'
+import { clicDansLeVide, estBalayage } from '../../lib/tacheForm'
 
 const hhmm = (min: number) => {
   const m = ((min % 1440) + 1440) % 1440
@@ -50,12 +51,22 @@ export function JourFenetre({ day, onDay, onClose, onEdit, onCreate, onStep, lec
   }, [onClose, onDay])
 
   const t0 = useRef<{ x: number; y: number } | null>(null)
+  // Fin d'un balayage : le « clic » qui peut le suivre ne doit pas créer d'évènement.
+  const balayeJusqua = useRef(0)
   const touchStart = (e: React.TouchEvent) => { t0.current = { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY } }
   const touchEnd = (e: React.TouchEvent) => {
     const a = t0.current; t0.current = null
     if (!a || window.getSelection()?.toString()) return
     const dx = e.changedTouches[0]!.clientX - a.x, dy = e.changedTouches[0]!.clientY - a.y
+    if (estBalayage(dx, dy)) balayeJusqua.current = Date.now() + 500
     if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.6) onDay(addDays(day, dx < 0 ? 1 : -1))
+  }
+
+  // Toucher le vide de la journée ouvre la création, comme le « + » (pas en lecture).
+  const toucheLeVide = (e: React.MouseEvent) => {
+    if (lecture || !clicDansLeVide(e.target, e.currentTarget)) return
+    if (Date.now() < balayeJusqua.current || window.getSelection()?.toString()) return
+    onCreate(d)
   }
 
   const fleche = 'grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/[0.07] text-sun transition-colors hover:bg-white/[0.13]'
@@ -81,10 +92,10 @@ export function JourFenetre({ day, onDay, onClose, onEdit, onCreate, onStep, lec
         </div>
         <button onClick={onClose} className="absolute left-2 top-1 rounded-lg p-1.5 text-ink-3 hover:text-ink" aria-label="Fermer" title="Fermer (Échap)"><X size={16} /></button>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+        <div onClick={toucheLeVide} className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
           {(journee.length > 0 || steps.length > 0 || anniv.length > 0 || fete) && <>
             <p className={lab}>Toute la journée</p>
-            <div className="mb-2.5 flex flex-wrap gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.05] p-1.5">
+            <div onClick={toucheLeVide} className="mb-2.5 flex flex-wrap gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.05] p-1.5">
               {fete && <span className="rounded-lg border-l-4 border-sun bg-sun/25 px-2 py-1 text-[12px] font-semibold">✝ {fete}</span>}
               {anniv.map((b) => <span key={b.id} className="rounded-lg border-l-4 border-[#ec7f97] bg-[#ec7f97]/25 px-2 py-1 text-[12px] font-semibold">🎂 {b.name}</span>)}
               {steps.map((st) => (
@@ -102,8 +113,8 @@ export function JourFenetre({ day, onDay, onClose, onEdit, onCreate, onStep, lec
           </>}
 
           <p className={lab}>Programme</p>
-          {aHeure.length === 0 && <p className="ml-1 text-sm text-ink-3">Aucun événement à heure fixe.</p>}
-          <div className="flex flex-col gap-1.5">
+          {aHeure.length === 0 && <p onClick={toucheLeVide} className="ml-1 text-sm text-ink-3">Aucun événement à heure fixe.</p>}
+          <div onClick={toucheLeVide} className="flex flex-col gap-1.5">
             {aHeure.map((t) => {
               const h = extractHourMinute(t.title)!
               const debut = h.hour * 60 + h.minute

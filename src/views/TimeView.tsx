@@ -56,7 +56,6 @@ export function TimeView() {
   const [focus, setFocus] = useState<Date | null>(() => (dateDemandee ? parseISO(dateDemandee) : null))
   const [editing, setEditing] = useState<Task | null>(null)
   const [createDate, setCreateDate] = useState<string | null>(null)
-  const [overrideScheduled, setOverrideScheduled] = useState<string | undefined>(undefined)
   const [openStep, setOpenStep] = useState<Step | null>(null)
   const [jourOuvert, setJourOuvert] = useState<Date | null>(null)
   const [massPick, setMassPick] = useState<{ date: string; label: string } | null>(null)
@@ -93,15 +92,13 @@ export function TimeView() {
   const calRef = useRef<HTMLDivElement>(null)
   useMolette(calRef, pas, agendaRelie)
 
-  // Déplacer un item : on ne change que la date. Cohérence : si une tâche
-  // atterrit après son échéance, on ouvre le formulaire (date pré-remplie) et
-  // la validation reste bloquée tant que ce n'est pas cohérent.
+  // Déplacer un item : on ne change que la date (l'échéance n'est plus éditée
+  // dans le formulaire : plus de contrôle ni de formulaire forcé au dépôt).
   const handleMove = (kind: Kind, id: string, dayIso: string, copier = false) => {
     if (kind === 'task') {
       const t = s.tasks.find((x) => x.id === id)
       // Ctrl + glisser : copie indépendante (rien ne bouge, pas de contrôle d'échéance).
       if (copier && t) { void s.insert('tasks', copieDeTache(t, dayIso)); return }
-      if (t?.due_date && dayIso > t.due_date) { setEditing(t); setOverrideScheduled(dayIso); return }
       void s.update('tasks', id, { scheduled_date: dayIso })
     } else if (kind === 'step') {
       const st = s.steps.find((x) => x.id === id)
@@ -113,7 +110,7 @@ export function TimeView() {
     }
   }
 
-  const closeTask = () => { setEditing(null); setCreateDate(null); setOverrideScheduled(undefined) }
+  const closeTask = () => { setEditing(null); setCreateDate(null) }
   const common = lecture
     ? { onEdit: () => {}, onCreate: () => {}, onStep: () => {}, onMove: () => {} }
     : { onEdit: setEditing, onCreate: setCreateDate, onStep: setOpenStep, onMove: handleMove }
@@ -196,7 +193,7 @@ export function TimeView() {
       {massPick && <MassPicker pick={massPick} onClose={() => setMassPick(null)} />}
 
       <TaskForm open={!lecture && (editing !== null || createDate !== null)} task={editing}
-        defaultDate={createDate ?? undefined} overrideScheduled={overrideScheduled}
+        defaultDate={createDate ?? undefined}
         onClose={closeTask} />
 
       {openStep && <StepTasksModal step={openStep} onEditTask={setEditing} onClose={() => setOpenStep(null)} />}

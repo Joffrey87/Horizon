@@ -6,8 +6,10 @@ const BULLET = '• '
 
 /** Zone de note : texte libre avec puces. Entrée continue la puce en cours
  *  (une ligne « • » vide sort de la liste). Bouton pour insérer une puce. */
-export function NoteArea({ value, onChange, placeholder, rows = 6 }: {
+export function NoteArea({ value, onChange, placeholder, rows = 6, compact = false }: {
   value: string; onChange: (v: string) => void; placeholder?: string; rows?: number
+  /** Version serrée : bouton « puce » en icône dans le coin, champ plus bas, sans redimensionnement. */
+  compact?: boolean
 }) {
   const ref = useRef<HTMLTextAreaElement>(null)
 
@@ -44,6 +46,20 @@ export function NoteArea({ value, onChange, placeholder, rows = 6 }: {
     const ins = (atLineStart ? '' : '\n') + BULLET
     const next = value.slice(0, pos) + ins + value.slice(pos)
     onChange(next); putCursor(pos + ins.length)
+  }
+
+  if (compact) {
+    return (
+      <div className="relative">
+        <textarea ref={ref} value={value} onChange={(e) => onChange(e.target.value)} onKeyDown={onKeyDown}
+          placeholder={placeholder} rows={rows}
+          className="field block w-full resize-none !py-2 !pr-9 text-[13px] leading-[1.35]" />
+        <button type="button" onClick={addBullet} aria-label="Insérer une puce" title="Insérer une puce"
+          className="absolute bottom-1.5 right-1.5 grid h-6 w-6 place-items-center rounded-md text-ink-3 hover:text-sun">
+          <List size={14} />
+        </button>
+      </div>
+    )
   }
 
   return (
@@ -124,8 +140,11 @@ export function ProjectTag({ name, color, size = 'sm' }: { name: string; color?:
   )
 }
 
-export function Modal({ open, onClose, title, children, wide = false, compact = false }: {
+export function Modal({ open, onClose, title, children, wide = false, compact = false, pied = false }: {
   open: boolean; onClose: () => void; title: string; children: ReactNode; wide?: boolean
+  /** Pied fixe : la fenêtre ne dépasse jamais l'écran (clavier ouvert compris) ;
+   *  l'enfant `form` gère lui-même sa zone défilante et son pied. */
+  pied?: boolean
   /** Marges réduites : pour un formulaire dont le bouton de validation doit
    *  rester visible sans défiler. */
   compact?: boolean
@@ -135,9 +154,10 @@ export function Modal({ open, onClose, title, children, wide = false, compact = 
     <div className={`fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm ${compact ? 'p-2 sm:p-3' : 'p-4'}`}
       onClick={onClose}>
       <div className={`card rise mx-auto w-full ${wide ? 'max-w-2xl' : 'max-w-md'} ${
-        compact ? 'my-1 p-4 sm:my-3' : 'my-6 p-5 sm:my-10'}`}
+        pied ? 'flex max-h-[calc(100dvh-1rem)] flex-col p-3 sm:max-h-[calc(100dvh-1.5rem)]'
+          : compact ? 'my-1 p-4 sm:my-3' : 'my-6 p-5 sm:my-10'}`}
         onClick={(e) => e.stopPropagation()}>
-        <header className={`${compact ? 'mb-2' : 'mb-4'} flex items-center justify-between`}>
+        <header className={`${compact || pied ? 'mb-2' : 'mb-4'} flex shrink-0 items-center justify-between`}>
           <h2 className="text-lg font-semibold">{title}</h2>
           <button onClick={onClose} className="btn-ghost p-1.5" aria-label="Fermer"><X size={16} /></button>
         </header>
