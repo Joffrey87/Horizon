@@ -59,6 +59,8 @@ export function ligneParNom<T extends Pick<FinLine, 'name' | 'kind'>>(lignes: T[
 export interface TuileBudget {
   cle: string
   titre: string
+  /** Id de la ligne de budget du foyer (pour changer son budget du mois) ; null si introuvable. */
+  ligneId: string | null
   /** Ligne introuvable dans le budget du foyer. */
   absente: boolean
   budget: number | null
@@ -72,11 +74,11 @@ export interface TuileBudget {
 
 /** Données d'une tuile : le budget n'existe que dans la vue Foyer (voir syntheseMois). */
 export function tuileBudget(def: { cle: string; titre: string }, ligne: LigneBudget | undefined): TuileBudget {
-  if (!ligne) return { ...def, absente: true, budget: null, depense: 0, restant: null, ratio: null, ton: 'neutre' }
+  if (!ligne) return { ...def, ligneId: null, absente: true, budget: null, depense: 0, restant: null, ratio: null, ton: 'neutre' }
   const budget = ligne.budget !== null && ligne.budget > 0 ? ligne.budget : null
   const ratio = budget !== null ? Math.max(0, ligne.reel) / budget : null
   return {
-    ...def, absente: false, budget, depense: ligne.reel,
+    ...def, ligneId: ligne.ligne?.id ?? null, absente: false, budget, depense: ligne.reel,
     restant: budget !== null ? budget - ligne.reel : null, ratio, ton: tonAnneau(ratio),
   }
 }

@@ -210,6 +210,22 @@ export function ecrituresBudgetMois(opts: {
 }
 
 /**
+ * Le budget d'un mois a-t-il été ajusté pour ce mois seulement ? Oui s'il diffère à la fois du mois
+ * précédent ET du mois suivant (un changement durable, lui, se retrouve le mois d'après ; et après un
+ * ajustement d'un mois, le suivant est figé à l'ancienne valeur — voir ecrituresBudgetMois).
+ * `base` = le budget habituel (celui du mois précédent), null si aucun.
+ */
+export function budgetAjuste(ligneId: string, mois: string, budgets: FinBudget[]): { ajuste: boolean; base: number | null } {
+  const v = (m: string) => budgetDe(ligneId, m, budgets) ?? 0
+  const courant = v(mois)
+  const avant = v(decaleMois(mois, -1))
+  const apres = v(decaleMois(mois, 1))
+  const ajuste = budgets.some((b) => b.kind === 'budget' && b.line_id === ligneId && moisDe(b.month) === mois)
+    && Math.abs(courant - avant) > 0.005 && Math.abs(courant - apres) > 0.005
+  return { ajuste, base: avant > 0 ? avant : null }
+}
+
+/**
  * Fond d'une ligne de budget. Couleurs imposées par nom (choix de Joffrey) : Aménagement vert, Dépenses
  * courantes sable, Dépenses exceptionnelles taupe. Pour les autres, la couleur enregistrée ; l'ancien
  * « bleu roi » (plus de bleu dans le design) s'affiche en vert.

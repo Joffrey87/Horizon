@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import type { FinAccount, FinBudget, FinEcheance, FinLoan, FinCategory, FinHolding, FinLine, FinPlanned, FinTarget, FinTransaction } from './types'
 import {
-  estEnAttente, NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, capitalRembourse, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, budgetDe, ecrituresBudgetMois, estEpargneComptee, fondLigne, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
+  estEnAttente, NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, capitalRembourse, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, budgetDe, budgetAjuste, ecrituresBudgetMois, estEpargneComptee, fondLigne, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
   libelleMois, moisEcoules, patrimoine, previsionDe, provision, syntheseMois,
   agregerHorsCapital, capitalDuMois, epargnesPrevues, listeEpargnes,
 } from './finances'
@@ -660,6 +660,38 @@ describe('budget d’un seul mois', () => {
   })
   it('ne touche pas au prévisionnel', () => {
     expect(ecrituresBudgetMois({ ligneId: c.id, mois: '2026-10', montant: 1, budgets: [bud('2026-11', 5, 'prevision')] }).map((e) => e.mois)).toEqual(['2026-11', '2026-10'])
+  })
+})
+
+describe('budget ajusté pour ce mois', () => {
+  const c = ligne('Courses')
+  const bud = (month: string, amount: number) => ({ id: month + amount, user_id: 'u', line_id: c.id, kind: 'budget', month: `${month}-01`, amount } as unknown as FinBudget)
+  const appliquer = (budgets: FinBudget[], mois: string, montant: number | null) => {
+    let b = budgets
+    for (const e of ecrituresBudgetMois({ ligneId: c.id, mois, montant, budgets })) {
+      b = b.filter((x) => !(x.kind === 'budget' && x.month === `${e.mois}-01`))
+      if (e.montant !== null) b = [...b, bud(e.mois, e.montant)]
+    }
+    return b
+  }
+  it('un budget changé pour ce mois seulement est ajusté, avec le budget habituel en base', () => {
+    const b = appliquer([bud('2026-01', 700)], '2026-10', 900)
+    expect(budgetAjuste(c.id, '2026-10', b)).toEqual({ ajuste: true, base: 700 })
+    // le mois suivant, figé à l'ancienne valeur, et les précédents ne le sont pas
+    expect(budgetAjuste(c.id, '2026-11', b).ajuste).toBe(false)
+    expect(budgetAjuste(c.id, '2026-09', b).ajuste).toBe(false)
+  })
+  it('un changement durable (budget « à partir de ») n’est pas un ajustement', () => {
+    const b = [bud('2026-01', 700), bud('2026-10', 900)]
+    expect(budgetAjuste(c.id, '2026-10', b).ajuste).toBe(false)
+    expect(budgetAjuste(c.id, '2026-11', b).ajuste).toBe(false)
+  })
+  it('rétablir le budget habituel efface l’ajustement', () => {
+    const b = appliquer(appliquer([bud('2026-01', 700)], '2026-10', 900), '2026-10', null)
+    expect(budgetAjuste(c.id, '2026-10', b).ajuste).toBe(false)
+  })
+  it('sans budget habituel : ajusté, base null', () => {
+    expect(budgetAjuste(c.id, '2026-10', appliquer([], '2026-10', 300))).toEqual({ ajuste: true, base: null })
   })
 })
 

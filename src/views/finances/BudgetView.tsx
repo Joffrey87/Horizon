@@ -14,6 +14,7 @@ import { somme, useTuilesMois } from './tuilesMois'
 import { DetailTroisMois } from './DetailTroisMois'
 import { ChampRecherche, ResultatsRecherche } from './RechercheOperations'
 import { useFin, useIndex, useReconnaissance, useVue } from './contexte'
+import { LegendeAjuste, MontantBudget, useBudgetMois } from './budgetMois'
 
 const CLE_PREV = 'horizon.finances.voirPrevision'
 const CLE_M1 = 'horizon.finances.voirM1'
@@ -31,7 +32,6 @@ export function BudgetView() {
   const transactions = useHorizon((s) => s.finTransactions)
   const lines = useHorizon((s) => s.finLines)
   const setFinBudget = useHorizon((s) => s.setFinBudget)
-  const setFinBudgetMois = useHorizon((s) => s.setFinBudgetMois)
   const idx = useIndex()
   const [depli, setDepli] = useState<Depli>(null)
   // Pastille Détails d'une ligne du tableau : toutes ses catégories ouvertes sur leurs groupes (1) ou leurs opérations (2).
@@ -55,6 +55,8 @@ export function BudgetView() {
   }
   // Vue partagée : les budgets et le prévisionnel restent ceux du propriétaire.
   const modifiable = !useVue()
+  // Budget d'une ligne pour ce mois seulement (même fenêtre que dans le Résumé).
+  const budgetMois = useBudgetMois()
 
   const { s, depenses, epargnes, capitalRetire, capitalMois, aVenir, epPrevues, listeEp, budgetDepenses, reelDepenses, resteTuile, epargne } = useTuilesMois()
   const prevues = useMemo(() => entreesPrevues({ mois, transactions, idx, filtre }), [mois, transactions, idx, filtre])
@@ -113,9 +115,18 @@ export function BudgetView() {
               <BoutonDetails niveau={ouvert === 'mois' && niveauTous?.cle === l.cle ? niveauTous.n : 0} onChange={(n) => reglerTous(l.cle, n)} />
             </div>
           </td>
-          <td className="w-44 px-2">
-            <BarreBudget reel={l.reel} budget={l.budget} depasse={depasse} onClic={() => basculer(l.cle, 'mois')}
-              edition={editable ? { mois, onSave: (v) => void setFinBudgetMois(l.ligne!.id, mois, v) } : undefined} />
+          <td className="w-52 px-2">
+            <div className="flex items-center gap-1.5">
+              <div className="min-w-0 flex-1">
+                <BarreBudget reel={l.reel} budget={l.budget} depasse={depasse}
+                  onClic={() => (editable ? budgetMois.ouvrir(l.ligne!, l.budget) : basculer(l.cle, 'mois'))} modifiable={editable} />
+              </div>
+              {l.ligne && foyer && (editable || aBudget) && (
+                <MontantBudget montant={l.budget} ajustement={budgetMois.ajustement(l.ligne.id)} className="shrink-0 text-xs"
+                  onOuvrir={editable ? () => budgetMois.ouvrir(l.ligne!, l.budget) : undefined} />
+              )}
+            </div>
+            {l.ligne && foyer && <LegendeAjuste ajustement={budgetMois.ajustement(l.ligne.id)} />}
           </td>
           <td className={`px-2 text-right tabular-nums ${depasse ? 'text-[#eda145]' : 'text-ink-2'}`}>
             {ecart !== null ? (depasse ? `+${euros(-ecart)} au-delà` : euros(ecart))
@@ -169,6 +180,7 @@ export function BudgetView() {
 
   return (
     <div className="rise space-y-4">
+      {budgetMois.dialogue}
       {/* Recherche à gauche, mois au centre, titulaire à droite. */}
       <header className="relative flex items-center justify-between gap-1 sm:gap-3 md:grid md:grid-cols-[1fr_auto_1fr]">
         <div className="md:justify-self-start"><ChampRecherche valeur={recherche} onChange={setRecherche} /></div>
@@ -279,43 +291,37 @@ export function BudgetView() {
 
 /**
  * Barre d'atteinte du budget. Au survol : « Réel / Budget » avec les deux montants.
- * Un clic épingle la bulle (utile au doigt) et appelle `onClic` (ouvrir la catégorie) ;
- * si `edition`, un clic sur la barre ouvre directement un champ pour changer le budget de CE MOIS seulement
- * (Entrée valide, Échap annule, champ vide = retour au budget par défaut).
+ * Un clic épingle la bulle (utile au doigt) et appelle `onClic` : ouvrir la catégorie, ou — si `modifiable` —
+ * la fenêtre de saisie du budget de ce mois (voir budgetMois.tsx), sans bulle.
  * Sans budget (ou budget à 0), pas de barre : le réel s'écrit en discret à sa place.
  * La bulle est rendue hors du tableau (portail) pour ne pas être rognée par son défilement.
  */
-function BarreBudget({ reel, budget, depasse, edition, onClic, discret = false }: {
-  reel: number; budget: number | null; depasse: boolean; discret?: boolean
-  edition?: { mois: string; onSave: (v: number | null) => void }; onClic?: () => void
+function BarreBudget({ reel, budget, depasse, modifiable = false, onClic, discret = false }: {
+  reel: number; budget: number | null; depasse: boolean; discret?: boolean; modifiable?: boolean; onClic?: () => void
 }) {
   const ancre = useRef<HTMLButtonElement>(null)
   const bulle = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const [epingle, setEpingle] = useState(false)
-  const [saisie, setSaisie] = useState(false)
-  const [texte, setTexte] = useState('')
-  /** Vrai dès que la saisie est validée ou annulée : évite qu'un blur tardif enregistre une seconde fois (ou après Échap). */
-  const clos = useRef(false)
   const aBudget = budget !== null && budget > 0
   const [largeur, setLargeur] = useState(0)
   // La bulle reste entièrement dans l'écran (téléphone : la barre est tout à droite).
-  useLayoutEffect(() => { if (pos && bulle.current) setLargeur(bulle.current.offsetWidth) }, [pos, saisie, epingle])
+  useLayoutEffect(() => { if (pos && bulle.current) setLargeur(bulle.current.offsetWidth) }, [pos, epingle])
 
   const placer = () => {
     const r = ancre.current?.getBoundingClientRect()
     if (r) setPos({ x: r.left + r.width / 2, y: r.top })
   }
-  const fermer = () => { setEpingle(false); setSaisie(false); setPos(null) }
+  const fermer = () => { setEpingle(false); setPos(null) }
 
   useEffect(() => {
     if (!epingle) return
-    // Clic ailleurs (après le blur du champ, qui enregistre), Échap ou défilement : on ferme.
+    // Clic ailleurs, Échap ou défilement : on ferme la bulle.
     const dehors = (e: MouseEvent) => {
       const t = e.target as Node
-      if (!ancre.current?.contains(t) && !bulle.current?.contains(t)) fermer()   // le blur du champ a déjà enregistré
+      if (!ancre.current?.contains(t) && !bulle.current?.contains(t)) fermer()
     }
-    const touche = (e: KeyboardEvent) => { if (e.key === 'Escape') { clos.current = true; fermer() } }
+    const touche = (e: KeyboardEvent) => { if (e.key === 'Escape') fermer() }
     document.addEventListener('click', dehors)
     document.addEventListener('keydown', touche)
     window.addEventListener('scroll', fermer, true)
@@ -326,29 +332,17 @@ function BarreBudget({ reel, budget, depasse, edition, onClic, discret = false }
     }
   }, [epingle])
 
-  const ouvrirSaisie = () => { clos.current = false; setTexte(budget === null ? '' : String(budget)); setSaisie(true) }
-  const annuler = () => { clos.current = true; fermer() }
-  const enregistrer = () => {
-    if (!edition || clos.current) return
-    const t = texte.replace(/\s/g, '').replace(',', '.')
-    const v = t === '' ? null : Number(t)
-    if (v !== null && (!Number.isFinite(v) || v < 0)) return
-    clos.current = true
-    if (v !== budget) edition.onSave(v)
-    fermer()
-  }
-
   return (
     <>
       <button ref={ancre} type="button"
-        onMouseEnter={() => { if (!epingle) placer() }} onMouseLeave={() => { if (!epingle) setPos(null) }}
+        onMouseEnter={() => { if (!epingle && !modifiable) placer() }} onMouseLeave={() => { if (!epingle) setPos(null) }}
         onClick={() => {
           onClic?.()
-          if (epingle) { annuler(); return }
+          if (modifiable) { setPos(null); return }
+          if (epingle) { fermer(); return }
           placer(); setEpingle(true)
-          if (edition) ouvrirSaisie()
         }}
-        title={edition ? 'Cliquer pour changer le budget de ce mois' : undefined}
+        title={modifiable ? 'Changer le budget de ce mois' : undefined}
         aria-label={`Réel ${euros(reel)}${budget !== null ? `, budget ${euros(budget)}` : ''}`}
         className="flex h-6 w-full items-center rounded px-0.5 hover:bg-panel-2/60">
         {aBudget
@@ -362,19 +356,8 @@ function BarreBudget({ reel, budget, depasse, edition, onClic, discret = false }
           <p className="mt-0.5 flex items-center gap-1 text-sm font-medium tabular-nums">
             <span className={depasse ? 'text-[#eda145]' : ''}>{euros(reel)}</span>
             <span className="text-ink-3">/</span>
-            {saisie && edition
-              ? <input autoFocus value={texte} onChange={(e) => setTexte(e.target.value)} inputMode="decimal"
-                  onFocus={(e) => e.target.select()} onBlur={enregistrer}
-                  onKeyDown={(e) => { if (e.key === 'Enter') enregistrer(); if (e.key === 'Escape') annuler() }}
-                  className="field !w-24 !px-2 !py-0.5 text-right text-sm tabular-nums" aria-label="Budget" />
-              : <span>{budget === null ? '—' : aBudget ? euros(budget) : 'sans budget'}</span>}
+            <span>{budget === null ? '—' : aBudget ? euros(budget) : 'sans budget'}</span>
           </p>
-          {epingle && edition && (
-            <p className="mt-1 text-[10px] leading-snug text-ink-3">
-              <span className="text-ink-2">Pour {libelleMois(edition.mois)} seulement</span><br />
-              Entrée valide · Échap annule · vide = budget par défaut
-            </p>
-          )}
         </div>,
         document.body,
       )}

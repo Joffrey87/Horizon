@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useHorizon } from '../../lib/store'
 import { euros } from '../../lib/finances'
@@ -8,6 +8,7 @@ import { FiltreSeg, NavMois } from './partage'
 import { DetailEpargne, DetailReste } from './DetailsTuiles'
 import { useTuilesMois } from './tuilesMois'
 import { useFin, useVue } from './contexte'
+import { LegendeAjuste, MontantBudget, useBudgetMois } from './budgetMois'
 
 /** Sommet de l'anneau : part consommée (plafonnée à 100 % pour le tracé, le texte dit le vrai pourcentage). */
 function Anneau({ ratio, ton, taille }: { ratio: number | null; ton: TonAnneau; taille: number }) {
@@ -28,11 +29,16 @@ function Anneau({ ratio, ton, taille }: { ratio: number | null; ton: TonAnneau; 
   )
 }
 
-function TuileBudgetAnneau({ t }: { t: TuileBudget }) {
+function TuileBudgetAnneau({ t, edition }: { t: TuileBudget; edition: ReturnType<typeof useBudgetMois> }) {
   const couleur = COULEURS_ANNEAU[t.ton]
   const montant = t.restant !== null ? euros(t.restant) : euros(t.depense)
-  const detail = t.budget === null ? 'dépensé ce mois'
-    : t.restant! < 0 ? `dépassé · ${euros(t.budget)}` : `restant · ${euros(t.budget)}`
+  // Budget : un montant qu'on touche pour le changer ce mois-ci (ambre souligné + légende si ajusté) ; sans budget, un lien pour en fixer un.
+  const ajustement = edition.ajustement(t.ligneId)
+  const ouvrir = edition.peutModifier && t.ligneId ? () => edition.ouvrir({ id: t.ligneId!, name: t.titre }, t.budget) : undefined
+  const montantBudget = <MontantBudget montant={t.budget} ajustement={ajustement} onOuvrir={ouvrir} />
+  const detail: ReactNode = t.budget === null
+    ? <>dépensé ce mois{ouvrir && <> · <button type="button" onClick={ouvrir} data-testid="budget-fixer" className="text-sun underline decoration-dotted underline-offset-4">fixer un budget</button></>}</>
+    : t.restant! < 0 ? <>dépassé · {montantBudget}</> : <>restant · {montantBudget}</>
   return (
     <div data-testid={`tuile-${t.cle}`} data-ton={t.ton}
       className="card flex flex-row items-center gap-2 px-2 py-2.5 lg:flex-col lg:gap-1 lg:px-3 lg:py-4 lg:text-center">
@@ -42,6 +48,7 @@ function TuileBudgetAnneau({ t }: { t: TuileBudget }) {
         <p className="flex min-h-[2.1rem] items-center text-[11.5px] font-semibold leading-tight lg:min-h-[2.4rem] lg:text-[13px]">{t.titre}</p>
         <p className="whitespace-nowrap text-[17px] font-bold tabular-nums lg:text-xl" style={{ color: couleur }}>{montant}</p>
         <p className="text-[10.5px] leading-snug text-ink-3 lg:text-[11px]">{detail}</p>
+        <LegendeAjuste ajustement={ajustement} />
       </div>
     </div>
   )
@@ -62,6 +69,7 @@ export function ResumeView() {
   // Mêmes chiffres que le Budget : un seul calcul (tuilesMois.ts), capital de prêt compté en épargne et non en dépense.
   const { s, capitalRetire, aVenir, epPrevues, listeEp, budgetDepenses, reelDepenses, resteTuile, epargne } = useTuilesMois()
   const resteValable = resteTuile !== null
+  const edition = useBudgetMois()
   const aPayer = aVenir.total + epPrevues.total
 
   const tuiles = useMemo(() => tuilesBudgets(s.lignes).filter((t) => !t.absente), [s.lignes])
@@ -72,6 +80,7 @@ export function ResumeView() {
 
   return (
     <div className="rise space-y-3">
+      {edition.dialogue}
       <header className="relative flex items-center justify-between gap-1 sm:gap-3 md:grid md:grid-cols-[1fr_auto_1fr]">
         <div className="md:justify-self-start"><NavMois mois={mois} onChange={setMois} /></div>
         <span className="max-md:hidden" />
@@ -117,7 +126,7 @@ export function ResumeView() {
       {tuiles.length ? (
         <div className="grid grid-cols-2 gap-2.5 lg:[grid-template-columns:repeat(var(--n),minmax(0,1fr))]"
           style={{ '--n': tuiles.length } as React.CSSProperties}>
-          {tuiles.map((t) => <TuileBudgetAnneau key={t.cle} t={t} />)}
+          {tuiles.map((t) => <TuileBudgetAnneau key={t.cle} t={t} edition={edition} />)}
         </div>
       ) : (
         <p className="py-4 text-center text-sm text-ink-3">Aucune ligne Courses, Aménagement, Vacances, Dons… trouvée dans ton budget.</p>
