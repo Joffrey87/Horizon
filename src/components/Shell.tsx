@@ -10,6 +10,7 @@ import { ONGLETS_PARTAGE, pageAccueil, routeAutorisee } from '../lib/partage'
 import { pagesFinancesVisibles } from '../lib/financesNav'
 import { todayIso, wallpaperOfDay } from '../lib/logic'
 import { QuickAdd } from './QuickAdd'
+import { useMediaQuery } from '../lib/useMediaQuery'
 import { ROUTE_ACCUEIL, ROUTE_COURSES } from '../lib/navigation'
 
 // Agendas externes : on resynchronise au plus une fois par demi-heure. Inutile
@@ -61,6 +62,14 @@ function useDayKey(): string {
   return day
 }
 
+function BoutonPlus({ onClick, className = '' }: { onClick: () => void; className?: string }) {
+  return (
+    <button onClick={onClick} title="Ajouter (tâche, idée, achat, rappel, courses)" aria-label="Ajouter" className={className}>
+      <Plus size={18} strokeWidth={2.4} />
+    </button>
+  )
+}
+
 export function Shell({ children }: { children: ReactNode }) {
   const dayKey = useDayKey()
   const [capture, setCapture] = useState(false)
@@ -86,6 +95,10 @@ export function Shell({ children }: { children: ReactNode }) {
   }, [vue, apercu, pathname, navigate])
   // Raccourci « Courses » dans l'Agenda (pas en vue partagée : la liste est privée).
   const caddie = !vue && pathname.startsWith('/temps')
+  // Agenda (téléphone) : le « + » quitte le coin de l'écran et rejoint la ligne du haut, à côté du caddie.
+  // Téléphone seulement : sur ordinateur, le « + » reste en bas à droite comme avant.
+  const telephone = useMediaQuery('(max-width: 767px)')
+  const plusEnHaut = !vue && telephone && pathname.startsWith('/temps')
   const pleineLargeur = pathname === ROUTE_ACCUEIL || pathname.startsWith('/temps')
 
   useEffect(() => {
@@ -220,6 +233,7 @@ export function Shell({ children }: { children: ReactNode }) {
                   <ShoppingCart size={18} strokeWidth={1.9} />
                 </Link>
               )}
+              {plusEnHaut && <BoutonPlus onClick={() => setCapture(true)} className="btn-sun flex h-9 w-9 shrink-0 items-center justify-center rounded-full p-0 shadow shadow-black/40" />}
               <Link to={accueil} aria-label="Retour à l'accueil" className="shrink-0">
                 <span className="block h-8 w-8 overflow-hidden rounded-full ring-1 ring-white/10">
                   <img src="/logo.png" alt="Horizon" className="h-full w-full object-cover"
@@ -269,7 +283,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </div>
 
       {/* ---- Capture rapide : toujours accessible, ne casse pas le focus (pas en vue partagée) ---- */}
-      {!vue && (
+      {!vue && !plusEnHaut && (
         <button onClick={() => setCapture(true)} title="Ajouter (tâche, idée, achat, rappel, courses)" aria-label="Ajouter"
           className={`btn-sun fixed bottom-6 right-6 z-40 flex h-13 w-13 items-center justify-center rounded-full p-3.5 shadow-lg shadow-black/40 ${
             // Agenda (ordinateur) : plus petit et plus bas, à côté du volet de notes, pour ne pas couvrir la marge des mois.

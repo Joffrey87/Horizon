@@ -8,7 +8,28 @@ export type VueTemps = '4sem' | 'semaine' | 'trimestre' | 'annee'
 
 const LUNDI = { weekStartsOn: 1 } as const
 
-/** Libellé de la période affichée au centre : ce que montre la vue en cours. */
+const MOIS_COURT = (d: Date) => format(d, 'MMM', { locale: fr })   // « oct. », « sept. »
+
+/** Libellé court de la période affichée au centre (« 19–25 oct. », « oct. », « oct.–déc. »…). L'année
+ *  n'apparaît que si ce n'est pas l'année en cours ; le libellé complet reste dans l'infobulle. */
+function libelleCourt(vue: VueTemps, a: Date, aujourdhui = new Date()): string {
+  const an = (d: Date) => (d.getFullYear() === aujourdhui.getFullYear() ? '' : ` ${format(d, 'yy')}`)
+  if (vue === 'semaine') {
+    const d = startOfWeek(a, LUNDI)
+    const f = endOfWeek(a, LUNDI)
+    if (d.getMonth() === f.getMonth()) return `${format(d, 'd')}–${format(f, 'd')} ${MOIS_COURT(f)}${an(f)}`
+    return `${format(d, 'd')} ${MOIS_COURT(d)}–${format(f, 'd')} ${MOIS_COURT(f)}${an(f)}`
+  }
+  if (vue === 'trimestre') {
+    const d = startOfMonth(a)
+    const f = addMonths(d, 2)
+    return `${MOIS_COURT(d)}–${MOIS_COURT(f)}${an(f)}`
+  }
+  if (vue === 'annee') return format(a, 'yyyy')
+  return `${MOIS_COURT(a)}${an(a)}`
+}
+
+/** Libellé complet (infobulle). */
 function libelle(vue: VueTemps, a: Date): string {
   if (vue === 'semaine') {
     const d = startOfWeek(a, LUNDI)
@@ -39,7 +60,9 @@ const TITRES: Record<VueTemps, { aller: string; precedent: string; suivant: stri
  *  Les flèches avancent d'une période ; le libellé ouvre un sélecteur adapté à la
  *  vue (semaine, mois, premier mois du trimestre, année) et le raccourci
  *  « Aujourd'hui » — ce que faisaient les boutons du haut. */
-export function NavPeriode({ vue, anchor, onShift, onGoto }: {
+export function NavPeriode({ vue, anchor, onShift, onGoto, compact = false }: {
+  /** Téléphone : libellé court (« 19–25 oct. »), flèches discrètes. */
+  compact?: boolean
   vue: VueTemps
   anchor: Date
   onShift: (dir: 1 | -1) => void
@@ -48,14 +71,27 @@ export function NavPeriode({ vue, anchor, onShift, onGoto }: {
   const [ouvert, setOuvert] = useState(false)
   const t = TITRES[vue]
   return (
-    <div className="flex shrink-0 items-center justify-center gap-1">
-      <button onClick={() => onShift(-1)} className="btn-ghost p-1.5" aria-label={t.precedent}><ChevronLeft size={16} /></button>
-      <button onClick={() => setOuvert(true)} aria-haspopup="dialog" title={t.aller}
-        className="flex items-center gap-1 rounded-xl px-2 py-1 text-base font-semibold capitalize leading-tight transition-colors hover:bg-panel-2">
-        {libelle(vue, anchor)}
-        <ChevronDown size={14} className="text-ink-3" />
-      </button>
-      <button onClick={() => onShift(1)} className="btn-ghost p-1.5" aria-label={t.suivant}><ChevronRight size={16} /></button>
+    <>
+    {compact ? (
+      <div className="flex shrink-0 items-center justify-center">
+        <button onClick={() => onShift(-1)} className="rounded-lg p-0.5 text-ink-3 transition-colors hover:bg-panel-2 hover:text-ink" aria-label={t.precedent}><ChevronLeft size={14} /></button>
+        <button onClick={() => setOuvert(true)} aria-haspopup="dialog" title={`${libelle(vue, anchor)} — ${t.aller}`}
+          className="flex h-8 items-center whitespace-nowrap rounded-xl px-1 text-[13px] font-semibold tracking-wide transition-colors hover:bg-panel-2">
+          {libelleCourt(vue, anchor)}
+        </button>
+        <button onClick={() => onShift(1)} className="rounded-lg p-0.5 text-ink-3 transition-colors hover:bg-panel-2 hover:text-ink" aria-label={t.suivant}><ChevronRight size={14} /></button>
+      </div>
+    ) : (
+      <div className="flex shrink-0 items-center justify-center gap-1">
+        <button onClick={() => onShift(-1)} className="btn-ghost p-1.5" aria-label={t.precedent}><ChevronLeft size={16} /></button>
+        <button onClick={() => setOuvert(true)} aria-haspopup="dialog" title={t.aller}
+          className="flex items-center gap-1 rounded-xl px-2 py-1 text-base font-semibold capitalize leading-tight transition-colors hover:bg-panel-2">
+          {libelle(vue, anchor)}
+          <ChevronDown size={14} className="text-ink-3" />
+        </button>
+        <button onClick={() => onShift(1)} className="btn-ghost p-1.5" aria-label={t.suivant}><ChevronRight size={16} /></button>
+      </div>
+    )}
 
       {ouvert && (
         <Modal open onClose={() => setOuvert(false)} title={t.aller} compact>
@@ -63,7 +99,7 @@ export function NavPeriode({ vue, anchor, onShift, onGoto }: {
             onGoto={(d) => { onGoto(d); setOuvert(false) }} />
         </Modal>
       )}
-    </div>
+    </>
   )
 }
 

@@ -28,6 +28,13 @@ type View = VueTemps
 const AGENDAS = ['Joffrey', 'Honorine'] as const
 type Agenda = (typeof AGENDAS)[number]
 
+const OPTIONS_VUE: { value: View; label: string }[] = [
+  { value: 'semaine', label: 'Semaine' },
+  { value: '4sem', label: 'Mois' },
+  { value: 'trimestre', label: 'Trimestre' },
+  { value: 'annee', label: 'Année' },
+]
+
 export function TimeView() {
   const s = useHorizon()
   // Vue partagée : l'agenda en lecture seule (ni création, ni déplacement, ni notes).
@@ -111,31 +118,44 @@ export function TimeView() {
     ? { onEdit: () => {}, onCreate: () => {}, onStep: () => {}, onMove: () => {} }
     : { onEdit: setEditing, onCreate: setCreateDate, onStep: setOpenStep, onMove: handleMove }
   const timeQuote = timeQuoteOfDay()
+  // Calendrier : deux pastilles, seulement les initiales (police de l'écran de connexion).
+  const choixAgenda = (
+    <div role="radiogroup" aria-label="Agenda" className="flex shrink-0 items-center gap-1">
+      {AGENDAS.map((a) => {
+        const actif = a === agenda
+        return (
+          <button key={a} type="button" role="radio" aria-checked={actif} aria-label={`Agenda ${a === 'Joffrey' ? 'de Joffrey' : 'd’Honorine'}`} title={a} onClick={() => setAgenda(a)}
+            className={`flex h-[26px] w-[26px] items-baseline justify-center rounded-full border pt-0.5 font-['Champignon',cursive] text-[22px] leading-none transition-colors ${
+              actif ? 'border-sun-soft/70 bg-white/10 text-sun-soft' : 'border-line text-sun-soft/60 hover:border-line-2 hover:text-sun-soft'}`}>
+            <span aria-hidden>{a[0]}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+  const allerA = (d: Date) => { setFocus(null); setFenetre(null); setAnchor(d) }
+  const navigation = <NavPeriode compact vue={view} anchor={anchor} onShift={shift} onGoto={allerA} />
+  const choixVue = <SelecteurVue compact value={view} onChange={changerVue} options={OPTIONS_VUE} />
 
   return (
     <div className={`rise flex md:h-[calc(100dvh-1.75rem)] flex-col gap-2 pt-2 max-md:h-[calc(100dvh-8.5rem)] max-md:gap-1 max-md:pt-0.5 ${lecture ? 'temps-lecture' : ''}`}>
       {/* Une seule ligne fine : titre, agenda, citation (petite), période, vue.
           Téléphone : deux lignes serrées (agenda + vue, puis la période). */}
-      <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 max-md:gap-x-1.5 md:flex-nowrap">
-        <h1 className="shrink-0 text-lg font-semibold leading-none max-md:hidden">Agenda</h1>
+      <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 max-md:gap-x-1.5 md:flex-nowrap max-md:hidden">
+        <h1 className="shrink-0 text-lg font-semibold leading-none">Agenda</h1>
         {/* Quel agenda afficher : celui de Joffrey (partagé avec Honorine) ou celui d'Honorine. */}
         <Seg value={agenda} onChange={setAgenda} compact options={AGENDAS.map((a) => ({ value: a, label: a }))} />
-        <p className="min-w-0 flex-1 truncate text-[11px] italic leading-tight text-ink-3 max-md:hidden"
+        <p className="min-w-0 flex-1 truncate text-[11px] italic leading-tight text-ink-3"
           title={`« ${timeQuote.text} »${timeQuote.source ? ` — ${timeQuote.source}` : ''}`}>
           « {timeQuote.text} »{timeQuote.source && <span className="not-italic"> — {timeQuote.source}</span>}
         </p>
-        <div className="shrink-0 max-md:order-last max-md:basis-full">
-          <NavPeriode vue={view} anchor={anchor} onShift={shift} onGoto={(d) => { setFocus(null); setFenetre(null); setAnchor(d) }} />
-        </div>
-        <div className="flex shrink-0 justify-end max-md:ml-auto">
-          <SelecteurVue value={view} onChange={changerVue} options={[
-            { value: 'semaine', label: 'Semaine' },
-            { value: '4sem', label: 'Mois' },
-            { value: 'trimestre', label: 'Trimestre' },
-            { value: 'annee', label: 'Année' },
-          ]} />
-        </div>
+        <NavPeriode vue={view} anchor={anchor} onShift={shift} onGoto={allerA} />
+        <SelecteurVue value={view} onChange={changerVue} options={OPTIONS_VUE} />
       </header>
+      {/* Téléphone : ligne unique (calendrier, période, type de période) sous la barre du haut (accueil, caddie, « + »). */}
+      {telephone && (
+        <div className="flex shrink-0 items-center justify-between gap-1">{choixAgenda}{navigation}{choixVue}</div>
+      )}
 
       {/* Évènements d'agenda externe en attente de tri : rien n'entre sans accord. */}
       {!lecture && agendaRelie && <div className="shrink-0"><AgendaPropositions /></div>}
