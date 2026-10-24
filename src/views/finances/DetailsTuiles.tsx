@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { euros, type LigneBudget, type listeEpargnes } from '../../lib/finances'
 
 /** Une ligne compacte du détail d'une tuile : libellé à gauche, montant à droite. */
@@ -110,6 +110,7 @@ function Ligne({ nom, montant, gras = false, vertSiPositif = true }: { nom: stri
 /** Détail de la tuile « Au-delà du budget » : Budgets (reste ou dépassement), Prévu, puis le total (= tuile). */
 export function DetailAuDela({ lignes, variante = VARIANTE_AU_DELA }: { lignes: LignesAuDela; variante?: 'A' | 'B' | 'C' }) {
   const { budgets, prevu, total } = lignes
+  const [details, setDetails] = useState(false)
   const titreTotal = total < 0 ? 'Au-delà du budget' : 'Reste'
   const titre = (t: string, sousTotal?: number, droite?: string) => (
     <div className="flex items-baseline justify-between pt-1 text-[10.5px] font-semibold uppercase tracking-[.08em] text-ink-3">
@@ -149,9 +150,11 @@ export function DetailAuDela({ lignes, variante = VARIANTE_AU_DELA }: { lignes: 
   return (
     <div data-testid="detail-reste" data-variante="A" className="card mx-auto w-full max-w-md space-y-1 px-4 py-3 text-sm">
       {titre('Budgets', undefined, 'Reste')}
-      {budgets.map((d) => <Ligne key={d.nom} {...d} />)}
-      <div data-testid="sous-total-budgets" className="flex justify-end">
-        <span className="border-t border-line/60 pl-6 pt-0.5 text-xs tabular-nums text-ink-3">{signe(sommeDe(budgets))}</span>
+      {details && budgets.map((d) => <Ligne key={d.nom} {...d} />)}
+      <div data-testid="sous-total-budgets" className="flex items-baseline justify-between gap-3">
+        <button type="button" data-testid="budgets-details" aria-expanded={details} onClick={() => setDetails(!details)}
+          className="text-xs text-ink-3 hover:text-ink-2">{details ? '− détails' : '+ détails'}</button>
+        <span className={details ? 'border-t border-line/60 pl-6 pt-0.5 text-xs tabular-nums text-ink-3' : 'tabular-nums'}>{signe(sommeDe(budgets))}</span>
       </div>
       {prevu.length > 0 && <>{titre('Prévu')}{prevu.map((d, i) => <Ligne key={i} {...d} />)}</>}
       <div className="border-t border-line pt-1.5"><Ligne gras nom={titreTotal} montant={total} vertSiPositif={false} /></div>
