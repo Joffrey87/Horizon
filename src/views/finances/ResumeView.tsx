@@ -5,7 +5,7 @@ import { euros } from '../../lib/finances'
 import { COULEURS_ANNEAU, eclaircie, rgba, tuilesBudgets, type TuileBudget } from '../../lib/resume'
 import { EmptyState } from '../../components/ui'
 import { FiltreSeg, NavMois } from './partage'
-import { DetailEpargne, DetailReste } from './DetailsTuiles'
+import { DetailAuDela, DetailEpargne, lignesAuDela } from './DetailsTuiles'
 import { useTuilesMois } from './tuilesMois'
 import { useFin, useVue } from './contexte'
 import { MontantBudget, useBudgetMois } from './budgetMois'
@@ -138,6 +138,9 @@ function LigneVerre({ t, edition, ouvert, onBasculer }: {
  * par budget du foyer (Courses, Aménagement, Vacances, Dépenses courantes, exceptionnelles, puis Dons à part).
  * Suit le mois et le filtre Foyer / Commun / Joffrey / Honorine, comme le Budget.
  */
+/** Démo : ?variante=A|B|C force une variante du détail « Au-delà du budget ». */
+const varianteDemo = () => { const v = new URLSearchParams(location.search).get('variante'); return v === 'A' || v === 'B' || v === 'C' ? v : undefined }
+
 export function ResumeView() {
   const { mois, setMois, filtre, setFiltre } = useFin()
   const vue = useVue()
@@ -150,7 +153,7 @@ export function ResumeView() {
   const basculerTuile = (cle: string) => setOuvertes((o) => { const n = new Set(o); if (n.has(cle)) n.delete(cle); else n.add(cle); return n })
 
   // Mêmes chiffres que le Budget : un seul calcul (tuilesMois.ts), capital de prêt compté en épargne et non en dépense.
-  const { s, aVenir, epPrevues, listeEp, budgetDepenses, reelDepenses, resteTuile, epargne, epargnes } = useTuilesMois()
+  const { s, depenses, aVenir, epPrevues, listeEp, resteTuile, epargne, epargnes } = useTuilesMois()
   const avenir = epargnes.filter((l) => estAvenir(l.ligne?.name)).reduce((a, l) => a + l.reel, 0)
   const resteValable = resteTuile !== null
   const edition = useBudgetMois()
@@ -207,7 +210,7 @@ export function ResumeView() {
       {loupeBtn}
       {detail === 'reste' && resteTuile !== null && (
         <div className="col-span-full flex justify-center">
-          <DetailReste budget={budgetDepenses} depense={reelDepenses} aVenir={aVenir} epargnes={epPrevues} resteTuile={resteTuile} />
+          <DetailAuDela lignes={lignesAuDela(depenses, aVenir, epPrevues)} variante={varianteDemo()} />
         </div>
       )}
       {detail === 'epargne' && <div className="col-span-full flex justify-center"><DetailEpargne liste={listeEp} /></div>}
