@@ -273,7 +273,7 @@ export function ResumeView() {
       <p className={`min-w-0 flex-1 truncate font-semibold text-ink-2 ${bureau ? 'text-[15px]' : 'text-[13px]'}`}>Salaire prévu</p>
       <div className="shrink-0 text-right">
         <p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">Prévu</p>
-        <b className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[22px]' : 'text-[20px]'}`}>{euros(salaire)}</b>
+        <b data-testid="montant-salaire" className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[22px]' : 'text-[20px]'}`} style={{ color: COULEURS_ANNEAU.ok }}>{euros(salaire)}</b>
       </div>
     </>
   )
