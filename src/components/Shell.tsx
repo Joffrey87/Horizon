@@ -117,7 +117,7 @@ export function Shell({ children }: { children: ReactNode }) {
   }, [nbAgendas, syncAgenda, vue])
 
   return (
-    <div className="flex min-h-screen overflow-x-clip">
+    <div className="flex min-h-dvh overflow-x-clip">
       {/* ---- Fond paysage du jour de l'accueil, répliqué en version très estompée (pages hors accueil) ---- */}
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 bg-bg">
         <img src={wallpaperOfDay()} alt="" className="h-full w-full object-cover opacity-30" />
@@ -125,7 +125,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
       {/* ---- Barre latérale (style options 1/3) ---- */}
       <aside className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-line bg-panel
-        transition-transform lg:sticky lg:top-0 lg:h-screen lg:shrink-0 lg:self-start lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        transition-transform lg:sticky lg:top-0 lg:h-dvh pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] lg:shrink-0 lg:self-start lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center gap-1 px-5 py-5">
           <Link to={accueil} onClick={() => setMenuOpen(false)}
             className="flex items-center gap-3 transition-opacity hover:opacity-80"
@@ -209,7 +209,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <div className="sunrise-veil min-w-0 flex-1">
         {/* L'accueil (paysage de bord à bord) et Temps (grilles denses) prennent toute la
             largeur ; les autres pages restent centrées dans une colonne de lecture. */}
-        <div className={`mx-auto px-4 pt-4 lg:px-8 ${pathname.startsWith('/temps') ? 'pb-16 md:pb-3' : 'pb-16'} max-md:pb-[calc(76px+env(safe-area-inset-bottom))] ${pleineLargeur ? '' : 'max-w-6xl'}`}>
+        <div className={`ios-marges mx-auto px-4 pt-4 lg:px-8 ${pathname.startsWith('/temps') ? 'pb-16 md:pb-3' : 'pb-16'} max-md:pb-[calc(76px+env(safe-area-inset-bottom))] ${pleineLargeur ? '' : 'max-w-6xl'}`}>
           {/* Barre mobile : menu + retour + logo (n'existe qu'en petit écran) */}
           <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
             <div className="flex shrink-0 items-center gap-1">

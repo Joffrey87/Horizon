@@ -152,6 +152,7 @@ export function Modal({ open, onClose, title, children, wide = false, compact = 
   if (!open) return null
   return createPortal(
     <div className={`fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm ${compact ? 'p-2 sm:p-3' : 'p-4'}`}
+      style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))', paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
       onClick={onClose}>
       <div className={`card rise mx-auto w-full ${wide ? 'max-w-2xl' : 'max-w-md'} ${
         pied ? 'flex max-h-[calc(100dvh-1rem)] flex-col p-3 sm:max-h-[calc(100dvh-1.5rem)]'

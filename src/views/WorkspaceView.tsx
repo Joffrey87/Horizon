@@ -168,7 +168,7 @@ export function WorkspaceView() {
   }
 
   return (
-    <div className="rise flex h-[calc(100vh-6rem)] flex-col space-y-3 pt-4">
+    <div className="rise flex h-[calc(100dvh-6rem)] flex-col space-y-3 pt-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Espace visuel</h1>

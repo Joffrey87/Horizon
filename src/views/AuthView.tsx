@@ -63,7 +63,7 @@ export function AuthView() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-6">
+    <div className="relative flex min-h-dvh items-center justify-center overflow-hidden p-6">
       {/* fond : le paysage Horizon, repris en petit derrière la carte */}
       <img src={wallpaperOfDay()} alt="" aria-hidden
         className="absolute inset-0 h-full w-full scale-105 object-cover blur-[2px]" />

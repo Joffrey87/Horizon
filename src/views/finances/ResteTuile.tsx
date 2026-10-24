@@ -65,7 +65,7 @@ function DetailReste({ r, aujourdhui, onClose }: { r: ReturnType<typeof calculer
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm md:items-center md:p-6" onClick={onClose}>
       <div role="dialog" aria-label="Détail du RESTE" onClick={(e) => e.stopPropagation()}
-        className="max-h-[92vh] w-full overflow-y-auto rounded-t-2xl border border-line bg-panel p-4 shadow-2xl md:max-w-lg md:rounded-2xl">
+        className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-line bg-panel p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl md:max-w-lg md:rounded-2xl">
         <header className="mb-3 flex items-start justify-between gap-3">
           <div>
             <p className="block-title">RESTE d'ici le {libelleFin(r.finMois)}</p>

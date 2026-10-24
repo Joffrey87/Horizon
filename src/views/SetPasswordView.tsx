@@ -18,7 +18,7 @@ export function SetPasswordView() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-6">
+    <div className="relative flex min-h-dvh items-center justify-center overflow-hidden p-6">
       <img src="/horizon-bg.jpg" alt="" aria-hidden
         className="absolute inset-0 h-full w-full scale-105 object-cover blur-[2px]" />
       <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/45 to-black/70" />

@@ -85,7 +85,7 @@ export function PlanningView() {
   const readId = (e: React.DragEvent) => e.dataTransfer.getData('application/horizon-plan')
 
   return (
-    <div className="rise flex h-[calc(100vh-5.5rem)] flex-col gap-3 pt-4">
+    <div className="rise flex h-[calc(100dvh-5.5rem)] flex-col gap-3 pt-4">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">Planification</h1>
         <div className="flex flex-wrap items-center gap-2">

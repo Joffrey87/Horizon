@@ -222,7 +222,7 @@ function FenetreRegrouper({ groupe, depose, autres, onClose }: {
           </p>
         )}
         {!depose && autres.length > 0 && (
-          <ul className="max-h-[45vh] divide-y divide-line/40 overflow-y-auto rounded-lg border border-line/60 px-3">
+          <ul className="max-h-[45dvh] divide-y divide-line/40 overflow-y-auto rounded-lg border border-line/60 px-3">
             {autres.map((a) => (
               <li key={a.cle}>
                 <label className={`flex cursor-pointer items-center gap-3 py-1.5 ${cochees.has(a.cle) ? '' : 'opacity-60'}`}>

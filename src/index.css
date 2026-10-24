@@ -190,3 +190,23 @@ input::placeholder, textarea::placeholder { color: var(--color-ink-3); }
 /* Feuille du bouton « + » : monte du bas de l'écran. */
 @keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
 .sheet-up { animation: sheet-up .22s ease-out both; }
+
+/* ================================================================
+   iPhone / iPad (app sur l'écran d'accueil)
+   ================================================================ */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
+a, button, [role="button"], label, summary { touch-action: manipulation; }
+/* Encoche, coins arrondis, barre d'état translucide : le contenu reste dans la zone sûre. */
+.ios-marges {
+  padding-top: max(1rem, calc(env(safe-area-inset-top) + 0.25rem));
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+@media (min-width: 1024px) {
+  .ios-marges { padding-left: max(2rem, env(safe-area-inset-left)); padding-right: max(2rem, env(safe-area-inset-right)); }
+}
+/* Safari iOS zoome sur un champ < 16 px : sur écran tactile, les champs restent à 16 px. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select { font-size: 16px; }
+}

@@ -12,7 +12,7 @@ export default function App() {
 
   if (!ready) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-dvh items-center justify-center">
         <p className="text-sm text-ink-3">Horizon se lève…</p>
       </div>
     )

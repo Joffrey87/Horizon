@@ -240,7 +240,7 @@ function EditeurLibelle({ tx, onClose }: { tx: FinTransaction; onClose: () => vo
             <input type="checkbox" checked={toutes} onChange={() => setCochees(toutes ? new Set() : new Set(semblables.map((t) => t.id)))} />
             Tout cocher / décocher
           </label>
-          <ul className="max-h-[45vh] divide-y divide-line/40 overflow-y-auto rounded-lg border border-line/60 px-3">
+          <ul className="max-h-[45dvh] divide-y divide-line/40 overflow-y-auto rounded-lg border border-line/60 px-3">
             {semblables.map((t) => (
               <li key={t.id}>
                 <label className={`flex cursor-pointer items-center gap-3 py-1.5 ${cochees.has(t.id) ? '' : 'opacity-50'}`}>
@@ -333,7 +333,7 @@ function ValidationRecategorisation({ tx, idx, categorie, semblables, onClose }:
             onChange={() => setCochees(tout ? new Set() : new Set(semblables.map((t) => t.id)))} />
           Tout cocher / décocher
         </label>
-        <ul className="max-h-[50vh] divide-y divide-line/40 overflow-y-auto rounded-lg border border-line/60 px-3">
+        <ul className="max-h-[50dvh] divide-y divide-line/40 overflow-y-auto rounded-lg border border-line/60 px-3">
           {semblables.map((t) => (
             <li key={t.id}>
               <label className={`flex cursor-pointer items-center gap-3 py-1.5 ${cochees.has(t.id) ? '' : 'opacity-50'}`}>
