@@ -1,14 +1,14 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Heart, PiggyBank, Receipt, Search, Plane, ShoppingCart, Sofa, Wallet, Zap, type LucideIcon } from 'lucide-react'
+import { Banknote, Heart, PiggyBank, Receipt, Search, Plane, ShoppingCart, Sofa, Wallet, Zap, type LucideIcon } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
-import { euros } from '../../lib/finances'
+import { entreesPrevues, euros } from '../../lib/finances'
 import { COULEURS_ANNEAU, eclaircie, rgba, tuilesBudgets, type TuileBudget } from '../../lib/resume'
 import { EmptyState } from '../../components/ui'
 import { FiltreSeg, NavMois } from './partage'
 import { DetailAuDela, DetailEpargne, DetailEpargneUtilisee, lignesAuDela } from './DetailsTuiles'
 import { epargneUtilisee } from '../../lib/epargneUtilisee'
 import { useTuilesMois } from './tuilesMois'
-import { useFin } from './contexte'
+import { useFin, useIndex } from './contexte'
 import { estMoisSansObjectif, LIGNE_AVEC_ANNEAU } from '../../lib/moisSansObjectif'
 import { MontantBudget, useBudgetMois } from './budgetMois'
 import { DetailLigneLecture } from './DetailLigne'
@@ -103,7 +103,7 @@ function TuileBudgetAnneau({ t, edition, ouvert, onBasculer }: {
   const alpha = t.separe ? [0.1, 0.03] : [0.24, 0.06]
   const depliable = t.ligneId !== null
   return (
-    <div data-testid={`tuile-${t.cle}`} data-ton={t.ton} data-ouvert={ouvert || undefined} className={t.separe ? '!mt-2' : ''}>
+    <div data-testid={`tuile-${t.cle}`} data-ton={t.ton} data-ouvert={ouvert || undefined}>
       <div {...enTete(depliable, ouvert, onBasculer)}
         className={`flex min-h-[54px] items-center gap-3 border px-3 py-1.5 ${depliable ? 'cursor-pointer' : ''} ${ouvert ? 'rounded-t-[14px] border-b-transparent' : 'rounded-[14px]'}`}
         style={{ background: `linear-gradient(100deg, ${rgba(t.rvb, alpha[0]!)}, ${rgba(t.rvb, alpha[1]!)} 80%), #15110e`, borderColor: rgba(t.rvb, 0.28) }}>
@@ -166,6 +166,8 @@ export function ResumeView() {
   const transactions = useHorizon((st) => st.finTransactions)
   const comptes = useHorizon((st) => st.finAccounts)
   const utilisee = useMemo(() => epargneUtilisee({ transactions, comptes, mois }), [transactions, comptes, mois])
+  const idx = useIndex()
+  const prevues = useMemo(() => entreesPrevues({ mois, transactions, idx, filtre }), [mois, transactions, idx, filtre])
   const aPayer = aVenir.total + epPrevues.total
 
   // Bureau (≥ md, là où la barre latérale est affichée) : panneaux de verre ; téléphone : tuiles teintées.
@@ -193,29 +195,47 @@ export function ResumeView() {
     </button>
   )
   const basculerEpargne = () => setDetail(detail === 'epargne' ? null : 'epargne')
-  // Tuile Épargné : un div cliquable (et non un bouton) pour pouvoir y loger la ligne « Utilisée », elle-même un bouton.
-  const epargneBtn = (
-    <div role="button" tabIndex={0} data-testid="tuile-epargne" aria-expanded={detail === 'epargne'}
-      onClick={basculerEpargne} onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); basculerEpargne() } }}
-      title="Voir les épargnes du mois"
-      className={`${bureau ? 'verre verre-tuile !py-2' : 'card px-3 py-2'} cursor-pointer text-left`}>
-      <p className="block-title">Épargné</p>
-      <div className="flex items-center gap-2">
-        <span data-testid="anneau-epargne" data-ratio={Math.round(Math.min(1, Math.max(0, epargne) / CIBLE_EPARGNE) * 100)}>
-          <Anneau ratio={Math.min(1, Math.max(0, epargne) / CIBLE_EPARGNE)} couleur={COULEURS_ANNEAU.ok} taille={bureau ? 28 : 26} trait={2} halo={bureau}>
-            <PiggyBank size={bureau ? 13 : 12} style={{ color: COULEURS_ANNEAU.ok }} aria-hidden />
-          </Anneau>
-        </span>
-        <p className={`whitespace-nowrap font-bold tabular-nums ${tailleMontant}`} style={{ color: COULEURS_ANNEAU.ok }}>{euros(epargne)}</p>
+  // Ligne Épargné : posée sous Frais fixe, comme une ligne de budget (montant épargné, anneau à 1 800 €, « Utilisée − x € »).
+  const ratioEp = Math.min(1, Math.max(0, epargne) / CIBLE_EPARGNE)
+  const corpsEpargne = (
+    <>
+      <span data-testid="anneau-epargne" data-ratio={Math.round(ratioEp * 100)} className="inline-flex">
+        <Anneau ratio={ratioEp} couleur={COULEURS_ANNEAU.ok} taille={bureau ? 36 : 38} trait={bureau ? 2 : 3} halo={bureau}>
+          <PiggyBank size={bureau ? 15 : 16} style={{ color: COULEURS_ANNEAU.ok }} strokeWidth={1.8} aria-hidden />
+        </Anneau>
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+        <p className={`truncate font-semibold text-ink-2 ${bureau ? 'text-[15px]' : 'text-[13px]'}`}>Épargné</p>
+        {utilisee.total > 0.5 && (
+          <button type="button" data-testid="tuile-epargne-utilisee" aria-expanded={detail === 'utilisee'}
+            onClick={e => { e.stopPropagation(); setDetail(detail === 'utilisee' ? null : 'utilisee') }}
+            title="Voir les virements depuis l'épargne"
+            className="-mx-1 self-start rounded px-1 text-left text-[11px] leading-snug tabular-nums hover:underline" style={{ color: COULEUR_UTILISEE }}>
+            Utilisée − {euros(utilisee.total)}
+          </button>
+        )}
       </div>
-      {utilisee.total > 0.5 ? (
-        <button type="button" data-testid="tuile-epargne-utilisee" aria-expanded={detail === 'utilisee'}
-          onClick={e => { e.stopPropagation(); setDetail(detail === 'utilisee' ? null : 'utilisee') }}
-          title="Voir les virements depuis l'épargne"
-          className="-mx-1 block rounded px-1 text-left text-[10.5px] leading-snug tabular-nums hover:underline" style={{ color: COULEUR_UTILISEE }}>
-          Utilisée − {euros(utilisee.total)}
-        </button>
-      ) : <p className="text-[10.5px] leading-snug">&nbsp;</p>}
+      <div className="shrink-0 text-right">
+        <p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">Épargné</p>
+        <b className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[22px]' : 'text-[20px]'}`} style={{ color: COULEURS_ANNEAU.ok }}>{euros(epargne)}</b>
+      </div>
+    </>
+  )
+  const detailEpargne = detail === 'epargne' ? <DetailEpargne liste={listeEp} utilisee={utilisee} /> : detail === 'utilisee' ? <DetailEpargneUtilisee donnees={utilisee} /> : null
+  const ouvertEp = detail === 'epargne' || detail === 'utilisee'
+  const ligneEpargne = bureau ? (
+    <div key="epargne" data-testid="tuile-epargne" data-ouvert={ouvertEp || undefined} className="border-t border-white/[.09] first:border-t-0">
+      <div {...enTete(true, detail === 'epargne', basculerEpargne)} title="Voir les épargnes du mois" className="flex h-[58px] cursor-pointer items-center gap-4 [@media(min-height:840px)]:h-[64px]">{corpsEpargne}</div>
+      {detailEpargne && <div className="flex justify-center pb-2">{detailEpargne}</div>}
+    </div>
+  ) : (
+    <div key="epargne" data-testid="tuile-epargne" data-ouvert={ouvertEp || undefined}>
+      <div {...enTete(true, detail === 'epargne', basculerEpargne)} title="Voir les épargnes du mois"
+        className={`flex min-h-[54px] cursor-pointer items-center gap-3 border px-3 py-1.5 ${detailEpargne ? 'rounded-t-[14px] border-b-transparent' : 'rounded-[14px]'}`}
+        style={{ background: 'linear-gradient(100deg, rgba(110,190,120,.2), rgba(110,190,120,.05) 80%), #15110e', borderColor: 'rgba(110,190,120,.28)' }}>
+        {corpsEpargne}
+      </div>
+      {detailEpargne && <div className="flex justify-center rounded-b-[14px] border border-t-0 px-1 py-1" style={{ borderColor: 'rgba(110,190,120,.28)', background: 'rgba(33,28,22,.55)' }}>{detailEpargne}</div>}
     </div>
   )
   const loupeBtn = (
@@ -224,19 +244,16 @@ export function ResumeView() {
       <Search size={bureau ? 18 : 16} strokeWidth={2} />
     </button>
   )
-  const colonnes = 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]'
+  const colonnes = 'grid-cols-[minmax(0,1fr)_auto]'
   const hautDeVue = (
     <div className={`grid gap-2.5 ${bureau ? 'gap-3' : ''} ${colonnes}`}>
       {resteBtn}
-      {epargneBtn}
       {loupeBtn}
       {detail === 'reste' && resteTuile !== null && (
         <div className="col-span-full flex justify-center">
           <DetailAuDela lignes={lignesAuDela(depenses, aVenir, epPrevues)} variante={varianteDemo()} />
         </div>
       )}
-      {detail === 'epargne' && <div className="col-span-full flex justify-center"><DetailEpargne liste={listeEp} utilisee={utilisee} /></div>}
-      {detail === 'utilisee' && <div className="col-span-full flex justify-center"><DetailEpargneUtilisee donnees={utilisee} /></div>}
     </div>
   )
   const noteFiltre = !foyer && <p className="-mt-1 text-[11px] text-ink-3">Les budgets sont ceux du foyer : ici, ce que {filtre === 'commun' ? 'le compte commun' : filtre === 'joffrey' ? 'Joffrey' : 'Honorine'} a dépensé. Choisis Foyer pour voir le restant.</p>
@@ -248,11 +265,39 @@ export function ResumeView() {
       <div className="md:justify-self-end"><FiltreSeg value={filtre} onChange={setFiltre} /></div>
     </header>
   )
+  // Ordre : Salaire, écart, Frais fixe + Épargné, écart, les autres budgets (Dons encore à part). Écarts = celui avant Dons.
+  const salaire = prevues ? Math.round(prevues.montant / 100) * 100 : null
+  const corpsSalaire = salaire !== null && (
+    <>
+      <Anneau sansTrace ratio={null} couleur="" taille={bureau ? 36 : 38}><Banknote size={bureau ? 15 : 16} color="#d8cfa8" strokeWidth={1.8} aria-hidden /></Anneau>
+      <p className={`min-w-0 flex-1 truncate font-semibold text-ink-2 ${bureau ? 'text-[15px]' : 'text-[13px]'}`}>Salaire prévu</p>
+      <div className="shrink-0 text-right">
+        <p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">Prévu</p>
+        <b className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[22px]' : 'text-[20px]'}`}>{euros(salaire)}</b>
+      </div>
+    </>
+  )
+  const ligneSalaire = corpsSalaire && (bureau
+    ? <div key="salaire" data-testid="tuile-salaire" className="flex h-[58px] items-center gap-4 [@media(min-height:840px)]:h-[64px]">{corpsSalaire}</div>
+    : <div key="salaire" data-testid="tuile-salaire" className="flex min-h-[54px] items-center gap-3 rounded-[14px] border px-3 py-1.5"
+        style={{ background: 'linear-gradient(100deg, rgba(216,207,168,.16), rgba(216,207,168,.04) 80%), #15110e', borderColor: 'rgba(216,207,168,.26)' }}>{corpsSalaire}</div>)
+  const groupes = (rendu: (t: TuileBudget) => ReactNode): ReactNode[][] => {
+    const ff = tuiles.filter((t) => t.cle === 'fraisfixe')
+    const autres = tuiles.filter((t) => t.cle !== 'fraisfixe' && !t.separe)
+    const apart = tuiles.filter((t) => t.cle !== 'fraisfixe' && t.separe)
+    return [ligneSalaire ? [ligneSalaire] : [], [...ff.map(rendu), ligneEpargne], autres.map(rendu), apart.map(rendu)].filter((g) => g.length)
+  }
+  // Mois sans objectif : total du dépensé en bas des lignes (l'épargne n'est pas une dépense : exclue).
+  const totalDepense = tuiles.reduce((n, t) => n + t.depense, 0)
+  const ligneTotal = estMoisSansObjectif(mois) && (
+    <div data-testid="total-depense" className={`flex items-center justify-between ${bureau ? 'px-0 pt-1' : 'px-3 pt-1.5'}`}>
+      <span className="text-[11px] font-semibold uppercase tracking-[.06em] text-ink-3">Total dépensé</span>
+      <b className={`font-bold tabular-nums ${bureau ? 'text-[22px]' : 'text-[20px]'}`}>{euros(totalDepense)}</b>
+    </div>
+  )
   const basculer = (t: TuileBudget) => ({ t, edition, ouvert: ouvertes.has(t.cle), onBasculer: () => basculerTuile(t.cle) })
 
   if (bureau) {
-    const principales = tuiles.filter((t) => !t.separe)
-    const apart = tuiles.filter((t) => t.separe)
     return (
       <div className="rise space-y-2">
         {edition.dialogue}
@@ -263,8 +308,10 @@ export function ResumeView() {
           {noteFiltre}
           {tuiles.length ? (
             <>
-              {principales.length > 0 && <div className="verre verre-panneau !py-0.5">{principales.map((t) => <LigneVerre key={t.cle} {...basculer(t)} />)}</div>}
-              {apart.length > 0 && <div className="verre verre-panneau !mt-3 !py-0 [@media(min-height:840px)]:!mt-5">{apart.map((t) => <LigneVerre key={t.cle} {...basculer(t)} />)}</div>}
+              {groupes((t) => <LigneVerre key={t.cle} {...basculer(t)} />).map((g, i) => (
+                <div key={i} className={`verre verre-panneau !py-0.5 ${i ? '!mt-3 [@media(min-height:840px)]:!mt-5' : ''}`}>{g}</div>
+              ))}
+              {ligneTotal}
             </>
           ) : vide}
         </div>
@@ -280,8 +327,9 @@ export function ResumeView() {
       {hautDeVue}
       {noteFiltre}
       {tuiles.length ? (
-        <div className="space-y-1">
-          {tuiles.map((t) => <TuileBudgetAnneau key={t.cle} {...basculer(t)} />)}
+        <div className="space-y-2">
+          {groupes((t) => <TuileBudgetAnneau key={t.cle} {...basculer(t)} />).map((g, i) => <div key={i} className="space-y-1">{g}</div>)}
+          {ligneTotal}
         </div>
       ) : vide}
     </div>
