@@ -129,15 +129,15 @@ export function ligneDeCategorie(cat: FinCategory | undefined, idx: IndexFinance
 
 /** Choix de catégorie (panneau d'édition) : catégories visibles, non fusionnées, groupées par ligne de budget
  *  dans l'ordre des lignes ; celles sans ligne à la fin (ligne null). Noms triés, « Parent › Enfant » pour une sous-catégorie. */
-export function categoriesParLigne(idx: IndexFinances): { ligne: FinLine | null; categories: { id: string; nom: string }[] }[] {
-  const par = new Map<string | null, { id: string; nom: string }[]>()
+export function categoriesParLigne(idx: IndexFinances): { ligne: FinLine | null; categories: { id: string; nom: string; court: string; parent: string | null }[] }[] {
+  const par = new Map<string | null, { id: string; nom: string; court: string; parent: string | null }[]>()
   for (const c of idx.categories.values()) {
     if (c.hidden || c.merged_into) continue
     const parent = c.parent_id ? idx.categories.get(c.parent_id) : undefined
     if (parent?.hidden) continue
     const l = ligneDeCategorie(c, idx)
     const cle = l && idx.lignes.has(l) ? l : null
-    par.set(cle, [...(par.get(cle) ?? []), { id: c.id, nom: parent ? `${parent.name} › ${c.name}` : c.name }])
+    par.set(cle, [...(par.get(cle) ?? []), { id: c.id, nom: parent ? `${parent.name} › ${c.name}` : c.name, court: c.name, parent: parent?.name ?? null }])
   }
   const lignes = lignesTriees([...idx.lignes.values()]).filter((l) => par.has(l.id))
   return [...lignes.map((l) => l.id), ...(par.has(null) ? [null] : [])].map((k) => ({

@@ -91,6 +91,17 @@ export function DetailLigne({ cle, niveauTous = 0 }: { cle: string; niveauTous?:
   )
 }
 
+type ChoixCat = { id: string; nom: string; court: string; parent: string | null }
+/** Catégories d'une ligne en blocs : celles sans sous-catégorie ensemble, puis chaque parent suivi de ses sous-catégories. */
+function grouperParParent(cats: ChoixCat[]): { titre: string | null; parentId: string | null; enfants: ChoixCat[] }[] {
+  const parents = new Set(cats.filter((c) => c.parent).map((c) => c.parent!))
+  const seules = cats.filter((c) => !c.parent && !parents.has(c.court))
+  const blocs = [...parents].sort((a, b) => a.localeCompare(b, 'fr')).map((p) => ({
+    titre: p, parentId: cats.find((c) => !c.parent && c.court === p)?.id ?? null, enfants: cats.filter((c) => c.parent === p),
+  }))
+  return [...(seules.length ? [{ titre: null, parentId: null, enfants: seules }] : []), ...blocs]
+}
+
 /** Opérations d'un nœud (sous-catégorie, « Autres » = opérations propres du parent, ou catégorie seule). */
 function opsDe(groupes: GroupeCategorie[], parent: string, enfant: string | null): FinTransaction[] {
   if (enfant === null || enfant === nomPropres(parent)) return groupes.find((g) => g.nom === parent)?.operations ?? []
@@ -150,20 +161,29 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
   const changerCategorie = (id: string) => sel.type === 'op' && lancer(async () => { await useHorizon.getState().update('fin_transactions', sel.tx.id, { category_id: id, category_manual: true }) })
   if (choixCat && sel.type === 'op') {
     const actuelle = categorieEffective(sel.tx.category_id, idx)?.id
+    const puce = (id: string, libelle: string) => (
+      <button key={id} disabled={envoi} onClick={() => void changerCategorie(id)} aria-pressed={id === actuelle}
+        className={`rounded-md px-1.5 py-0.5 text-[11.5px] ${id === actuelle ? 'bg-[#eda145]/10 text-[#eda145] ring-1 ring-[#eda145]/60' : 'bg-[#c9b48a]/10 text-ink-2 hover:text-ink'}`}>
+        {libelle}
+      </button>
+    )
     return (
       <div data-testid="panneau-categorie" className="my-1.5 rounded-lg border border-line-2 bg-panel-2 p-2">
         <div className="max-h-56 overflow-y-auto">
           {categoriesParLigne(idx).map((g) => (
             <div key={g.ligne?.id ?? '-'} className="mb-1.5">
               <p className="px-1 text-[10.5px] text-ink-3">{g.ligne?.name ?? '—'}</p>
-              <div className="flex flex-wrap gap-1">
-                {g.categories.map((c) => (
-                  <button key={c.id} disabled={envoi} onClick={() => void changerCategorie(c.id)} aria-pressed={c.id === actuelle}
-                    className={`rounded-md px-1.5 py-0.5 text-[11.5px] ${c.id === actuelle ? 'bg-[#eda145]/10 text-[#eda145] ring-1 ring-[#eda145]/60' : 'bg-[#c9b48a]/10 text-ink-2 hover:text-ink'}`}>
-                    {c.nom}
-                  </button>
-                ))}
-              </div>
+              {/* Le parent une seule fois, en tête ; ses sous-catégories dessous, en retrait, sans répéter son nom. */}
+              {grouperParParent(g.categories).map((b) => (
+                <div key={b.titre ?? '-'} className="mb-1">
+                  {b.titre !== null && (b.parentId
+                    ? <div className="flex">{puce(b.parentId, b.titre)}</div>
+                    : <p className="px-1 text-[11.5px] text-ink-2">{b.titre}</p>)}
+                  <div className={`flex flex-wrap gap-1 ${b.titre !== null ? 'mt-1 pl-3' : ''}`}>
+                    {b.enfants.map((c) => puce(c.id, c.court))}
+                  </div>
+                </div>
+              ))}
             </div>
           ))}
         </div>
