@@ -148,7 +148,7 @@ export function DetailAuDela({ lignes, variante = VARIANTE_AU_DELA }: { lignes: 
   // A : liste simple, titres de section discrets, total souligné.
   return (
     <div data-testid="detail-reste" data-variante="A" className="card mx-auto w-full max-w-md space-y-1 px-4 py-3 text-sm">
-      {titre('Budgets')}
+      {titre('Budgets', sommeDe(budgets))}
       {budgets.map((d) => <Ligne key={d.nom} {...d} />)}
       {prevu.length > 0 && <>{titre('Prévu')}{prevu.map((d, i) => <Ligne key={i} {...d} />)}</>}
       <div className="border-t border-line pt-1.5"><Ligne gras nom={titreTotal} montant={total} vertSiPositif={false} /></div>
