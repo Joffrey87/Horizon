@@ -7,6 +7,9 @@ import { EmptyState } from '../../components/ui'
 import { FiltreSeg, NavMois } from './partage'
 import { DetailAuDela, DetailEpargne, DetailEpargneUtilisee, lignesAuDela } from './DetailsTuiles'
 import { epargneUtilisee } from '../../lib/epargneUtilisee'
+import { soldesComptes } from '../../lib/soldes'
+import { PanneauSoldes } from './SoldesComptes'
+import { IconeDeCompte } from './IconeCompte'
 import { useTuilesMois } from './tuilesMois'
 import { useFin, useIndex } from './contexte'
 import { estMoisSansObjectif, LIGNE_AVEC_ANNEAU } from '../../lib/moisSansObjectif'
@@ -154,7 +157,7 @@ export function ResumeView() {
   const lines = useHorizon((s) => s.finLines)
   const foyer = filtre === 'foyer'
   const [recents, setRecents] = useState(false)
-  const [detail, setDetail] = useState<'reste' | 'epargne' | 'utilisee' | null>(null)
+  const [detail, setDetail] = useState<'reste' | 'epargne' | 'utilisee' | 'soldes' | null>(null)
   // Tuiles de budget dépliées (détail par catégorie).
   const [ouvertes, setOuvertes] = useState<Set<string>>(new Set())
   const basculerTuile = (cle: string) => setOuvertes((o) => { const n = new Set(o); if (n.has(cle)) n.delete(cle); else n.add(cle); return n })
@@ -165,6 +168,7 @@ export function ResumeView() {
   const edition = useBudgetMois()
   const transactions = useHorizon((st) => st.finTransactions)
   const comptes = useHorizon((st) => st.finAccounts)
+  const soldes = useMemo(() => soldesComptes(comptes, filtre), [comptes, filtre])
   const utilisee = useMemo(() => epargneUtilisee({ transactions, comptes, mois }), [transactions, comptes, mois])
   const idx = useIndex()
   const prevues = useMemo(() => entreesPrevues({ mois, transactions, idx, filtre }), [mois, transactions, idx, filtre])
@@ -249,6 +253,15 @@ export function ResumeView() {
     <div className={`grid gap-2.5 ${bureau ? 'gap-3' : ''} ${colonnes}`}>
       {resteBtn}
       {loupeBtn}
+      <button type="button" data-testid="soldes-comptes" aria-expanded={detail === 'soldes'} onClick={() => setDetail(detail === 'soldes' ? null : 'soldes')}
+        title="Voir le solde de chaque compte"
+        className={`${bureau ? 'verre verre-tuile !py-1.5' : 'card px-3 py-1.5'} col-span-full flex items-center justify-between gap-3 text-left`}>
+        <span className="flex items-center gap-2 text-[12px] text-ink-3">Comptes
+          <span className="flex -space-x-1">{soldes.comptes.map((a) => <IconeDeCompte key={a.id} compte={a} taille={14} />)}</span>
+        </span>
+        <span className="text-[15px] font-semibold tabular-nums" style={soldes.total < 0 ? { color: COULEURS_ANNEAU.depasse } : undefined}>{euros(soldes.total)}</span>
+      </button>
+      {detail === 'soldes' && <div className="col-span-full flex justify-center"><PanneauSoldes soldes={soldes} /></div>}
       {detail === 'reste' && resteTuile !== null && (
         <div className="col-span-full flex justify-center">
           <DetailAuDela lignes={lignesAuDela(depenses, aVenir, epPrevues)} variante={varianteDemo()} />
