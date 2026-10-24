@@ -169,7 +169,7 @@ export function ResumeView() {
       onClick={() => setDetail(detail === 'reste' ? null : 'reste')} title="Voir le détail du calcul"
       className={`${bureau ? 'verre verre-tuile !py-2' : 'card px-3 py-2'} text-left disabled:cursor-default`}
       style={bureau ? undefined : { borderColor: 'rgba(245,158,11,.4)', background: 'linear-gradient(135deg, rgba(245,158,11,.14), rgba(25,21,18,.9) 70%)' }}>
-      <p className="block-title">{resteTuile !== null && resteTuile < 0 ? 'Au-delà du budget' : 'Reste'}</p>
+      <p className="block-title overflow-hidden text-ellipsis whitespace-nowrap max-md:!tracking-[.04em]" data-testid="titre-reste">{resteTuile !== null && resteTuile < 0 ? 'Au-delà du budget' : 'Reste'}</p>
       <p className={`whitespace-nowrap font-bold tabular-nums ${bureau ? 'text-[24px] leading-tight' : 'text-[21px] leading-tight'}`}
         style={{ color: resteTuile === null ? '#857c6d' : resteTuile < 0 ? COULEURS_ANNEAU.depasse : COULEURS_ANNEAU.ok }}>
         {resteTuile === null ? '—' : euros(Math.abs(resteTuile))}
@@ -196,12 +196,12 @@ export function ResumeView() {
   )
   const loupeBtn = (
     <button type="button" data-testid="tuile-loupe" aria-label="Dernières opérations" onClick={() => setRecents(true)}
-      className={`${bureau ? 'verre verre-tuile !px-0 w-12' : 'card w-11'} flex items-center justify-center text-ink-2 hover:text-ink`}>
-      <Search size={bureau ? 18 : 17} strokeWidth={1.8} />
+      className={`${bureau ? 'verre verre-tuile !px-0 w-14' : 'card w-9'} flex items-center justify-center text-ink-2 hover:text-ink`}>
+      <Search size={bureau ? 18 : 16} strokeWidth={2} />
     </button>
   )
   const hautDeVue = (
-    <div className={`grid gap-2.5 ${bureau ? 'gap-3' : ''} ${vue ? 'grid-cols-[1fr_auto]' : 'grid-cols-[1fr_1fr_auto]'}`}>
+    <div className={`grid gap-2.5 ${bureau ? 'gap-3' : ''} ${vue ? 'grid-cols-[minmax(0,1fr)_auto]' : 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]'}`}>
       {resteBtn}
       {epargneBtn}
       {loupeBtn}
