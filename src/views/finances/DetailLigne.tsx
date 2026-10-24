@@ -94,6 +94,11 @@ function opsDe(groupes: GroupeCategorie[], parent: string, enfant: string | null
   return groupes.find((g) => g.nom === `${parent} › ${enfant}`)?.operations ?? []
 }
 
+/** Toutes les opérations d'une catégorie, sous-catégories comprises. */
+function opsNoeud(groupes: GroupeCategorie[], parent: string): FinTransaction[] {
+  return groupes.filter((g) => g.nom === parent || g.nom.startsWith(`${parent} › `)).flatMap((g) => g.operations)
+}
+
 /** Applique des écritures planifiées (editionGroupes) sur une table. */
 async function appliquer(table: 'fin_groups' | 'fin_merchant_alias', plan: Ecriture[]) {
   const { insert, update, remove } = useHorizon.getState()
@@ -298,6 +303,11 @@ export function DetailLigneLecture({ cle, couleur, barres = false }: { cle: stri
   }
   const [ouvert, setOuvert] = useState<string | null>(null)
   if (!noeuds.length) return <p className="py-2 text-xs text-ink-3">Aucune dépense ce mois-ci</p>
+  // Une seule catégorie (Vacances…) : pas d'étage inutile, les opérations directement ;
+  // si elle a plusieurs sous-catégories, ce sont elles qui deviennent le premier niveau.
+  if (noeuds.length === 1 && noeuds[0]!.enfants.length <= 1) {
+    return <div data-testid="detail-lecture"><MarchandsLecture operations={opsNoeud(groupes, noeuds[0]!.nom)} nomCategorie={noeuds[0]!.nom} /></div>
+  }
   const total = noeuds.reduce((s, n) => s + n.total, 0)
   const part = (v: number, base: number) => barres && base > 0 && v > 0 ? (
     <span className="w-14 sm:w-24"><ProgressBar value={(v / base) * 100} color={couleur} /></span>
@@ -321,9 +331,18 @@ export function DetailLigneLecture({ cle, couleur, barres = false }: { cle: stri
   }
   return (
     <ul data-testid="detail-lecture" className="divide-y divide-line/40">
-      {noeuds.map((n) => (
+      {noeuds.length === 1 && noeuds[0]!.enfants.map((e) => (
+        <li key={e.nom}>
+          {ligne(noeuds[0]!.nom + '\u0000' + e.nom, <>
+            <span className="min-w-0 flex-1 truncate" title={e.nom}>{e.nom}</span>
+            {part(e.total, total)}
+            <span className="w-16 text-right font-medium tabular-nums">{euros(e.total)}</span>
+          </>, opsDe(groupes, noeuds[0]!.nom, e.nom), e.nom, 'py-1.5 text-sm', 'detail-sous-categorie')}
+        </li>
+      ))}
+      {noeuds.length > 1 && noeuds.map((n) => (
         <li key={n.nom}>
-          {n.enfants.length
+          {n.enfants.length > 1
             ? <div className="flex items-center gap-3 py-1.5 text-sm">
                 <span className="min-w-0 flex-1 truncate" title={n.nom}>{n.nom}</span>
                 {part(0, total)}
@@ -333,9 +352,9 @@ export function DetailLigneLecture({ cle, couleur, barres = false }: { cle: stri
                 <span className="min-w-0 flex-1 truncate" title={n.nom}>{n.nom}</span>
                 {part(n.total, total)}
                 <span className="w-16 text-right font-medium tabular-nums">{euros(n.total)}</span>
-              </>, opsDe(groupes, n.nom, null), n.nom, 'py-1.5 text-sm')}
-          {!n.enfants.length && pastilles(n.nom)}
-          {n.enfants.map((e) => (
+              </>, opsNoeud(groupes, n.nom), n.nom, 'py-1.5 text-sm')}
+          {n.enfants.length <= 1 && pastilles(n.nom)}
+          {n.enfants.length > 1 && n.enfants.map((e) => (
             <div key={e.nom}>
               {ligne(n.nom + '\u0000' + e.nom, <>
                 <span className="min-w-0 flex-1 truncate" title={`${n.nom} › ${e.nom}`}>{e.nom}</span>
