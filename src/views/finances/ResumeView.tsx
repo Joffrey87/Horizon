@@ -18,9 +18,8 @@ const ICONES: Record<string, LucideIcon> = {
   courses: ShoppingCart, amenagement: Sofa, vacances: Plane, courantes: Wallet, exceptionnelles: Zap, fraisfixe: Receipt, dons: Heart,
 }
 
-/** Cible mensuelle d'Épargne avenir : l'anneau d'« Épargné » est plein à ce montant. */
-export const CIBLE_EPARGNE_AVENIR = 1000
-const estAvenir = (nom?: string | null) => (nom ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes('epargne avenir')
+/** Cible mensuelle d'épargne : l'anneau d'« Épargné » est plein à ce montant (plafonné à 100 %, excédent non affiché). */
+export const CIBLE_EPARGNE = 1800
 
 /** Anneau de part consommée (plafonnée à 100 % pour le tracé), l'icône du budget au centre. Aucun chiffre dedans. */
 function Anneau({ ratio, couleur, taille, trait = 4, halo = false, children }: {
@@ -156,8 +155,7 @@ export function ResumeView() {
   const basculerTuile = (cle: string) => setOuvertes((o) => { const n = new Set(o); if (n.has(cle)) n.delete(cle); else n.add(cle); return n })
 
   // Mêmes chiffres que le Budget : un seul calcul (tuilesMois.ts), capital de prêt compté en épargne et non en dépense.
-  const { s, depenses, aVenir, epPrevues, listeEp, resteTuile, epargne, epargnes } = useTuilesMois()
-  const avenir = epargnes.filter((l) => estAvenir(l.ligne?.name)).reduce((a, l) => a + l.reel, 0)
+  const { s, depenses, aVenir, epPrevues, listeEp, resteTuile, epargne } = useTuilesMois()
   const resteValable = resteTuile !== null
   const edition = useBudgetMois()
   const transactions = useHorizon((st) => st.finTransactions)
@@ -195,8 +193,8 @@ export function ResumeView() {
       className={`${bureau ? 'verre verre-tuile !py-2' : 'card px-3 py-2'} text-left`}>
       <p className="block-title">Épargné</p>
       <div className="flex items-center gap-2">
-        <span data-testid="anneau-epargne" data-avenir={Math.round(avenir)}>
-          <Anneau ratio={Math.max(0, avenir) / CIBLE_EPARGNE_AVENIR} couleur={COULEURS_ANNEAU.ok} taille={bureau ? 28 : 26} trait={2} halo={bureau}>
+        <span data-testid="anneau-epargne" data-ratio={Math.round(Math.min(1, Math.max(0, epargne) / CIBLE_EPARGNE) * 100)}>
+          <Anneau ratio={Math.min(1, Math.max(0, epargne) / CIBLE_EPARGNE)} couleur={COULEURS_ANNEAU.ok} taille={bureau ? 28 : 26} trait={2} halo={bureau}>
             <PiggyBank size={bureau ? 13 : 12} style={{ color: COULEURS_ANNEAU.ok }} aria-hidden />
           </Anneau>
         </span>
