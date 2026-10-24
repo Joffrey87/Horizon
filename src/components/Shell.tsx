@@ -3,7 +3,7 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   Home, FolderKanban, ListTodo, Compass, CalendarDays, CalendarRange,
   Repeat, ClipboardCheck, Network, Settings, Plus, LogOut, Menu, ArrowLeft, ShieldCheck, Timer, Newspaper,
-  AlertTriangle, X, RotateCw, ArrowLeftRight, Wallet, Eye, Hourglass, ShoppingCart, Euro,
+  AlertTriangle, X, RotateCw, ArrowLeftRight, Wallet, Eye, Hourglass, ShoppingCart, Euro, Target, createLucideIcon,
 } from 'lucide-react'
 import { useHorizon, vueCourante } from '../lib/store'
 import { ONGLETS_PARTAGE, pageAccueil, routeAutorisee } from '../lib/partage'
@@ -208,7 +208,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <div className="sunrise-veil min-w-0 flex-1">
         {/* L'accueil (paysage de bord à bord) et Temps (grilles denses) prennent toute la
             largeur ; les autres pages restent centrées dans une colonne de lecture. */}
-        <div className={`mx-auto px-4 pt-4 lg:px-8 ${pathname.startsWith('/temps') ? 'pb-16 md:pb-3' : 'pb-16'} ${pleineLargeur ? '' : 'max-w-6xl'}`}>
+        <div className={`mx-auto px-4 pt-4 lg:px-8 ${pathname.startsWith('/temps') ? 'pb-16 md:pb-3' : 'pb-16'} max-md:pb-[calc(76px+env(safe-area-inset-bottom))] ${pleineLargeur ? '' : 'max-w-6xl'}`}>
           {/* Barre mobile : menu + retour + logo (n'existe qu'en petit écran) */}
           <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
             <div className="flex shrink-0 items-center gap-1">
@@ -234,16 +234,7 @@ export function Shell({ children }: { children: ReactNode }) {
             )}
             <div className="flex shrink-0 items-center gap-1">
               {/* Agenda : raccourci vers la liste de courses, à côté du logo qui mène à l'accueil. */}
-              {caddie && (
-                <Link to={ROUTE_COURSES} className="btn-ghost p-2" aria-label="Liste de courses" title="Liste de courses">
-                  <ShoppingCart size={18} strokeWidth={1.9} />
-                </Link>
-              )}
-              {caddie && (
-                <Link to="/finances" className="btn-ghost p-2" aria-label="Résumé des finances" title="Résumé des finances">
-                  <Euro size={18} strokeWidth={1.9} />
-                </Link>
-              )}
+              {/* Téléphone : caddie et € sont dans la barre de raccourcis du bas. */}
               {plusEnHaut && <BoutonPlus onClick={() => setCapture(true)} className="btn-sun flex h-9 w-9 shrink-0 items-center justify-center rounded-full p-0 shadow shadow-black/40" />}
               <Link to={accueil} aria-label="Retour à l'accueil" className="shrink-0">
                 <span className="block h-8 w-8 overflow-hidden rounded-full ring-1 ring-white/10">
@@ -296,14 +287,51 @@ export function Shell({ children }: { children: ReactNode }) {
       {/* ---- Capture rapide : toujours accessible, ne casse pas le focus (pas en vue partagée) ---- */}
       {!vue && !plusEnHaut && pathname !== '/finances' && (
         <button onClick={() => setCapture(true)} title="Ajouter (tâche, idée, achat, rappel, courses)" aria-label="Ajouter"
-          className={`btn-sun fixed bottom-6 right-6 z-40 flex h-13 w-13 items-center justify-center rounded-full p-3.5 shadow-lg shadow-black/40 ${
+          className={`btn-sun fixed bottom-6 right-6 max-md:bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 flex h-13 w-13 items-center justify-center rounded-full p-3.5 shadow-lg shadow-black/40 ${
             // Agenda (ordinateur) : plus petit et plus bas, à côté du volet de notes, pour ne pas couvrir la marge des mois.
             pathname.startsWith('/temps') ? 'md:bottom-2 md:h-10 md:w-10 md:p-2.5' : ''}`}>
           <Plus size={22} strokeWidth={2.4} />
         </button>
       )}
 
+      {/* Téléphone : barre de raccourcis en bas, sur tous les onglets (pas en vue partagée). */}
+      {telephone && !vue && <BarreRaccourcis pathname={pathname} />}
       <QuickAdd open={capture} onClose={() => setCapture(false)} />
     </div>
+  )
+}
+
+/** Livre fermé avec une croix chrétienne sur la couverture (même trait que les icônes lucide). */
+const LivreCroix = createLucideIcon('livre-croix', [
+  ['path', { d: 'M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20', key: 'couv' }],
+  ['path', { d: 'M12 5.5v8', key: 'croix-v' }],
+  ['path', { d: 'M9.5 8h5', key: 'croix-h' }],
+])
+
+const RACCOURCIS = [
+  { to: '/finances', label: 'Finances', icon: Euro, actif: (p: string) => p.startsWith('/finances') },
+  { to: ROUTE_COURSES, label: 'Liste de courses', icon: ShoppingCart, actif: (p: string) => p.startsWith('/verifications/listes') },
+  { to: '/temps', label: 'Agenda', icon: CalendarDays, actif: (p: string) => p.startsWith('/temps') },
+  { to: '/activites/ecritures', label: 'Écritures', icon: LivreCroix, actif: (p: string) => p.startsWith('/activites/ecritures') },
+  { to: '/priorites', label: 'Priorités', icon: Target, actif: (p: string) => p.startsWith('/priorites') },
+]
+
+/** Téléphone : capsule flottante en bas ; l'onglet actif dans un rond ambre. */
+function BarreRaccourcis({ pathname }: { pathname: string }) {
+  return (
+    <nav aria-label="Raccourcis" className="fixed inset-x-0 bottom-0 z-40 px-3"
+      style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}>
+      <div className="mx-auto flex h-13 items-center justify-around rounded-full border border-line bg-panel/95 px-2 shadow-lg shadow-black/40 backdrop-blur">
+        {RACCOURCIS.map(({ to, label, icon: Icon, actif }) => {
+          const a = actif(pathname)
+          return (
+            <Link key={to} to={to} aria-label={label} title={label} aria-current={a ? 'page' : undefined}
+              className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${a ? 'bg-[#eda145] text-bg' : 'text-ink-2'}`}>
+              <Icon size={18} strokeWidth={1.9} />
+            </Link>
+          )
+        })}
+      </div>
+    </nav>
   )
 }
