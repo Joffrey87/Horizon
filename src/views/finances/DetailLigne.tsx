@@ -3,7 +3,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
-import { aplatirGroupes, detailHorsCapital, detailLigne, euros, grouperParIntitule, hierarchieDetail, nomLisible, type GroupeCategorie, type GroupeIntitules } from '../../lib/finances'
+import { categoriesParLigne, categorieEffective, aplatirGroupes, detailHorsCapital, detailLigne, euros, grouperParIntitule, hierarchieDetail, nomLisible, type GroupeCategorie, type GroupeIntitules } from '../../lib/finances'
 import type { FinTransaction } from '../../lib/types'
 import { cleCommercant, clesDuGroupe, planAlias, planRegrouper, planSeparer, type Ecriture } from '../../lib/editionGroupes'
 import { ProgressBar } from '../../components/ui'
@@ -121,6 +121,8 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
   const [cible, setCible] = useState<string | null>(autres[0]?.cle ?? null)
   const [nom, setNom] = useState(nomAffiche)
   const [envoi, setEnvoi] = useState(false)
+  const [choixCat, setChoixCat] = useState(false)
+  const idx = useIndex()
   const lancer = async (f: () => Promise<void>) => { setEnvoi(true); await f(); setEnvoi(false); onClose() }
   const renommer = () => lancer(async () => {
     if (sel.type === 'op') return appliquer('fin_merchant_alias', planAlias([cleCommercant(sel.tx.label)], nom, alias))
@@ -134,6 +136,31 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
   })
   const separer = () => lancer(() => appliquer('fin_groups', planSeparer(clesDuGroupe(groupe, regles), regles)))
 
+  // Catégorie de CETTE opération seulement : même écriture que le classement à la main (LigneOperation).
+  const changerCategorie = (id: string) => sel.type === 'op' && lancer(async () => { await useHorizon.getState().update('fin_transactions', sel.tx.id, { category_id: id, category_manual: true }) })
+  if (choixCat && sel.type === 'op') {
+    const actuelle = categorieEffective(sel.tx.category_id, idx)?.id
+    return (
+      <div data-testid="panneau-categorie" className="my-1.5 rounded-lg border border-line-2 bg-panel-2 p-2">
+        <div className="max-h-56 overflow-y-auto">
+          {categoriesParLigne(idx).map((g) => (
+            <div key={g.ligne?.id ?? '-'} className="mb-1.5">
+              <p className="px-1 text-[10.5px] text-ink-3">{g.ligne?.name ?? '—'}</p>
+              <div className="flex flex-wrap gap-1">
+                {g.categories.map((c) => (
+                  <button key={c.id} disabled={envoi} onClick={() => void changerCategorie(c.id)} aria-pressed={c.id === actuelle}
+                    className={`rounded-md px-1.5 py-0.5 text-[11.5px] ${c.id === actuelle ? 'bg-[#eda145]/10 text-[#eda145] ring-1 ring-[#eda145]/60' : 'bg-[#c9b48a]/10 text-ink-2 hover:text-ink'}`}>
+                    {c.nom}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-1.5 flex"><button onClick={() => setChoixCat(false)} className={BTN_NEUTRE}>Annuler</button></div>
+      </div>
+    )
+  }
   if (fusion) return (
     <div data-testid="panneau-fusion" className="my-1.5 rounded-lg border border-line-2 bg-panel-2 p-2">
       <ul className="max-h-32 overflow-y-auto">
@@ -166,6 +193,7 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
       {sel.type === 'op' && <p className="mt-1 text-[10.5px] text-ink-3">Pour toutes les opérations {groupe.nom}</p>}
       <div className="mt-2 flex flex-wrap gap-1.5">
         <button disabled={envoi} onClick={() => void renommer()} className={BTN_OK}>Renommer</button>
+        {sel.type === 'op' && <button onClick={() => setChoixCat(true)} className={BTN_NEUTRE}>Catégorie</button>}
         {autres.length > 0 && <button onClick={() => { setNom(groupe.nom); setFusion(true) }} className={BTN_NEUTRE}>Regrouper avec…</button>}
         {sel.type === 'groupe' && groupe.manuel && (
           <button disabled={envoi} onClick={() => void separer()} className={`${BTN} border-[#eda145]/70 text-[#eda145]`}>Séparer</button>)}
@@ -378,4 +406,21 @@ function OperationsGroupees({ operations, nomCategorie, toutDeplie }: {
   })
 
   return <ul className="divide-y divide-line/40">{liste(groupes, '', 0)}</ul>
+}
+
+/** Panneau d'édition d'une opération seule (Dernières opérations du Résumé) : le même que dans le
+ *  détail, avec ses voisins de catégorie du mois pour « Regrouper avec… ». */
+export function EditionOperation({ tx, onClose }: { tx: FinTransaction; onClose: () => void }) {
+  const transactions = useHorizon((s) => s.finTransactions)
+  const regles = useHorizon((s) => s.finGroups)
+  const reco = useReconnaissance()
+  const groupes = useMemo(() => {
+    const voisins = transactions.filter((t) => !t.internal && t.category_id === tx.category_id && t.date.slice(0, 7) === tx.date.slice(0, 7))
+    return aplatirGroupes(grouperParIntitule(voisins, regles, (t) => (reco.estLocal(t) ? reco.libelle(t) : null)))
+  }, [transactions, regles, reco, tx])
+  const groupe = groupes.find((g) => g.operations.some((o) => o.id === tx.id))
+  if (!groupe) return null
+  const nom = (reco.estLocal(tx) ? reco.libelle(tx) : nomLisible(tx.label)) || '(sans libellé)'
+  return <PanneauEdition sel={{ type: 'op', tx, groupe: groupe.cle }} groupe={groupe} onClose={onClose}
+    autres={groupes.filter((g) => g.cle !== groupe.cle)} nomAffiche={nom} />
 }

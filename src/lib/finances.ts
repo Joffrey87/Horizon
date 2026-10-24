@@ -126,6 +126,25 @@ export function ligneDeCategorie(cat: FinCategory | undefined, idx: IndexFinance
   return parent?.line_id ?? null
 }
 
+/** Choix de catégorie (panneau d'édition) : catégories visibles, non fusionnées, groupées par ligne de budget
+ *  dans l'ordre des lignes ; celles sans ligne à la fin (ligne null). Noms triés, « Parent › Enfant » pour une sous-catégorie. */
+export function categoriesParLigne(idx: IndexFinances): { ligne: FinLine | null; categories: { id: string; nom: string }[] }[] {
+  const par = new Map<string | null, { id: string; nom: string }[]>()
+  for (const c of idx.categories.values()) {
+    if (c.hidden || c.merged_into) continue
+    const parent = c.parent_id ? idx.categories.get(c.parent_id) : undefined
+    if (parent?.hidden) continue
+    const l = ligneDeCategorie(c, idx)
+    const cle = l && idx.lignes.has(l) ? l : null
+    par.set(cle, [...(par.get(cle) ?? []), { id: c.id, nom: parent ? `${parent.name} › ${c.name}` : c.name }])
+  }
+  const lignes = lignesTriees([...idx.lignes.values()]).filter((l) => par.has(l.id))
+  return [...lignes.map((l) => l.id), ...(par.has(null) ? [null] : [])].map((k) => ({
+    ligne: k ? idx.lignes.get(k)! : null,
+    categories: par.get(k)!.sort((a, b) => a.nom.localeCompare(b.nom, 'fr')),
+  }))
+}
+
 export type Classement =
   | { type: 'ligne'; ligne: string }
   | { type: 'non_classe' }
@@ -894,6 +913,40 @@ export function rechercherOperations(opts: {
     const texte = sansAccents([tx.label, tx.label_local ?? '', libelle?.(tx) ?? '', nomCategorie(cat, idx), ligne?.name ?? ''].join(' '))
     return mots.every((m) => texte.includes(m))
   }).sort((a, b) => b.date.localeCompare(a.date))
+}
+
+/**
+ * Dernières opérations (panneau du Résumé) : dépenses et entrées du filtre de titulaire,
+ * les plus récentes d'abord, virements internes écartés. Avec une recherche, mêmes règles
+ * que rechercherOperations (intitulés, catégorie, ligne, montant).
+ */
+export function operationsRecentes(opts: {
+  transactions: FinTransaction[]; requete: string; idx: IndexFinances; filtre: FiltreTitulaire
+  libelle?: (tx: FinTransaction) => string
+}): FinTransaction[] {
+  const base = opts.transactions.filter((tx) => !tx.internal)
+  if (opts.requete.trim()) return rechercherOperations({ ...opts, transactions: base })
+  return base.filter((tx) => correspond(opts.filtre, titulaireDe(tx, opts.idx)))
+    .sort((a, b) => b.date.localeCompare(a.date) || b.created_at.localeCompare(a.created_at))
+}
+
+/** Découpe `texte` en morceaux, `vu` vrai sur ceux qui répondent à un mot de la recherche
+ *  (casse et accents ignorés) : pour surligner. Une recherche de montant ne surligne rien. */
+export function segmentsSurlignes(texte: string, requete: string): { t: string; vu: boolean }[] {
+  const q = requete.trim()
+  if (!q || /^[+-]?\d+(?:[.,]\d{1,2})?$/.test(q.replace(/\s|€/g, ''))) return [{ t: texte, vu: false }]
+  // Un caractère accentué décomposé garde sa longueur (NFD puis retrait des diacritiques, lettre par lettre).
+  const plat = [...texte].map((c) => sansAccents(c) || c).map((c) => c.slice(0, 1)).join('')
+  const marque = new Array<boolean>(texte.length).fill(false)
+  for (const m of sansAccents(q).split(/\s+/).filter(Boolean)) {
+    for (let i = plat.indexOf(m); i >= 0; i = plat.indexOf(m, i + 1)) for (let k = i; k < i + m.length; k++) marque[k] = true
+  }
+  const out: { t: string; vu: boolean }[] = []
+  ;[...texte].forEach((c, i) => {
+    const d = out[out.length - 1]
+    if (d && d.vu === marque[i]) d.t += c; else out.push({ t: c, vu: marque[i]! })
+  })
+  return out
 }
 
 // ---------- Regroupements d'intitulés (détail compacté) ----------

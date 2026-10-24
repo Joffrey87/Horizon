@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import type { FinAccount, FinBudget, FinEcheance, FinLoan, FinCategory, FinHolding, FinLine, FinPlanned, FinTarget, FinTransaction } from './types'
 import {
-  estEnAttente, NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, capitalRembourse, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, budgetDe, budgetAjuste, ecrituresBudgetMois, estEpargneComptee, fondLigne, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
+  estEnAttente, NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, capitalRembourse, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, operationsRecentes, segmentsSurlignes, categoriesParLigne, ligneDeCategorie, budgetDe, budgetAjuste, ecrituresBudgetMois, estEpargneComptee, fondLigne, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
   libelleMois, moisEcoules, patrimoine, previsionDe, provision, syntheseMois,
   agregerHorsCapital, hierarchieDetail, detailHorsCapital, NOM_PRET_REIMS, capitalDuMois, epargnesPrevues, listeEpargnes,
 } from './finances'
@@ -769,5 +769,47 @@ describe('libellé Engie par jour', () => {
   it('deux groupes distincts', () => {
     const g = grouperParIntitule([op('2026-09-18', '-163.01'), op('2026-09-28', '-152.36')], [], (tx) => (reco.estLocal(tx) ? reco.libelle(tx) : null))
     expect(g.length).toBe(2)
+  })
+})
+
+describe('dernières opérations (panneau du Résumé)', () => {
+  const tx = [
+    op(joint.id, '2026-09-03', -42.5, { category_id: alim.id, label: 'EPICERIE ÉTÉ 2 CB*1111' }),
+    op(joint.id, '2026-10-03', 1200, { label: 'SALAIRE OCTOBRE' }),
+    op(joint.id, '2026-10-04', -300, { label: 'VIR INTERNE', internal: true }),
+    op(perso.id, '2026-10-05', -8, { category_id: loyer.id, label: 'ASSURANCE HABITATION', owner: 'honorine' }),
+  ]
+  const r = (requete: string, filtre: 'foyer' | 'commun' | 'honorine' = 'foyer') =>
+    operationsRecentes({ transactions: tx, requete, idx, filtre }).map((t) => t.label)
+  it('sans recherche : dépenses et entrées, récentes d’abord, sans virement interne', () => {
+    expect(r('')).toEqual(['ASSURANCE HABITATION', 'SALAIRE OCTOBRE', 'EPICERIE ÉTÉ 2 CB*1111'])
+  })
+  it('suit le filtre Commun / Honorine', () => {
+    expect(r('', 'honorine')).toEqual(['ASSURANCE HABITATION'])
+    expect(r('', 'commun')).toEqual(['SALAIRE OCTOBRE', 'EPICERIE ÉTÉ 2 CB*1111'])
+  })
+  it('avec recherche : intitulé, montant, catégorie ; jamais un virement interne', () => {
+    expect(r('salaire')).toEqual(['SALAIRE OCTOBRE'])
+    expect(r('1200')).toEqual(['SALAIRE OCTOBRE'])
+    expect(r('courses')).toEqual(['EPICERIE ÉTÉ 2 CB*1111'])
+    expect(r('300')).toEqual([])
+  })
+  it('surligne les mots cherchés sans casse ni accents', () => {
+    expect(segmentsSurlignes('Épicerie été', 'ete')).toEqual([{ t: 'Épicerie ', vu: false }, { t: 'été', vu: true }])
+    expect(segmentsSurlignes('Carrefour City', 'CARRE')).toEqual([{ t: 'Carre', vu: true }, { t: 'four City', vu: false }])
+    expect(segmentsSurlignes('Carrefour', '42')).toEqual([{ t: 'Carrefour', vu: false }])
+  })
+})
+
+describe('choix de catégorie par ligne', () => {
+  it('groupe les catégories visibles par ligne, sans les masquées ni les fusionnées', () => {
+    const groupes = categoriesParLigne(idx)
+    const ids = groupes.flatMap((g) => g.categories.map((c) => c.id))
+    for (const c of categories) if (c.hidden || c.merged_into) expect(ids).not.toContain(c.id)
+    for (const g of groupes) for (const c of g.categories) {
+      const l = ligneDeCategorie(idx.categories.get(c.id), idx)
+      expect(g.ligne ? l : null).toBe(g.ligne ? g.ligne.id : null)
+    }
+    expect(new Set(ids).size).toBe(ids.length)
   })
 })

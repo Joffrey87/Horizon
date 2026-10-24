@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Heart, PiggyBank, Receipt, Plane, ShoppingCart, Sofa, Wallet, Zap, type LucideIcon } from 'lucide-react'
+import { Heart, PiggyBank, Receipt, Search, Plane, ShoppingCart, Sofa, Wallet, Zap, type LucideIcon } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import { euros } from '../../lib/finances'
 import { COULEURS_ANNEAU, eclaircie, rgba, tuilesBudgets, type TuileBudget } from '../../lib/resume'
@@ -10,6 +10,7 @@ import { useTuilesMois } from './tuilesMois'
 import { useFin, useVue } from './contexte'
 import { MontantBudget, useBudgetMois } from './budgetMois'
 import { DetailLigneLecture } from './DetailLigne'
+import { DernieresOperations } from './DernieresOperations'
 import { useMediaQuery } from '../../lib/useMediaQuery'
 
 const ICONES: Record<string, LucideIcon> = {
@@ -142,6 +143,7 @@ export function ResumeView() {
   const vue = useVue()
   const lines = useHorizon((s) => s.finLines)
   const foyer = filtre === 'foyer'
+  const [recents, setRecents] = useState(false)
   const [detail, setDetail] = useState<'reste' | 'epargne' | null>(null)
   // Tuiles de budget dépliées (détail par catégorie).
   const [ouvertes, setOuvertes] = useState<Set<string>>(new Set())
@@ -192,16 +194,23 @@ export function ResumeView() {
       </div>
     </button>
   )
+  const loupeBtn = (
+    <button type="button" data-testid="tuile-loupe" aria-label="Dernières opérations" onClick={() => setRecents(true)}
+      className={`${bureau ? 'verre verre-tuile !px-0 w-12' : 'card w-11'} flex items-center justify-center text-ink-2 hover:text-ink`}>
+      <Search size={bureau ? 18 : 17} strokeWidth={1.8} />
+    </button>
+  )
   const hautDeVue = (
-    <div className={`grid gap-2.5 ${bureau ? 'gap-3' : ''} ${vue ? '' : 'grid-cols-2'}`}>
+    <div className={`grid gap-2.5 ${bureau ? 'gap-3' : ''} ${vue ? 'grid-cols-[1fr_auto]' : 'grid-cols-[1fr_1fr_auto]'}`}>
       {resteBtn}
       {epargneBtn}
+      {loupeBtn}
       {detail === 'reste' && resteTuile !== null && (
-        <div className="col-span-2 flex justify-center">
+        <div className="col-span-full flex justify-center">
           <DetailReste budget={budgetDepenses} depense={reelDepenses} aVenir={aVenir} epargnes={epPrevues} resteTuile={resteTuile} />
         </div>
       )}
-      {detail === 'epargne' && <div className={`flex justify-center ${vue ? '' : 'col-span-2'}`}><DetailEpargne liste={listeEp} /></div>}
+      {detail === 'epargne' && <div className="col-span-full flex justify-center"><DetailEpargne liste={listeEp} /></div>}
     </div>
   )
   const noteFiltre = !foyer && <p className="-mt-1 text-[11px] text-ink-3">Les budgets sont ceux du foyer : ici, ce que {filtre === 'commun' ? 'le compte commun' : filtre === 'joffrey' ? 'Joffrey' : 'Honorine'} a dépensé. Choisis Foyer pour voir le restant.</p>
@@ -221,6 +230,7 @@ export function ResumeView() {
     return (
       <div className="rise space-y-2">
         {edition.dialogue}
+        {recents && <DernieresOperations bureau onClose={() => setRecents(false)} />}
         {entete}
         <div className="mx-auto w-full max-w-[660px] space-y-2.5">
           {hautDeVue}
@@ -239,6 +249,7 @@ export function ResumeView() {
   return (
     <div className="rise space-y-2">
       {edition.dialogue}
+      {recents && <DernieresOperations bureau={false} onClose={() => setRecents(false)} />}
       {entete}
       {hautDeVue}
       {noteFiltre}
