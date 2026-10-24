@@ -45,7 +45,7 @@ const MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 
 const dateJour = (iso: string) => `${Number(iso.slice(8, 10))} ${MOIS_COURTS[Number(iso.slice(5, 7)) - 1]}`
 
 /** Épargnes du mois, une ligne chacune : faite, prévue (ou prêt payé hors budget, pour information). */
-export function DetailEpargne({ liste }: { liste: ReturnType<typeof listeEpargnes> }) {
+export function DetailEpargne({ liste, utilisee }: { liste: ReturnType<typeof listeEpargnes>; utilisee?: ReturnType<typeof epargneUtilisee> }) {
   const badge = (etat: 'fait' | 'prevu') => etat === 'fait'
     ? <span className="whitespace-nowrap rounded-full border border-[#4cc79a]/50 px-1.5 text-[10px] uppercase tracking-wider text-[#4cc79a]">fait</span>
     : <span className="whitespace-nowrap rounded-full border border-[#eda145]/50 px-1.5 text-[10px] uppercase tracking-wider text-[#eda145]">prévu</span>
@@ -71,6 +71,18 @@ export function DetailEpargne({ liste }: { liste: ReturnType<typeof listeEpargne
       ))}
       <LigneDetail fin nom="Total fait" montant={liste.fait} />
       {liste.prevu > 0.5 && <LigneDetail nom="Encore prévu" montant={liste.prevu} />}
+      {utilisee && utilisee.total > 0.5 && (
+        <div data-testid="detail-epargne-section-utilisee" className="!mt-3 space-y-1.5 border-t border-line pt-2.5">
+          <p className="block-title" style={{ color: '#eda145' }}>Utilisée</p>
+          {utilisee.parOrigine.map((g) => (
+            <div key={g.origine} className="space-y-0.5">
+              <LigneDetail nom={<span className="font-medium">{g.origine}</span>} montant={g.total} />
+              {g.virements.map((v) => <LigneDetail key={v.id} sous nom={`${dateJour(v.date)} · ${v.libelle}`} montant={v.montant} />)}
+            </div>
+          ))}
+          <LigneDetail fin nom="Total utilisée" montant={utilisee.total} />
+        </div>
+      )}
     </div>
   )
 }

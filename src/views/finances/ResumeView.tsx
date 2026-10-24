@@ -229,7 +229,7 @@ export function ResumeView() {
           <DetailAuDela lignes={lignesAuDela(depenses, aVenir, epPrevues)} variante={varianteDemo()} />
         </div>
       )}
-      {detail === 'epargne' && <div className="col-span-full flex justify-center"><DetailEpargne liste={listeEp} /></div>}
+      {detail === 'epargne' && <div className="col-span-full flex justify-center"><DetailEpargne liste={listeEp} utilisee={utilisee} /></div>}
       {detail === 'utilisee' && <div className="col-span-full flex justify-center"><DetailEpargneUtilisee donnees={utilisee} /></div>}
     </div>
   )
