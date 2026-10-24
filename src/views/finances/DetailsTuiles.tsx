@@ -39,6 +39,10 @@ export function DetailReste({ budget, depense, aVenir, epargnes, resteTuile }: {
   )
 }
 
+const MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.']
+/** « 1 oct. » */
+const dateJour = (iso: string) => `${Number(iso.slice(8, 10))} ${MOIS_COURTS[Number(iso.slice(5, 7)) - 1]}`
+
 /** Épargnes du mois, une ligne chacune : faite, prévue (ou prêt payé hors budget, pour information). */
 export function DetailEpargne({ liste }: { liste: ReturnType<typeof listeEpargnes> }) {
   const badge = (etat: 'fait' | 'prevu') => etat === 'fait'
@@ -48,9 +52,20 @@ export function DetailEpargne({ liste }: { liste: ReturnType<typeof listeEpargne
     <div data-testid="detail-epargne" className="card mx-auto w-full max-w-md space-y-1 px-4 py-3 text-sm">
       {liste.lignes.length === 0 && <p className="text-ink-3">Aucune épargne ce mois-ci.</p>}
       {liste.lignes.map((l) => (
-        <div key={`${l.nom}-${l.etat}`} className="flex items-center justify-between gap-3">
-          <span className="flex min-w-0 items-center gap-2"><span className="truncate">{l.nom}</span>{badge(l.etat)}</span>
-          <span className="shrink-0 tabular-nums">{euros(l.montant)}</span>
+        <div key={`${l.nom}-${l.etat}`}>
+          <div className="flex items-center justify-between gap-3">
+            <span className="flex min-w-0 items-center gap-2"><span className="truncate">{l.nom}</span>{badge(l.etat)}</span>
+            <span className="shrink-0 tabular-nums">{euros(l.montant)}</span>
+          </div>
+          {l.pastilles && l.pastilles.length > 0 && (
+            <div data-testid="pastilles-epargne" className="flex flex-wrap gap-1 pl-3">
+              {l.pastilles.map((p, i) => (
+                <span key={i} className="whitespace-nowrap rounded-full bg-[#c9b48a]/15 px-2 text-[10.5px] leading-4 tabular-nums text-[#d8c7a3]">
+                  {p.type === 'operation' ? `${dateJour(p.date!)} · ${euros(p.montant, true)}` : `− ${euros(p.montant, true)} ${p.texte}`}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       ))}
       <LigneDetail fin nom="Total fait" montant={liste.fait} />

@@ -349,7 +349,20 @@ export interface CapitalPret {
   horsBudget?: boolean
   /** Motif de reconnaissance du prélèvement (loan.debit_match), pour retrouver la charge. */
   motif: string | null
+  /** Prélèvements réels du mois (date, montant positif, id), pour les montrer tels quels. */
+  operations?: { id: string; date: string; montant: number }[]
+  /** Intérêts + frais et assurance de l'échéance du mois (fin_echeances). */
+  interets?: number
+  assurance?: number
+  /** Prêt de l'appartement de Reims : regroupé en une ligne « Prêt appart Reims » dans l'Épargné. */
+  reims?: boolean
 }
+
+/** Prêts de l'appart de Reims (motif de prélèvement) : PRET IMMOBILIER 164522C et prêt BFM. */
+export const MOTIF_PRETS_REIMS = /164522C|BOBOCRE/i
+export const NOM_PRET_REIMS = 'Prêt appart Reims'
+/** Prêt sans intérêts (BFM) : la part hors capital de l'échéance est de l'assurance. */
+export const PRET_SANS_INTERETS = /BOBOCRE/i
 
 export interface CapitalMois {
   mois: string
@@ -395,7 +408,15 @@ export function capitalDuMois(opts: OptionsCapital & { mois: string }): CapitalM
     const capital = echeances.reduce((s, e) => s + Number(e.capital), 0)
     const re = motifPrelevement(pret.debit_match)
     const nom = (idx.comptes.get(pret.account_id)?.name ?? 'Prêt').replace(/^pr[eê]t immobilier\s*/i, 'Prêt ')
-    const base = { pretId: pret.id, nom, mois, capital, debite: 0, extrait: 0, prevu: 0, ligneId: null as string | null, motif: pret.debit_match }
+    const operations: { id: string; date: string; montant: number }[] = []
+    const base = {
+      pretId: pret.id, nom, mois, capital, debite: 0, extrait: 0, prevu: 0, ligneId: null as string | null, motif: pret.debit_match, operations,
+      // Prêt BFM : sans intérêts, la part hors capital de son échéancier est de l'assurance.
+      ...(PRET_SANS_INTERETS.test(pret.debit_match ?? '')
+        ? { interets: 0, assurance: echeances.reduce((s, e) => s + Number(e.interets ?? 0) + Number(e.frais ?? 0) + Number(e.assurance ?? 0), 0) }
+        : { interets: echeances.reduce((s, e) => s + Number(e.interets ?? 0) + Number(e.frais ?? 0), 0), assurance: echeances.reduce((s, e) => s + Number(e.assurance ?? 0), 0) }),
+      reims: MOTIF_PRETS_REIMS.test(pret.debit_match ?? ''),
+    }
     // Opérations qui portent le prélèvement : compte du budget (ligne) ou hors budget.
     let debite = 0
     let ligneId: string | null = null
@@ -410,13 +431,13 @@ export function capitalDuMois(opts: OptionsCapital & { mois: string }): CapitalM
         if (c.type === 'ignoree' && c.raison === 'compte') {
           if (!correspond(filtre, titulaireDe(tx, idx))) continue
           horsBudgetVu = true
-          if (moisDe(tx.date) === mois) debiteHors -= Number(tx.amount)
+          if (moisDe(tx.date) === mois) { debiteHors -= Number(tx.amount); operations.push({ id: tx.id, date: tx.date, montant: -Number(tx.amount) }) }
           continue
         }
         if (c.type !== 'ligne' || !correspond(filtre, titulaireDe(tx, idx))) continue
         budgetVu = true
         ligneVue = c.ligne
-        if (moisDe(tx.date) === mois) { debite -= Number(tx.amount); ligneId = c.ligne }
+        if (moisDe(tx.date) === mois) { debite -= Number(tx.amount); ligneId = c.ligne; operations.push({ id: tx.id, date: tx.date, montant: -Number(tx.amount) }) }
       }
     }
     const surCompteBudget = (pret.debit_account_ids ?? []).some((id) => idx.comptes.get(id)?.in_budget)
@@ -490,7 +511,18 @@ export function epargnesPrevues(opts: {
   return { total: details.reduce((s, d) => s + d.montant, 0), details }
 }
 
-export interface EpargneLigne { nom: string; montant: number; etat: 'fait' | 'prevu'; type: 'ligne' | 'capital' }
+/** Pastille sous une ligne du détail : une opération réelle, ou une part retirée (intérêts, assurance). */
+export interface PastilleEpargne { texte: string; montant: number; type: 'operation' | 'interets' | 'assurance'; date?: string }
+
+export interface EpargneLigne { nom: string; montant: number; etat: 'fait' | 'prevu'; type: 'ligne' | 'capital'; pastilles?: PastilleEpargne[] }
+
+/** Pastilles d'un prêt fait : ses prélèvements réels, puis ce qui en est retiré (intérêts, assurance). */
+export function pastillesPret(p: CapitalPret): PastilleEpargne[] {
+  const res: PastilleEpargne[] = (p.operations ?? []).map((o) => ({ texte: 'operation', montant: o.montant, type: 'operation', date: o.date }))
+  if ((p.interets ?? 0) > 0.005) res.push({ texte: 'intérêts', montant: p.interets!, type: 'interets' })
+  if ((p.assurance ?? 0) > 0.005) res.push({ texte: 'assurance', montant: p.assurance!, type: 'assurance' })
+  return res
+}
 
 /**
  * La liste des épargnes du mois pour l'encart « Épargné » : une ligne par épargne, faite
@@ -505,9 +537,21 @@ export function listeEpargnes(opts: {
     if (!estEpargneComptee(l.ligne)) continue
     if (Math.abs(l.reel) >= 0.5) lignes.push({ nom: l.ligne.name, montant: l.reel, etat: 'fait', type: 'ligne' })
   }
+  let reims: EpargneLigne | null = null
   for (const p of opts.capital?.prets ?? []) {
-    const nom = `Capital · ${p.nom}`
-    if (p.etat === 'fait' && p.extrait > 0.005) lignes.push({ nom, montant: p.extrait, etat: 'fait', type: 'capital' })
+    if (p.etat !== 'fait' || p.extrait <= 0.005) continue
+    if (p.reims) {
+      // Prêts de l'appart de Reims : une seule ligne, montant = capital épargné, pastilles = opérations réelles − intérêts/assurance.
+      if (!reims) { reims = { nom: NOM_PRET_REIMS, montant: 0, etat: 'fait', type: 'capital', pastilles: [] }; lignes.push(reims) }
+      reims.montant += p.extrait
+      reims.pastilles!.push(...pastillesPret(p))
+      continue
+    }
+    lignes.push({ nom: `Capital · ${p.nom}`, montant: p.extrait, etat: 'fait', type: 'capital' })
+  }
+  if (reims) {
+    const ordre = { operation: 0, interets: 1, assurance: 2 }
+    reims.pastilles!.sort((a, b) => ordre[a.type] - ordre[b.type] || (a.date ?? '').localeCompare(b.date ?? ''))
   }
   const prevues = epargnesPrevues(opts)
   for (const d of prevues.details) lignes.push({ nom: d.nom, montant: d.montant, etat: 'prevu', type: d.type })
@@ -700,6 +744,26 @@ export function detailLigne(opts: {
   }
   for (const g of groupes.values()) g.operations.sort((a, b) => b.date.localeCompare(a.date))
   return [...groupes.values()].sort((a, b) => b.total - a.total)
+}
+
+/**
+ * Détail d'une ligne sans le capital de prêt (compté dans l'Épargné) : chaque groupe qui porte un
+ * prélèvement d'emprunt perd la part de capital extraite, comme la tuile. Renvoie aussi les noms
+ * des groupes touchés (pour signaler « opération dans Épargné »).
+ */
+export function detailHorsCapital(groupes: GroupeCategorie[], cle: string, capital?: CapitalMois): { groupes: GroupeCategorie[]; touches: Map<string, { reims: boolean }> } {
+  const touches = new Map<string, { reims: boolean }>()
+  if (!capital) return { groupes, touches }
+  const res = groupes.map((g) => ({ ...g }))
+  for (const p of capital.prets) {
+    if (p.etat !== 'fait' || p.horsBudget || p.ligneId !== cle || p.extrait <= 0.005) continue
+    const ids = new Set((p.operations ?? []).map((o) => o.id))
+    const g = res.find((x) => x.operations.some((tx) => ids.has(tx.id)))
+    if (!g) continue
+    g.total -= p.extrait
+    touches.set(g.nom, { reims: (touches.get(g.nom)?.reims ?? false) || !!p.reims })
+  }
+  return { groupes: res.sort((a, b) => b.total - a.total), touches }
 }
 
 export interface NoeudCategorie {

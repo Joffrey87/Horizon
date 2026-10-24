@@ -6,7 +6,7 @@ import type { FinAccount, FinBudget, FinEcheance, FinLoan, FinCategory, FinHoldi
 import {
   estEnAttente, NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, capitalRembourse, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, budgetDe, budgetAjuste, ecrituresBudgetMois, estEpargneComptee, fondLigne, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
   libelleMois, moisEcoules, patrimoine, previsionDe, provision, syntheseMois,
-  agregerHorsCapital, hierarchieDetail, capitalDuMois, epargnesPrevues, listeEpargnes,
+  agregerHorsCapital, hierarchieDetail, detailHorsCapital, NOM_PRET_REIMS, capitalDuMois, epargnesPrevues, listeEpargnes,
 } from './finances'
 
 let seq = 0
@@ -521,6 +521,26 @@ describe('capital de prêt extrait de la ligne emprunt', () => {
     op(joint.id, '2026-10-03', -40, { category_id: loyer.id, label: 'ASSURANCE' }),
   ]
   const base = { prets, echeances, transactions: tx, idx: idxP, filtre: 'foyer' as const, moisCourant: '2026-10', aujourdhui: '2026-10-20' }
+
+  it('prêts de Reims (164522C + BFM) : une ligne « Prêt appart Reims » avec opérations réelles et intérêts/assurance', () => {
+    const r1 = compte({ kind: 'pret', in_budget: false, name: 'PRET IMMOBILIER 164522C' })
+    const bfm = compte({ kind: 'pret', in_budget: false, name: 'Prêt BFM' })
+    const ix = indexer([joint, perso, r1, bfm], categories, lines)
+    const o = { prets: [pret(r1.id, 'ECH PRET 164522C'), pret(bfm.id, '00019999BOBOCRE001')],
+      echeances: [ech(r1.id, '2026-10-01', 853.67, 329.49), ech(bfm.id, '2026-10-05', 207.08, 4.54)],
+      transactions: [debit('2026-10-01', 1183.16, 'ECH PRET 164522C DU 01/10/26'), debit('2026-10-05', 211.62, 'BANQUE FRANCAISE MUTUALISTE 00019999BOBOCRE001 Echeance')],
+      idx: ix, filtre: 'foyer' as const, moisCourant: '2026-10', aujourdhui: '2026-10-20' }
+    const c = capitalDuMois({ ...o, mois: '2026-10' })
+    const l = listeEpargnes({ mois: '2026-10', moisCourant: '2026-10', lignes: [], capital: c })
+    expect(l.lignes).toHaveLength(1)
+    expect(l.lignes[0]!.nom).toBe(NOM_PRET_REIMS)
+    expect(l.lignes[0]!.montant).toBeCloseTo(1060.75)
+    expect(l.lignes[0]!.pastilles!.map((p) => [p.type, p.montant])).toEqual([
+      ['operation', 1183.16], ['operation', 211.62], ['interets', 329.49], ['assurance', 4.54]])
+    const g = detailHorsCapital([{ nom: 'Frais › Emprunt', court: 'Emprunt', total: 1394.78, operations: o.transactions }], fixes.id, c)
+    expect(g.groupes[0]!.total).toBeCloseTo(334.03)
+    expect(g.touches.get('Frais › Emprunt')).toEqual({ reims: true })
+  })
 
   it('retire le capital de la ligne qui porte le prélèvement, borné au montant débité', () => {
     const c = capitalDuMois({ ...base, mois: '2026-10' })

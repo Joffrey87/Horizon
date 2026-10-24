@@ -3,11 +3,12 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
-import { aplatirGroupes, detailLigne, euros, grouperParIntitule, hierarchieDetail, nomLisible, type GroupeCategorie, type GroupeIntitules } from '../../lib/finances'
+import { aplatirGroupes, detailHorsCapital, detailLigne, euros, grouperParIntitule, hierarchieDetail, nomLisible, type GroupeCategorie, type GroupeIntitules } from '../../lib/finances'
 import type { FinTransaction } from '../../lib/types'
 import { ProgressBar } from '../../components/ui'
 import { LigneOperation } from './partage'
 import { dateCourte, useFin, useIndex, useReconnaissance } from './contexte'
+import { useTuilesMois } from './tuilesMois'
 
 /** Niveau de détail d'une catégorie : fermée, ses groupes d'intitulés, ou toutes ses opérations. */
 export type Niveau = 0 | 1 | 2
@@ -150,8 +151,22 @@ export function DetailLigneLecture({ cle, couleur, barres = false }: { cle: stri
   const { mois, filtre } = useFin()
   const transactions = useHorizon((s) => s.finTransactions)
   const idx = useIndex()
-  const groupes = useMemo(() => detailLigne({ cle, mois, transactions, idx, filtre }), [cle, mois, transactions, idx, filtre])
+  // Même chiffre que la tuile : le capital des prêts est retiré (il est compté dans l'Épargné).
+  const { capitalMois } = useTuilesMois()
+  const { groupes, touches } = useMemo(() => detailHorsCapital(detailLigne({ cle, mois, transactions, idx, filtre }), cle, capitalMois),
+    [cle, mois, transactions, idx, filtre, capitalMois])
   const noeuds = useMemo(() => hierarchieDetail(groupes), [groupes])
+  /** Pastilles sous une catégorie qui porte un prélèvement d'emprunt : la part restante, et où est l'opération. */
+  const pastilles = (nomComplet: string) => {
+    const t = touches.get(nomComplet)
+    if (!t) return null
+    return (
+      <div data-testid="pastilles-pret" className="flex flex-wrap gap-1 pb-1 pl-4">
+        <span className="rounded-full bg-[#c9b48a]/15 px-2 text-[10.5px] leading-4 text-[#d8c7a3]">{t.reims ? 'intérêts · prêt Reims' : 'intérêts · assurance'}</span>
+        <span className="rounded-full bg-[#c9b48a]/15 px-2 text-[10.5px] leading-4 text-[#d8c7a3]">opération dans Épargné</span>
+      </div>
+    )
+  }
   const [ouvert, setOuvert] = useState<string | null>(null)
   if (!noeuds.length) return <p className="py-2 text-xs text-ink-3">Aucune dépense ce mois-ci</p>
   const total = noeuds.reduce((s, n) => s + n.total, 0)
@@ -190,6 +205,7 @@ export function DetailLigneLecture({ cle, couleur, barres = false }: { cle: stri
                 {part(n.total, total)}
                 <span className="w-16 text-right font-medium tabular-nums">{euros(n.total)}</span>
               </>, opsDe(groupes, n.nom, null), n.nom, 'py-1.5 text-sm')}
+          {!n.enfants.length && pastilles(n.nom)}
           {n.enfants.map((e) => (
             <div key={e.nom}>
               {ligne(n.nom + '\u0000' + e.nom, <>
@@ -197,6 +213,7 @@ export function DetailLigneLecture({ cle, couleur, barres = false }: { cle: stri
                 {part(e.total, total)}
                 <span className="w-16 text-right tabular-nums">{euros(e.total)}</span>
               </>, opsDe(groupes, n.nom, e.nom), e.nom, 'py-1 pl-4 text-[13px] text-ink-2', 'detail-sous-categorie')}
+              {pastilles(e.nom === 'Autres' ? n.nom : `${n.nom} › ${e.nom}`)}
             </div>
           ))}
         </li>
