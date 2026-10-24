@@ -98,7 +98,8 @@ export function Shell({ children }: { children: ReactNode }) {
   // Agenda (téléphone) : le « + » quitte le coin de l'écran et rejoint la ligne du haut, à côté du caddie.
   // Téléphone seulement : sur ordinateur, le « + » reste en bas à droite comme avant.
   const telephone = useMediaQuery('(max-width: 767px)')
-  const plusEnHaut = !vue && telephone && pathname.startsWith('/temps')
+  // Téléphone : le « + » vit dans la barre de raccourcis du bas.
+  const plusEnHaut = false
   const pleineLargeur = pathname === ROUTE_ACCUEIL || pathname.startsWith('/temps')
 
   useEffect(() => {
@@ -285,7 +286,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </div>
 
       {/* ---- Capture rapide : toujours accessible, ne casse pas le focus (pas en vue partagée) ---- */}
-      {!vue && !plusEnHaut && pathname !== '/finances' && (
+      {!vue && !plusEnHaut && !telephone && pathname !== '/finances' && (
         <button onClick={() => setCapture(true)} title="Ajouter (tâche, idée, achat, rappel, courses)" aria-label="Ajouter"
           className={`btn-sun fixed bottom-6 right-6 max-md:bottom-[calc(76px+env(safe-area-inset-bottom))] z-40 flex h-13 w-13 items-center justify-center rounded-full p-3.5 shadow-lg shadow-black/40 ${
             // Agenda (ordinateur) : plus petit et plus bas, à côté du volet de notes, pour ne pas couvrir la marge des mois.
@@ -295,7 +296,7 @@ export function Shell({ children }: { children: ReactNode }) {
       )}
 
       {/* Téléphone : barre de raccourcis en bas, sur tous les onglets (pas en vue partagée). */}
-      {telephone && !vue && <BarreRaccourcis pathname={pathname} />}
+      {telephone && !vue && <BarreRaccourcis pathname={pathname} onPlus={() => setCapture(true)} />}
       <QuickAdd open={capture} onClose={() => setCapture(false)} />
     </div>
   )
@@ -317,7 +318,7 @@ const RACCOURCIS = [
 ]
 
 /** Téléphone : capsule flottante en bas ; l'onglet actif dans un rond ambre. */
-function BarreRaccourcis({ pathname }: { pathname: string }) {
+function BarreRaccourcis({ pathname, onPlus }: { pathname: string; onPlus: () => void }) {
   return (
     <nav aria-label="Raccourcis" className="fixed inset-x-0 bottom-0 z-40 px-3"
       style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}>
@@ -331,6 +332,10 @@ function BarreRaccourcis({ pathname }: { pathname: string }) {
             </Link>
           )
         })}
+        <button onClick={onPlus} aria-label="Ajouter" title="Ajouter (tâche, idée, achat, rappel, courses)"
+          className="btn-sun flex h-10 w-10 items-center justify-center rounded-full p-0">
+          <Plus size={18} strokeWidth={2.4} />
+        </button>
       </div>
     </nav>
   )
