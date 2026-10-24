@@ -153,7 +153,7 @@ export function DetailLigneLecture({ cle, couleur, barres = false }: { cle: stri
   const idx = useIndex()
   // Même chiffre que la tuile : le capital des prêts est retiré (il est compté dans l'Épargné).
   const { capitalMois } = useTuilesMois()
-  const { groupes, touches } = useMemo(() => detailHorsCapital(detailLigne({ cle, mois, transactions, idx, filtre }), cle, capitalMois),
+  const { groupes } = useMemo(() => detailHorsCapital(detailLigne({ cle, mois, transactions, idx, filtre }), cle, capitalMois),
     [cle, mois, transactions, idx, filtre, capitalMois])
   const noeuds = useMemo(() => hierarchieDetail(groupes), [groupes])
   /** Pastilles sous une catégorie qui porte un prélèvement d'emprunt : la part restante, et où est l'opération. */

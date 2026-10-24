@@ -821,15 +821,23 @@ export function normaliserLibelle(s: string): string {
 /** Reconnaît les intitulés : l'intitulé propre à l'opération, sinon la règle dont le
  *  motif est EXACTEMENT l'intitulé nettoyé (jamais « contient » : « reims » ne doit pas
  *  rebaptiser « CRF REIMS », « LAV REIMS »…), sinon rien (null). */
+/** Règle intégrée : deux contrats Engie partagent le même mandat, seul le jour
+ *  du prélèvement les distingue (Taissy vers le 18, Reims vers le 28). Débits seulement. */
+export function libelleEngie(tx: Pick<FinTransaction, 'label' | 'amount' | 'date'>): string | null {
+  if (Number(tx.amount) >= 0 || !/\bengie\b/.test(normaliserLibelle(tx.label))) return null
+  const jour = Number(tx.date.slice(8, 10))
+  return jour >= 22 ? 'Engie Reims Gaz&Electricité' : 'Engie Taissy Electricité'
+}
+
 export function creerReconnaissance(regles: FinLabel[]) {
   const parMotif = new Map(regles.filter((r) => r.pattern.trim()).map((r) => [r.pattern.trim(), r]))
   const regleDe = (label: string): FinLabel | null => parMotif.get(normaliserLibelle(label)) ?? null
   return {
     regleDe,
     /** Ce qu'on affiche pour une opération. */
-    libelle: (tx: FinTransaction): string => tx.label_local?.trim() || regleDe(tx.label)?.label || tx.label,
+    libelle: (tx: FinTransaction): string => tx.label_local?.trim() || regleDe(tx.label)?.label || libelleEngie(tx) || tx.label,
     /** Vrai si l'opération a un intitulé local (propre ou par règle). */
-    estLocal: (tx: FinTransaction): boolean => !!tx.label_local?.trim() || !!regleDe(tx.label),
+    estLocal: (tx: FinTransaction): boolean => !!tx.label_local?.trim() || !!regleDe(tx.label) || !!libelleEngie(tx),
   }
 }
 

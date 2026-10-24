@@ -756,3 +756,22 @@ describe('hierarchieDetail (détail en lecture seule du Résumé)', () => {
     expect(hierarchieDetail([g('Vacances', 383)])).toEqual([{ nom: 'Vacances', total: 383, enfants: [] }])
   })
 })
+
+describe('libellé Engie par jour', () => {
+  const op = (date: string, amount: string, label = 'ENGIE S.A. Mandat 00S011613352 RUM 00S011613352', label_local: string | null = null) =>
+    ({ id: date + amount, label, amount, date, label_local }) as unknown as FinTransaction
+  const reco = creerReconnaissance([])
+  it('18 → Taissy, 28 → Reims, ENGIE nu inclus', () => {
+    expect(reco.libelle(op('2026-09-18', '-163.01'))).toBe('Engie Taissy Electricité')
+    expect(reco.libelle(op('2026-09-28', '-152.36'))).toBe('Engie Reims Gaz&Electricité')
+    expect(reco.libelle(op('2026-10-19', '-218.69', 'ENGIE'))).toBe('Engie Taissy Electricité')
+  })
+  it('crédit inchangé, label_local prioritaire', () => {
+    expect(reco.libelle(op('2025-12-19', '124.04', 'ENGIE S.A. D000'))).toBe('ENGIE S.A. D000')
+    expect(reco.libelle(op('2026-09-28', '-152.36', 'ENGIE', 'Autre'))).toBe('Autre')
+  })
+  it('deux groupes distincts', () => {
+    const g = grouperParIntitule([op('2026-09-18', '-163.01'), op('2026-09-28', '-152.36')], [], (tx) => (reco.estLocal(tx) ? reco.libelle(tx) : null))
+    expect(g.length).toBe(2)
+  })
+})
