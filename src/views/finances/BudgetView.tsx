@@ -119,7 +119,7 @@ export function BudgetView() {
             </div>
           </td>
           {sansObjectif ? (
-            <td className="w-52 px-2">
+            <td className="w-6 px-0">
               {estFraisFixe(l.ligne?.name) && aBudget && <AnneauRemplissage ratio={l.reel / l.budget!} depasse={depasse} />}
             </td>
           ) : <td className="w-52 px-2">
@@ -134,7 +134,7 @@ export function BudgetView() {
               )}
             </div>
           </td>}
-          {sansObjectif ? <td className="px-2 text-right tabular-nums text-ink-2" data-testid="depense-ligne">{euros(l.reel)}</td> :
+          {sansObjectif ? <td className="whitespace-nowrap pl-1 pr-2 text-right tabular-nums text-ink-2" data-testid="depense-ligne">{euros(l.reel)}</td> :
           <td className={`px-2 text-right tabular-nums ${depasse ? 'text-[#eda145]' : 'text-ink-2'}`}>
             {ecart !== null ? (depasse ? `+${euros(-ecart)} au-delà` : euros(ecart))
               : l.ligne && foyer && l.reel > 0 ? <span className="text-xs text-ink-3">sans budget</span> : '—'}
@@ -222,11 +222,11 @@ export function BudgetView() {
           {detailTuile === 'epargne' && <DetailEpargne liste={listeEp} />}
 
           <div className="card overflow-x-auto p-4">
-            <table className="w-full min-w-[640px] text-sm">
+            <table className={`w-full text-sm ${sansObjectif ? '' : 'min-w-[640px]'}`}>
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wider text-ink-3">
                   <th className="pb-2 pr-2 font-medium" aria-label="Ligne" />
-                  <th className="px-2 pb-2 font-medium">{sansObjectif ? '' : 'Réel / budget'}</th>
+                  <th className={`pb-2 font-medium ${sansObjectif ? 'w-6 px-0' : 'px-2'}`}>{sansObjectif ? '' : 'Réel / budget'}</th>
                   <th className="px-2 pb-2 text-right font-medium">{sansObjectif ? 'Dépensé' : 'Reste'}</th>
                   <th className="px-2 pb-2 text-right font-medium">Moy. 3 mois</th>
                   <th className="px-2 pb-2 text-right font-medium">
@@ -259,8 +259,8 @@ export function BudgetView() {
                   <tr className="text-xs text-ink-3" title={prevues.sources.map((x) => `${x.nom} : ${euros(x.montant)} au plus bas, ${euros(x.moyenne)} en moyenne`).join('\n')}>
                     {/* Même format que les sous-totaux (« Dépenses »). */}
                     <td className="py-1.5 pr-2 uppercase tracking-wider">Salaire prévu</td>
-                    <td className="px-2 tabular-nums">{euros(aLaCentaine(prevues.montant))}</td>
-                    <td />
+                    {sansObjectif ? <><td /><td className="whitespace-nowrap pl-1 pr-2 text-right tabular-nums">{euros(aLaCentaine(prevues.montant))}</td></>
+                      : <><td className="px-2 tabular-nums">{euros(aLaCentaine(prevues.montant))}</td><td /></>}
                     <td className="px-2 text-right tabular-nums" title="Salaire moyen des 3 derniers mois">{euros(prevues.moyenne)}</td>
                     <td colSpan={2} />
                   </tr>
