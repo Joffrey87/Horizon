@@ -26,6 +26,9 @@ const ICONES: Record<string, LucideIcon> = {
 
 /** Cible mensuelle d'épargne : l'anneau d'« Épargné » est plein à ce montant (plafonné à 100 %, excédent non affiché). */
 export const CIBLE_EPARGNE = 1800
+/** Cibles fixes : l'anneau est plein à ce montant dépensé (tous les mois, objectifs ou non) ; aucun autre chiffre que le dépensé. */
+export const CIBLE_COURSES = 750
+export const CIBLE_VACANCES = 700
 
 /** Anneau de part consommée (plafonnée à 100 % pour le tracé), l'icône du budget au centre. Aucun chiffre dedans. */
 function Anneau({ ratio, couleur, taille, trait = 4, halo = false, sansTrace = false, children }: {
@@ -64,12 +67,13 @@ function CorpsTuile({ t, edition, bureau }: { t: TuileBudget; edition: ReturnTyp
   const ouvrir = edition.peutModifier && t.ligneId ? () => edition.ouvrir({ id: t.ligneId!, name: t.titre }, t.budget) : undefined
   const { mois } = useFin()
   // Mois sans objectif : seulement le dépensé ; Frais fixe garde son anneau, les autres n'en ont pas.
-  const sansObjectif = estMoisSansObjectif(mois)
-  const sansAnneau = sansObjectif && t.cle !== LIGNE_AVEC_ANNEAU
+  const cible = t.cle === 'courses' ? CIBLE_COURSES : null
+  const sansObjectif = estMoisSansObjectif(mois) || cible !== null
+  const sansAnneau = sansObjectif && t.cle !== LIGNE_AVEC_ANNEAU && cible === null
   const negatif = !sansObjectif && t.restant !== null && t.restant < 0
   return (
     <>
-      <Anneau sansTrace={sansAnneau} ratio={sansAnneau ? null : t.ratio} couleur={depasse ? COULEURS_ANNEAU.depasse : clair} taille={bureau ? 36 : 38} trait={bureau ? 2 : 3} halo={bureau}>
+      <Anneau sansTrace={sansAnneau} ratio={sansAnneau ? null : cible ? Math.max(0, t.depense) / cible : t.ratio} couleur={depasse && !cible ? COULEURS_ANNEAU.depasse : clair} taille={bureau ? 36 : 38} trait={bureau ? 2 : 3} halo={bureau}>
         <Icone size={bureau ? 15 : 16} color={clair} strokeWidth={1.8} />
       </Anneau>
       <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
@@ -119,8 +123,8 @@ function TuileBudgetAnneau({ t, edition, ouvert, onBasculer, exclureFF }: {
         <CorpsTuile t={t} edition={edition} bureau={false} />
       </div>
       {ouvert && t.ligneId && (
-        <div className={`${t.cle === 'fraisfixe' ? '' : 'max-h-[45dvh] overflow-y-auto'} rounded-b-[14px] border border-t-0 px-3 py-0.5`} style={{ borderColor: rgba(t.rvb, 0.28), background: 'rgba(33,28,22,.55)' }}>
-          <DetailLigneLecture cle={t.ligneId} couleur={clair} aplat={t.cle === 'fraisfixe'} exclure={t.cle === 'fraisfixe' ? exclureFF : undefined} />
+        <div className={`${t.cle === 'fraisfixe' || t.cle === 'courses' ? '' : 'max-h-[45dvh] overflow-y-auto'} rounded-b-[14px] border border-t-0 px-3 py-0.5`} style={{ borderColor: rgba(t.rvb, 0.28), background: 'rgba(33,28,22,.55)' }}>
+          <DetailLigneLecture cle={t.ligneId} couleur={clair} deplie={t.cle === 'courses'} aplat={t.cle === 'fraisfixe'} exclure={t.cle === 'fraisfixe' ? exclureFF : undefined} />
         </div>
       )}
     </div>
@@ -142,7 +146,7 @@ function LigneVerre({ t, edition, ouvert, onBasculer, exclureFF }: {
         <CorpsTuile t={t} edition={edition} bureau />
       </div>
       {ouvert && t.ligneId && (
-        <div className={`${t.cle === 'fraisfixe' ? '' : 'max-h-[45dvh] overflow-y-auto'} pb-2`}><DetailLigneLecture cle={t.ligneId} couleur={clair} aplat={t.cle === 'fraisfixe'} exclure={t.cle === 'fraisfixe' ? exclureFF : undefined} /></div>
+        <div className={`${t.cle === 'fraisfixe' || t.cle === 'courses' ? '' : 'max-h-[45dvh] overflow-y-auto'} pb-2`}><DetailLigneLecture cle={t.ligneId} couleur={clair} deplie={t.cle === 'courses'} aplat={t.cle === 'fraisfixe'} exclure={t.cle === 'fraisfixe' ? exclureFF : undefined} /></div>
       )}
     </div>
   )
@@ -362,7 +366,7 @@ export function ResumeView() {
           <b className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[19px]' : 'text-[16px]'}`}>{euros(vac.depense)}</b></div>
       </div>
     )
-    const ligneVac = vac && ligneMaison('vacances', vacRvb, corpsMaison(Plane, eclaircie(vacRvb, 0.24), 'Vacances', 0, deuxCol), ouvertes.has('vacances'), () => basculerTuile('vacances'),
+    const ligneVac = vac && ligneMaison('vacances', vacRvb, corpsMaison(Plane, eclaircie(vacRvb, 0.24), 'Vacances', 0, deuxCol, Math.max(0, vac.depense) / CIBLE_VACANCES), ouvertes.has('vacances'), () => basculerTuile('vacances'),
       vac.ligneId ? <div className="w-full px-2"><DetailLigneLecture cle={vac.ligneId} couleur={eclaircie(vacRvb, 0.24)} /></div> : null)
     const bloc1: ReactNode[] = [ffTot && rendu(ffTot), ligneEpargne, ligneEpDep, ligneVac, courses && rendu(courses)]
     const ordre2 = ['courantes', 'exceptionnelles', 'amenagement'].map(par).filter(Boolean) as TuileBudget[]

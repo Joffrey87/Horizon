@@ -3,7 +3,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
-import { categoriesParLigne, categorieEffective, aplatirGroupes, detailHorsCapital, detailLigne, euros, grouperParIntitule, hierarchieDetail, nomLisible, titulaireDe, type GroupeCategorie, type GroupeIntitules } from '../../lib/finances'
+import { categoriesParLigne, categorieEffective, aplatirGroupes, detailHorsCapital, detailLigne, euros, grouperParIntitule, hierarchieDetail, nomPropres, nomLisible, titulaireDe, type GroupeCategorie, type GroupeIntitules } from '../../lib/finances'
 import type { FinTransaction } from '../../lib/types'
 import { cleCommercant, clesDuGroupe, planAlias, planRegrouper, planSeparer, type Ecriture } from '../../lib/editionGroupes'
 import { ProgressBar } from '../../components/ui'
@@ -93,7 +93,7 @@ export function DetailLigne({ cle, niveauTous = 0 }: { cle: string; niveauTous?:
 
 /** Opérations d'un nœud (sous-catégorie, « Autres » = opérations propres du parent, ou catégorie seule). */
 function opsDe(groupes: GroupeCategorie[], parent: string, enfant: string | null): FinTransaction[] {
-  if (enfant === null || enfant === 'Autres') return groupes.find((g) => g.nom === parent)?.operations ?? []
+  if (enfant === null || enfant === nomPropres(parent)) return groupes.find((g) => g.nom === parent)?.operations ?? []
   return groupes.find((g) => g.nom === `${parent} › ${enfant}`)?.operations ?? []
 }
 
@@ -176,7 +176,7 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
       <ul className="max-h-32 overflow-y-auto">
         {autres.map((g) => (
           <li key={g.cle}>
-            <button onClick={() => setCible(g.cle)} aria-pressed={cible === g.cle}
+            <button onClick={() => { setCible(g.cle); setNom(g.nom) }} aria-pressed={cible === g.cle}
               className={`flex w-full items-baseline justify-between rounded px-1.5 py-1 text-left text-[12px] ${cible === g.cle ? 'bg-[#eda145]/10 text-[#eda145]' : 'text-ink-2'}`}>
               <span className="min-w-0 truncate">{g.nom}</span>
               <span className="shrink-0 tabular-nums text-ink-3">{euros(g.total)}</span>
@@ -205,7 +205,7 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
         <button disabled={envoi} onClick={() => void renommer()} className={BTN_OK}>Renommer</button>
         {sel.type === 'op' && <button onClick={() => setChoixCat(true)} className={BTN_NEUTRE}>Catégorie</button>}
         {site && <button onClick={() => setConso(!conso)} aria-pressed={conso} className={BTN_NEUTRE}>Consommation</button>}
-        {autres.length > 0 && <button onClick={() => { setNom(groupe.nom); setFusion(true) }} className={BTN_NEUTRE}>Regrouper avec…</button>}
+        {autres.length > 0 && <button onClick={() => { const c = autres.find((g) => g.cle === cible) ?? autres[0]; if (c) { setCible(c.cle); setNom(c.nom) } setFusion(true) }} className={BTN_NEUTRE}>Regrouper avec…</button>}
         {sel.type === 'groupe' && groupe.manuel && (
           <button disabled={envoi} onClick={() => void separer()} className={`${BTN} border-[#eda145]/70 text-[#eda145]`}>Séparer</button>)}
       </div>
@@ -298,7 +298,7 @@ function MarchandsLecture({ operations, nomCategorie }: { operations: FinTransac
  * Toucher une sous-catégorie (ou une catégorie sans sous-catégorie) montre ses opérations, regroupées par marchand.
  * Catégories et montants en lecture seule, sans barre ; intitulés et regroupements modifiables.
  */
-export function DetailLigneLecture({ cle, couleur, barres = false, aplat = false, exclure }: { cle: string; couleur: string; barres?: boolean; aplat?: boolean; exclure?: Set<string> }) {
+export function DetailLigneLecture({ cle, couleur, barres = false, aplat = false, deplie = false, exclure }: { cle: string; couleur: string; barres?: boolean; aplat?: boolean; deplie?: boolean; exclure?: Set<string> }) {
   const { mois, filtre } = useFin()
   const toutes = useHorizon((s) => s.finTransactions)
   const transactions = useMemo(() => exclure?.size ? toutes.filter((t) => !exclure.has(t.id)) : toutes, [toutes, exclure])
@@ -322,6 +322,8 @@ export function DetailLigneLecture({ cle, couleur, barres = false, aplat = false
     return null
   }
   const [ouvert, setOuvert] = useState<string | null>(null)
+  // Déplié (Courses) : tout est ouvert d'emblée ; toucher une ligne la replie (ou la rouvre).
+  const [replies, setReplies] = useState<Set<string>>(() => new Set())
   if (!noeuds.length) return <p className="py-2 text-xs text-ink-3">Aucune dépense ce mois-ci</p>
   // Une seule catégorie (Vacances…) : pas d'étage inutile, les opérations directement ;
   // si elle a plusieurs sous-catégories, ce sont elles qui deviennent le premier niveau.
@@ -334,10 +336,13 @@ export function DetailLigneLecture({ cle, couleur, barres = false, aplat = false
   ) : barres ? <span className="w-14 sm:w-24" /> : null
 
   const ligne = (k: string, contenu: ReactNode, ops: FinTransaction[], nomCat: string, cls: string, testid?: string) => {
-    const estOuvert = ouvert === k
+    const estOuvert = deplie ? !replies.has(k) : ouvert === k
+    const basculer = () => deplie
+      ? setReplies((r) => { const n = new Set(r); if (n.has(k)) n.delete(k); else n.add(k); return n })
+      : setOuvert(estOuvert ? null : k)
     return (
       <>
-        <button data-testid={testid} onClick={() => setOuvert(estOuvert ? null : k)} aria-expanded={estOuvert}
+        <button data-testid={testid} onClick={basculer} aria-expanded={estOuvert}
           className={`flex w-full items-center gap-3 text-left ${cls} ${estOuvert ? 'text-ink' : ''}`}>
           {contenu}
         </button>
@@ -381,7 +386,7 @@ export function DetailLigneLecture({ cle, couleur, barres = false, aplat = false
                 {part(e.total, total)}
                 <span className="w-16 text-right tabular-nums">{euros(e.total)}</span>
               </>, opsDe(groupes, n.nom, e.nom), e.nom, 'py-1 pl-4 text-[13px] text-ink-2', 'detail-sous-categorie')}
-              {pastilles(e.nom === 'Autres' ? n.nom : `${n.nom} › ${e.nom}`)}
+              {pastilles(e.nom === nomPropres(n.nom) ? n.nom : `${n.nom} › ${e.nom}`)}
             </div>
           ))}
         </li>

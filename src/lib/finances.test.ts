@@ -6,7 +6,7 @@ import type { FinAccount, FinBudget, FinEcheance, FinLoan, FinCategory, FinHoldi
 import {
   estEnAttente, NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, capitalRembourse, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, operationsRecentes, segmentsSurlignes, categoriesParLigne, ligneDeCategorie, budgetDe, budgetAjuste, ecrituresBudgetMois, estEpargneComptee, fondLigne, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
   libelleMois, moisEcoules, patrimoine, previsionDe, provision, syntheseMois,
-  agregerHorsCapital, hierarchieDetail, detailHorsCapital, NOM_PRET_REIMS, capitalDuMois, epargnesPrevues, listeEpargnes,
+  agregerHorsCapital, hierarchieDetail, nomPropres, detailHorsCapital, NOM_PRET_REIMS, capitalDuMois, epargnesPrevues, listeEpargnes,
 } from './finances'
 
 let seq = 0
@@ -747,6 +747,8 @@ describe('hierarchieDetail (détail en lecture seule du Résumé)', () => {
     const r = hierarchieDetail([g('Maison', 50), g('Maison › Travaux', 100)])
     expect(r[0]!.total).toBe(150)
     expect(r[0]!.enfants).toEqual([{ nom: 'Travaux', total: 100 }, { nom: 'Autres', total: 50 }])
+    expect(nomPropres('Courses')).toBe('Supermarché')
+    expect(nomPropres('Logement')).toBe('Autres')
   })
   it('une catégorie seule reste une ligne simple', () => {
     expect(hierarchieDetail([g('Vacances', 383)])).toEqual([{ nom: 'Vacances', total: 383, enfants: [] }])

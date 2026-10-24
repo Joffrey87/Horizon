@@ -798,6 +798,9 @@ export interface NoeudCategorie {
  * Les groupes « Parent › Enfant » se rangent sous Parent, dont la somme est celle de tous ses enfants (et de ses
  * propres opérations s'il en a). Une catégorie sans sous-catégorie reste une ligne simple. Tri par somme décroissante.
  */
+/** Libellé des opérations rangées directement dans un parent qui a des sous-catégories (« Supermarché » pour Courses). */
+export const nomPropres = (parent: string) => (parent.trim().toLowerCase() === 'courses' ? 'Supermarché' : 'Autres')
+
 export function hierarchieDetail(groupes: GroupeCategorie[]): NoeudCategorie[] {
   const parents = new Map<string, { total: number; propre: number; enfants: { nom: string; total: number }[] }>()
   for (const g of groupes) {
@@ -812,7 +815,7 @@ export function hierarchieDetail(groupes: GroupeCategorie[]): NoeudCategorie[] {
   return [...parents.entries()].map(([nom, n]) => {
     const enfants = [...n.enfants]
     // Opérations rangées directement dans la catégorie parente, à côté de ses sous-catégories.
-    if (enfants.length && Math.abs(n.propre) > 0.005) enfants.push({ nom: 'Autres', total: n.propre })
+    if (enfants.length && Math.abs(n.propre) > 0.005) enfants.push({ nom: nomPropres(nom), total: n.propre })
     return { nom, total: n.total, enfants: enfants.sort((a, b) => b.total - a.total) }
   }).sort((a, b) => b.total - a.total)
 }
