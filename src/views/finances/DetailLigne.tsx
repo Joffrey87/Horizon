@@ -3,11 +3,12 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
-import { categoriesParLigne, categorieEffective, aplatirGroupes, detailHorsCapital, detailLigne, euros, grouperParIntitule, hierarchieDetail, nomLisible, type GroupeCategorie, type GroupeIntitules } from '../../lib/finances'
+import { categoriesParLigne, categorieEffective, aplatirGroupes, detailHorsCapital, detailLigne, euros, grouperParIntitule, hierarchieDetail, nomLisible, titulaireDe, type GroupeCategorie, type GroupeIntitules } from '../../lib/finances'
 import type { FinTransaction } from '../../lib/types'
 import { cleCommercant, clesDuGroupe, planAlias, planRegrouper, planSeparer, type Ecriture } from '../../lib/editionGroupes'
 import { ProgressBar } from '../../components/ui'
 import { LigneOperation } from './partage'
+import { IconeCompte } from './IconeCompte'
 import { dateCourte, useFin, useIndex, useReconnaissance } from './contexte'
 import { useTuilesMois } from './tuilesMois'
 
@@ -212,6 +213,7 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
 function MarchandsLecture({ operations, nomCategorie }: { operations: FinTransaction[]; nomCategorie: string }) {
   const regles = useHorizon((s) => s.finGroups)
   const reco = useReconnaissance()
+  const idx = useIndex()
   const [ouverts, setOuverts] = useState<Set<string>>(new Set())
   const [sel, setSel] = useState<Selection | null>(null)
   const nom = (tx: FinTransaction) => (reco.estLocal(tx) ? reco.libelle(tx) : nomLisible(tx.label)) || '(sans libellé)'
@@ -241,6 +243,7 @@ function MarchandsLecture({ operations, nomCategorie }: { operations: FinTransac
               <button data-testid="souscat-op" onClick={() => choisir({ type: 'op', tx, groupe: g.cle })}
                 className={`flex w-full items-baseline gap-3 py-1 text-left text-[12px] ${actif ? 'text-[#eda145]' : 'text-ink-2'}`}>
                 <span className={`w-11 shrink-0 tabular-nums ${actif ? '' : 'text-ink-3'}`}>{dateCourte(tx.date)}</span>
+                <IconeCompte tx={tx} idx={idx} />
                 <span className="min-w-0 flex-1 truncate">{nom(tx)}</span>
                 {m(-Number(tx.amount))}
               </button>
@@ -255,6 +258,8 @@ function MarchandsLecture({ operations, nomCategorie }: { operations: FinTransac
               <button data-testid="souscat-groupe" onClick={() => bascule(g.cle)} aria-expanded={ouvert} className="w-11 shrink-0 text-left text-ink-3">
                 {ouvert ? <ChevronDown size={12} className="inline" /> : <ChevronRight size={12} className="inline" />}
               </button>
+              {g.operations.every((o) => o.account_id === g.operations[0]!.account_id && titulaireDe(o, idx) === titulaireDe(g.operations[0]!, idx))
+                ? <IconeCompte tx={g.operations[0]!} idx={idx} /> : <span className="w-[18px] shrink-0" />}
               <button data-testid="souscat-groupe-nom" onClick={() => (ouvert ? choisir({ type: 'groupe', groupe: g.cle }) : bascule(g.cle))}
                 className={`min-w-0 flex-1 truncate text-left ${sel?.type === 'groupe' && sel.groupe === g.cle ? 'text-[#eda145]' : ''}`}>
                 {g.nom}

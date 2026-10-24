@@ -9,6 +9,7 @@ import { categorieEffective, euros, nomCategorie, operationsRecentes, segmentsSu
 import type { FinTransaction } from '../../lib/types'
 import { dateCourte, useFin, useIndex, useReconnaissance } from './contexte'
 import { EditionOperation } from './DetailLigne'
+import { IconeCompte } from './IconeCompte'
 
 const PAQUET = 50
 const VERT = '#4cc79a'
@@ -82,6 +83,7 @@ export function DernieresOperations({ onClose, bureau }: { onClose: () => void; 
                     <li key={tx.id} className="border-t border-white/[.05] first:border-t-0">
                       <button data-testid="op-recente" onClick={() => setSel(actif ? null : tx.id)}
                         className={`flex w-full items-baseline gap-2 py-1.5 text-left text-[12.5px] ${actif ? 'text-[#eda145]' : 'text-ink-2'}`}>
+                        <IconeCompte tx={tx} idx={idx} />
                         <span className="min-w-0 flex-1 truncate" title={tx.label}>
                           <Surligne texte={reco.libelle(tx) || '(sans libellé)'} requete={requete} />
                         </span>

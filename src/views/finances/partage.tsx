@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, EyeOff, Eye } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import { TITULAIRES, categorieEffective, nomCategorie, normaliserLibelle, operationsSemblables, decaleMois, estEnAttente, euros, libelleMois, type FiltreTitulaire, type IndexFinances } from '../../lib/finances'
 import type { FinOwner, FinTransaction } from '../../lib/types'
+import { IconeCompte } from './IconeCompte'
 import { Modal, Seg } from '../../components/ui'
 import { dateCourte, dateLongue, moisCourant, useArbreCategories, useReconnaissance, useVue } from './contexte'
 
@@ -142,6 +143,7 @@ export function LigneOperation({ tx, idx, montrerDate = true }: { tx: FinTransac
     <li className={`flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-sm sm:flex-nowrap ${tx.excluded ? 'opacity-50' : ''}`}>
       {montrerDate && <span className="w-14 shrink-0 text-xs tabular-nums text-ink-3">{dateCourte(tx.date)}</span>}
       {/* Intitulé local s'il existe (sinon bancaire, en plus pâle), raccourci ; le reste au survol, l'édition au clic. */}
+      <IconeCompte tx={tx} idx={idx} />
       <button onClick={() => { if (rangeable) setEdition(true) }} className="w-40 min-w-0 shrink-0 text-left sm:w-52"
         title={`${local ? `${reco.libelle(tx)}\nIntitulé bancaire : ` : ''}${tx.label}\n${compte?.name ?? ''}${tx.internal ? ' · virement interne' : ''}${tx.category_manual ? ' · classée à la main' : ''}\nCliquer pour choisir l’intitulé affiché`}>
         <span className={`block truncate decoration-dotted underline-offset-4 hover:underline ${local ? '' : 'text-ink-2'}`}>
