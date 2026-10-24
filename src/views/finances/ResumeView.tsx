@@ -186,10 +186,13 @@ export function ResumeView() {
       </p>
     </button>
   )
+  const basculerEpargne = () => setDetail(detail === 'epargne' ? null : 'epargne')
+  // Tuile Épargné : un div cliquable (et non un bouton) pour pouvoir y loger la ligne « Utilisée », elle-même un bouton.
   const epargneBtn = (
-    <button type="button" data-testid="tuile-epargne" aria-expanded={detail === 'epargne'}
-      onClick={() => setDetail(detail === 'epargne' ? null : 'epargne')} title="Voir les épargnes du mois"
-      className={`${bureau ? 'verre verre-tuile !py-2' : 'card px-3 py-2'} text-left`}>
+    <div role="button" tabIndex={0} data-testid="tuile-epargne" aria-expanded={detail === 'epargne'}
+      onClick={basculerEpargne} onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); basculerEpargne() } }}
+      title="Voir les épargnes du mois"
+      className={`${bureau ? 'verre verre-tuile !py-2' : 'card px-3 py-2'} cursor-pointer text-left`}>
       <p className="block-title">Épargné</p>
       <div className="flex items-center gap-2">
         <span data-testid="anneau-epargne" data-ratio={Math.round(Math.min(1, Math.max(0, epargne) / CIBLE_EPARGNE) * 100)}>
@@ -199,20 +202,20 @@ export function ResumeView() {
         </span>
         <p className={`whitespace-nowrap font-bold tabular-nums ${tailleMontant}`} style={{ color: COULEURS_ANNEAU.ok }}>{euros(epargne)}</p>
       </div>
-    </button>
+      {utilisee.total > 0.5 ? (
+        <button type="button" data-testid="tuile-epargne-utilisee" aria-expanded={detail === 'utilisee'}
+          onClick={e => { e.stopPropagation(); setDetail(detail === 'utilisee' ? null : 'utilisee') }}
+          title="Voir les virements depuis l'épargne"
+          className="-mx-1 block rounded px-1 text-left text-[10.5px] leading-snug tabular-nums hover:underline" style={{ color: COULEUR_UTILISEE }}>
+          Utilisée − {euros(utilisee.total)}
+        </button>
+      ) : <p className="text-[10.5px] leading-snug">&nbsp;</p>}
+    </div>
   )
   const loupeBtn = (
     <button type="button" data-testid="tuile-loupe" aria-label="Dernières opérations" onClick={() => setRecents(true)}
       className={`${bureau ? 'verre verre-tuile !px-0 w-14' : 'card w-9'} flex items-center justify-center text-ink-2 hover:text-ink`}>
       <Search size={bureau ? 18 : 16} strokeWidth={2} />
-    </button>
-  )
-  // Petite tuile sous Épargné : l'argent repris de l'épargne ce mois-ci.
-  const utiliseeBtn = utilisee.total > 0.5 && (
-    <button type="button" data-testid="tuile-epargne-utilisee" aria-expanded={detail === 'utilisee'} onClick={() => setDetail(detail === 'utilisee' ? null : 'utilisee')}
-      title="Voir les virements depuis l'épargne" className={`${bureau ? 'verre verre-tuile !py-1' : 'card px-3 py-1'} col-start-2 flex items-baseline justify-between gap-2 text-left`}>
-      <span className="truncate text-[11px] text-ink-3">Utilisée</span>
-      <span className="text-[15px] font-semibold tabular-nums" style={{ color: COULEUR_UTILISEE }}>− {euros(utilisee.total)}</span>
     </button>
   )
   const colonnes = 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]'
@@ -221,7 +224,6 @@ export function ResumeView() {
       {resteBtn}
       {epargneBtn}
       {loupeBtn}
-      {utiliseeBtn}
       {detail === 'reste' && resteTuile !== null && (
         <div className="col-span-full flex justify-center">
           <DetailAuDela lignes={lignesAuDela(depenses, aVenir, epPrevues)} variante={varianteDemo()} />
