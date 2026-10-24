@@ -108,7 +108,7 @@ type Selection = { type: 'op'; tx: FinTransaction; groupe: string } | { type: 'g
 const BTN = 'rounded-full border px-2.5 py-0.5 text-[12px]'
 const BTN_OK = `${BTN} border-[#4cc79a]/70 text-[#4cc79a]`
 const BTN_NEUTRE = `${BTN} border-line-2 text-ink-2`
-const CHAMP = 'mt-1 w-full rounded-md border border-line-2 bg-panel px-2 py-1 text-[13px] text-ink outline-none focus:border-[#c9b48a]'
+const CHAMP = 'mt-0.5 w-full rounded-md border border-line-2 bg-panel px-2 py-1 text-[13px] text-ink outline-none focus:border-[#c9b48a]'
 
 /** Panneau d'édition, dans la boîte sable sous le groupe touché : intitulé (opération)
  *  ou nom (groupe), puis « Regrouper avec… » (choix du groupe et du nom), et Séparer. */
@@ -147,7 +147,11 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
           </li>
         ))}
       </ul>
+      <p className="mt-1.5 text-[10.5px] text-ink-3">Nom du groupe</p>
       <input aria-label="Nom du groupe" value={nom} onChange={(e) => setNom(e.target.value)} className={CHAMP} />
+      {(() => { const autre = autres.find((g) => g.cle === cible); if (!autre) return null
+        const n = groupe.operations.length + autre.operations.length
+        return <p className="mt-1 text-[10.5px] text-ink-3">{n} opération{n > 1 ? 's' : ''} · {euros(groupe.total + autre.total)}</p> })()}
       <div className="mt-2 flex gap-1.5">
         <button disabled={envoi || !cible || !nom.trim()} onClick={() => void regrouper()} className={BTN_OK}>Regrouper</button>
         <button onClick={() => setFusion(false)} className={BTN_NEUTRE}>Annuler</button>
@@ -159,6 +163,7 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
       {sel.type === 'op' && <p className="truncate text-[10.5px] text-ink-3" title={sel.tx.label}>{sel.tx.label}</p>}
       <input aria-label={sel.type === 'op' ? 'Intitulé' : 'Nom du groupe'} value={nom}
         onChange={(e) => setNom(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void renommer() }} className={CHAMP} />
+      {sel.type === 'op' && <p className="mt-1 text-[10.5px] text-ink-3">Pour toutes les opérations {groupe.nom}</p>}
       <div className="mt-2 flex flex-wrap gap-1.5">
         <button disabled={envoi} onClick={() => void renommer()} className={BTN_OK}>Renommer</button>
         {autres.length > 0 && <button onClick={() => { setNom(groupe.nom); setFusion(true) }} className={BTN_NEUTRE}>Regrouper avec…</button>}
