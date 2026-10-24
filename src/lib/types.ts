@@ -743,3 +743,16 @@ export interface Partage {
   temps_taches_masquees: boolean // Temps : évènements seulement
   created_at: string
 }
+
+/** Relevé Engie réel (export « Ma conso »), une période de facturation. */
+export interface FinEnergieConso {
+  id?: UUID
+  site: 'reims' | 'taissy'
+  energie: 'elec' | 'gaz'
+  periode_debut: string
+  periode_fin: string
+  kwh: number | null
+  kwh_hp: number | null
+  kwh_hc: number | null
+  m3: number | null
+}

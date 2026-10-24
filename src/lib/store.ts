@@ -12,7 +12,7 @@ import { ecrituresBudgetMois } from './finances'
 import { ecriturePermise, projetsVisibles, tachesVisibles, vueActive } from './partage'
 import type {
   Birthday, CalendarFeed, CelesteProposal, CelesteRules, Check, Domain, FinAccount, FinBudget, FinCategory, FinDca,
-  FinEcheance, FinGroup, FinMerchantAlias, FinLoan, FinHolding, FinLabel, FinLine, FinNetworth, FinPlanned, FinResteAjustement, FinTarget, FinTransaction, GospelQuiz, Habit, HabitLog, Idea, Layout,
+  FinEcheance, FinGroup, FinMerchantAlias, FinLoan, FinHolding, FinLabel, FinLine, FinNetworth, FinPlanned, FinResteAjustement, FinEnergieConso, FinTarget, FinTransaction, GospelQuiz, Habit, HabitLog, Idea, Layout,
   NewsDigest, NewsKind, NewsTopic, Objective, OlafatcoJob, Partage, Project, PropositionAgenda, Review, Settings, ShoppingItem,
   ShoppingList, Step, Task,
 } from './types'
@@ -78,6 +78,7 @@ interface HorizonState {
   /** Règles d'intitulés locaux (motif → intitulé affiché). */
   finLabels: FinLabel[]
   finResteAjustements: FinResteAjustement[]
+  finEnergie: FinEnergieConso[]
   finGroups: FinGroup[]
   finMerchantAlias: FinMerchantAlias[]
   /** Échéances des prêts dont le capital remboursé compte comme épargné. */
@@ -153,7 +154,7 @@ const LECTURE_SEULE = 'Lecture seule : cette vue partagée ne permet pas de modi
 /** Les vides de l'onglet Finances (état initial et déconnexion). */
 const FIN_VIDE = {
   finLoaded: false, finLines: [], finAccounts: [], finCategories: [], finTransactions: [], finBudgets: [],
-  finNetworth: [], finHoldings: [], finTargets: [], finDca: [], finPlanned: [], finLabels: [], finGroups: [], finMerchantAlias: [], finEcheances: [], finLoans: [], finResteAjustements: [],
+  finNetworth: [], finHoldings: [], finTargets: [], finDca: [], finPlanned: [], finLabels: [], finGroups: [], finMerchantAlias: [], finEcheances: [], finLoans: [], finResteAjustements: [], finEnergie: [],
 }
 
 /** Lit une table en entier : PostgREST plafonne une réponse à 1000 lignes. */
@@ -533,7 +534,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       ['finHoldings', 'fin_holdings', 'value', false], ['finTargets', 'fin_targets', 'asset_class'],
       ['finDca', 'fin_dca', 'sort_order'], ['finPlanned', 'fin_planned', 'due_date'],
       ['finLabels', 'fin_labels', 'pattern'], ['finGroups', 'fin_groups', 'pattern'], ['finMerchantAlias', 'fin_merchant_alias', 'pattern'], ['finEcheances', 'fin_echeances', 'date'], ['finLoans', 'fin_loans', 'created_at'],
-      ['finResteAjustements', 'fin_reste_ajustements', 'created_at'],
+      ['finResteAjustements', 'fin_reste_ajustements', 'created_at'], ['finEnergie', 'fin_energie_conso', 'periode_debut'],
     ]
     const res = await Promise.all(lectures.map(([, table, ordre, croissant]) => toutLire(table, ordre, croissant)))
     const maj: Partial<HorizonState> = {}
@@ -552,7 +553,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       const budget = new Set(get().finAccounts.filter((a) => a.in_budget).map((a) => a.id))
       set({
         finTransactions: get().finTransactions.filter((t) => budget.has(t.account_id)),
-        finHoldings: [], finTargets: [], finDca: [], finPlanned: [],
+        finHoldings: [], finTargets: [], finDca: [], finPlanned: [], finEnergie: [],
       })
     }
     if (echecs.length) set({ error: `Finances : chargement incomplet — ${echecs.join(', ')}.` })

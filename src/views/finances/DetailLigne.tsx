@@ -9,6 +9,8 @@ import { cleCommercant, clesDuGroupe, planAlias, planRegrouper, planSeparer, typ
 import { ProgressBar } from '../../components/ui'
 import { LigneOperation } from './partage'
 import { IconeCompte } from './IconeCompte'
+import { FenetreConso, varianteEnergie } from './ConsoEnergie'
+import { siteEnergie } from '../../lib/energie'
 import { dateCourte, useFin, useIndex, useReconnaissance } from './contexte'
 import { useTuilesMois } from './tuilesMois'
 
@@ -128,7 +130,9 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
   const [nom, setNom] = useState(nomAffiche)
   const [envoi, setEnvoi] = useState(false)
   const [choixCat, setChoixCat] = useState(false)
+  const [conso, setConso] = useState(false)
   const idx = useIndex()
+  const site = sel.type === 'op' ? siteEnergie(nomAffiche, sel.tx.label_local, sel.tx.label) : null
   const lancer = async (f: () => Promise<void>) => { setEnvoi(true); await f(); setEnvoi(false); onClose() }
   const renommer = () => lancer(async () => {
     if (sel.type === 'op') return appliquer('fin_merchant_alias', planAlias([cleCommercant(sel.tx.label)], nom, alias))
@@ -200,10 +204,12 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
       <div className="mt-2 flex flex-wrap gap-1.5">
         <button disabled={envoi} onClick={() => void renommer()} className={BTN_OK}>Renommer</button>
         {sel.type === 'op' && <button onClick={() => setChoixCat(true)} className={BTN_NEUTRE}>Catégorie</button>}
+        {site && <button onClick={() => setConso(!conso)} aria-pressed={conso} className={BTN_NEUTRE}>Consommation</button>}
         {autres.length > 0 && <button onClick={() => { setNom(groupe.nom); setFusion(true) }} className={BTN_NEUTRE}>Regrouper avec…</button>}
         {sel.type === 'groupe' && groupe.manuel && (
           <button disabled={envoi} onClick={() => void separer()} className={`${BTN} border-[#eda145]/70 text-[#eda145]`}>Séparer</button>)}
       </div>
+      {site && conso && <FenetreConso site={site} variante={varianteEnergie()} onClose={() => setConso(false)} />}
     </div>
   )
 }
