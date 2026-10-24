@@ -307,7 +307,15 @@ export function DetailLigneLecture({ cle, couleur, barres = false, aplat = false
   const { capitalMois } = useTuilesMois()
   const { groupes } = useMemo(() => detailHorsCapital(detailLigne({ cle, mois, transactions, idx, filtre }), cle, capitalMois),
     [cle, mois, transactions, idx, filtre, capitalMois])
-  const noeuds = useMemo(() => hierarchieDetail(groupes), [groupes])
+  // À plat (Frais fixe) : la catégorie qui porte le nom de la ligne cède la place à ses sous-catégories, au même niveau
+  // que les autres catégories de la ligne (Impôts & taxes, Frais bancaires…), chacune sur une seule ligne cliquable.
+  const noeuds = useMemo(() => {
+    const h = hierarchieDetail(groupes)
+    if (!aplat) return h
+    return h.flatMap((n) => n.enfants.length > 1 && /^frais fixes?$/i.test(n.nom)
+      ? n.enfants.filter((e) => e.total !== 0).map((e) => ({ ...n, nom: e.nom, total: e.total, enfants: [], _parent: n.nom, _enfant: e.nom }))
+      : [n]).sort((x, y) => y.total - x.total)
+  }, [groupes, aplat])
   /** Pastilles sous une catégorie qui porte un prélèvement d'emprunt : la part restante, et où est l'opération. */
   const pastilles = (nomComplet: string) => {
     void nomComplet
@@ -364,7 +372,7 @@ export function DetailLigneLecture({ cle, couleur, barres = false, aplat = false
                 <span className="min-w-0 flex-1 truncate" title={n.nom}>{n.nom}</span>
                 {part(n.total, total)}
                 <span className="w-16 text-right font-medium tabular-nums">{euros(n.total)}</span>
-              </>, opsNoeud(groupes, n.nom), n.nom, 'py-1.5 text-sm')}
+              </>, '_parent' in n ? opsDe(groupes, n._parent as string, (n as unknown as { _enfant: string })._enfant) : opsNoeud(groupes, n.nom), n.nom, 'py-1.5 text-sm', 'detail-poste')}
           {n.enfants.length <= 1 && pastilles(n.nom)}
           {n.enfants.length > 1 && !aplat && n.enfants.map((e) => (
             <div key={e.nom}>
