@@ -111,9 +111,9 @@ function Ligne({ nom, montant, gras = false, vertSiPositif = true }: { nom: stri
 export function DetailAuDela({ lignes, variante = VARIANTE_AU_DELA }: { lignes: LignesAuDela; variante?: 'A' | 'B' | 'C' }) {
   const { budgets, prevu, total } = lignes
   const titreTotal = total < 0 ? 'Au-delà du budget' : 'Reste'
-  const titre = (t: string, sousTotal?: number) => (
+  const titre = (t: string, sousTotal?: number, droite?: string) => (
     <div className="flex items-baseline justify-between pt-1 text-[10.5px] font-semibold uppercase tracking-[.08em] text-ink-3">
-      <span>{t}</span>{sousTotal !== undefined && <span className="tabular-nums">{signe(sousTotal)}</span>}
+      <span>{t}</span>{sousTotal !== undefined && <span className="tabular-nums">{signe(sousTotal)}</span>}{droite && <span>{droite}</span>}
     </div>
   )
   if (variante === 'B') {
@@ -148,8 +148,11 @@ export function DetailAuDela({ lignes, variante = VARIANTE_AU_DELA }: { lignes: 
   // A : liste simple, titres de section discrets, total souligné.
   return (
     <div data-testid="detail-reste" data-variante="A" className="card mx-auto w-full max-w-md space-y-1 px-4 py-3 text-sm">
-      {titre('Budgets', sommeDe(budgets))}
+      {titre('Budgets', undefined, 'Reste')}
       {budgets.map((d) => <Ligne key={d.nom} {...d} />)}
+      <div data-testid="sous-total-budgets" className="flex justify-end">
+        <span className="border-t border-line/60 pl-6 pt-0.5 text-xs tabular-nums text-ink-3">{signe(sommeDe(budgets))}</span>
+      </div>
       {prevu.length > 0 && <>{titre('Prévu')}{prevu.map((d, i) => <Ligne key={i} {...d} />)}</>}
       <div className="border-t border-line pt-1.5"><Ligne gras nom={titreTotal} montant={total} vertSiPositif={false} /></div>
     </div>
