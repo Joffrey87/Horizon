@@ -158,14 +158,8 @@ export function DetailLigneLecture({ cle, couleur, barres = false }: { cle: stri
   const noeuds = useMemo(() => hierarchieDetail(groupes), [groupes])
   /** Pastilles sous une catégorie qui porte un prélèvement d'emprunt : la part restante, et où est l'opération. */
   const pastilles = (nomComplet: string) => {
-    const t = touches.get(nomComplet)
-    if (!t) return null
-    return (
-      <div data-testid="pastilles-pret" className="flex flex-wrap gap-1 pb-1 pl-4">
-        <span className="rounded-full bg-[#c9b48a]/15 px-2 text-[10.5px] leading-4 text-[#d8c7a3]">{t.reims ? 'intérêts · prêt Reims' : 'intérêts · assurance'}</span>
-        <span className="rounded-full bg-[#c9b48a]/15 px-2 text-[10.5px] leading-4 text-[#d8c7a3]">opération dans Épargné</span>
-      </div>
-    )
+    void nomComplet
+    return null
   }
   const [ouvert, setOuvert] = useState<string | null>(null)
   if (!noeuds.length) return <p className="py-2 text-xs text-ink-3">Aucune dépense ce mois-ci</p>
