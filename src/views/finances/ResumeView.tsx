@@ -8,7 +8,7 @@ import { FiltreSeg, NavMois } from './partage'
 import { DetailAuDela, DetailEpargne, DetailEpargneUtilisee, lignesAuDela } from './DetailsTuiles'
 import { epargneUtilisee } from '../../lib/epargneUtilisee'
 import { useTuilesMois } from './tuilesMois'
-import { useFin, useVue } from './contexte'
+import { useFin } from './contexte'
 import { MontantBudget, useBudgetMois } from './budgetMois'
 import { DetailLigneLecture } from './DetailLigne'
 import { DernieresOperations } from './DernieresOperations'
@@ -145,7 +145,6 @@ const COULEUR_UTILISEE = '#eda145'
 
 export function ResumeView() {
   const { mois, setMois, filtre, setFiltre } = useFin()
-  const vue = useVue()
   const lines = useHorizon((s) => s.finLines)
   const foyer = filtre === 'foyer'
   const [recents, setRecents] = useState(false)
@@ -172,7 +171,7 @@ export function ResumeView() {
   }
 
   const tailleMontant = bureau ? 'text-[24px] leading-tight' : 'text-[21px] leading-tight'
-  const resteBtn = !vue && (
+  const resteBtn = (
     <button type="button" data-testid="tuile-reste" aria-expanded={detail === 'reste'} disabled={!resteValable}
       onClick={() => setDetail(detail === 'reste' ? null : 'reste')} title="Voir le détail du calcul"
       className={`${bureau ? 'verre verre-tuile !py-2' : 'card px-3 py-2'} text-left disabled:cursor-default`}
@@ -209,14 +208,14 @@ export function ResumeView() {
     </button>
   )
   // Petite tuile sous Épargné : l'argent repris de l'épargne ce mois-ci.
-  const utiliseeBtn = !vue && utilisee.total > 0.5 && (
+  const utiliseeBtn = utilisee.total > 0.5 && (
     <button type="button" data-testid="tuile-epargne-utilisee" aria-expanded={detail === 'utilisee'} onClick={() => setDetail(detail === 'utilisee' ? null : 'utilisee')}
       title="Voir les virements depuis l'épargne" className={`${bureau ? 'verre verre-tuile !py-1' : 'card px-3 py-1'} col-start-2 flex items-baseline justify-between gap-2 text-left`}>
       <span className="truncate text-[11px] text-ink-3">Utilisée</span>
       <span className="text-[15px] font-semibold tabular-nums" style={{ color: COULEUR_UTILISEE }}>− {euros(utilisee.total)}</span>
     </button>
   )
-  const colonnes = vue ? 'grid-cols-[minmax(0,1fr)_auto]' : 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]'
+  const colonnes = 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]'
   const hautDeVue = (
     <div className={`grid gap-2.5 ${bureau ? 'gap-3' : ''} ${colonnes}`}>
       {resteBtn}
