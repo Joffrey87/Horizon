@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import { aplatirGroupes, detailHorsCapital, detailLigne, euros, grouperParIntitule, hierarchieDetail, nomLisible, type GroupeCategorie, type GroupeIntitules } from '../../lib/finances'
 import type { FinTransaction } from '../../lib/types'
+import { cleCommercant, clesDuGroupe, planAlias, planRegrouper, planSeparer, type Ecriture } from '../../lib/editionGroupes'
 import { ProgressBar } from '../../components/ui'
 import { LigneOperation } from './partage'
 import { dateCourte, useFin, useIndex, useReconnaissance } from './contexte'
@@ -93,48 +94,149 @@ function opsDe(groupes: GroupeCategorie[], parent: string, enfant: string | null
   return groupes.find((g) => g.nom === `${parent} › ${enfant}`)?.operations ?? []
 }
 
-/** Groupes marchand (lecture seule) : « Carrefour ×6 » repliable, opérations isolées une par une. */
+/** Applique des écritures planifiées (editionGroupes) sur une table. */
+async function appliquer(table: 'fin_groups' | 'fin_merchant_alias', plan: Ecriture[]) {
+  const { insert, update, remove } = useHorizon.getState()
+  for (const e of plan) {
+    if (e.op === 'insert') await insert(table, e.values)
+    else if (e.op === 'update') await update(table, e.id, e.values)
+    else await remove(table, e.id)
+  }
+}
+
+type Selection = { type: 'op'; tx: FinTransaction; groupe: string } | { type: 'groupe'; groupe: string }
+const BTN = 'rounded-full border px-2.5 py-0.5 text-[12px]'
+const BTN_OK = `${BTN} border-[#4cc79a]/70 text-[#4cc79a]`
+const BTN_NEUTRE = `${BTN} border-line-2 text-ink-2`
+const CHAMP = 'mt-1 w-full rounded-md border border-line-2 bg-panel px-2 py-1 text-[13px] text-ink outline-none focus:border-[#c9b48a]'
+
+/** Panneau d'édition, dans la boîte sable sous le groupe touché : intitulé (opération)
+ *  ou nom (groupe), puis « Regrouper avec… » (choix du groupe et du nom), et Séparer. */
+function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
+  sel: Selection; groupe: GroupeIntitules; autres: GroupeIntitules[]; nomAffiche: string; onClose: () => void
+}) {
+  const regles = useHorizon((s) => s.finGroups)
+  const alias = useHorizon((s) => s.finMerchantAlias)
+  const [fusion, setFusion] = useState(false)
+  const [cible, setCible] = useState<string | null>(autres[0]?.cle ?? null)
+  const [nom, setNom] = useState(nomAffiche)
+  const [envoi, setEnvoi] = useState(false)
+  const lancer = async (f: () => Promise<void>) => { setEnvoi(true); await f(); setEnvoi(false); onClose() }
+  const renommer = () => lancer(async () => {
+    if (sel.type === 'op') return appliquer('fin_merchant_alias', planAlias([cleCommercant(sel.tx.label)], nom, alias))
+    if (groupe.manuel) return appliquer('fin_groups', planRegrouper(clesDuGroupe(groupe, regles), nom, regles))
+    return appliquer('fin_merchant_alias', planAlias(groupe.cles, nom, alias))
+  })
+  const regrouper = () => lancer(async () => {
+    const autre = autres.find((g) => g.cle === cible)
+    if (!autre) return
+    await appliquer('fin_groups', planRegrouper([...clesDuGroupe(groupe, regles), ...clesDuGroupe(autre, regles)], nom, regles))
+  })
+  const separer = () => lancer(() => appliquer('fin_groups', planSeparer(clesDuGroupe(groupe, regles), regles)))
+
+  if (fusion) return (
+    <div data-testid="panneau-fusion" className="my-1.5 rounded-lg border border-line-2 bg-panel-2 p-2">
+      <ul className="max-h-32 overflow-y-auto">
+        {autres.map((g) => (
+          <li key={g.cle}>
+            <button onClick={() => setCible(g.cle)} aria-pressed={cible === g.cle}
+              className={`flex w-full items-baseline justify-between rounded px-1.5 py-1 text-left text-[12px] ${cible === g.cle ? 'bg-[#eda145]/10 text-[#eda145]' : 'text-ink-2'}`}>
+              <span className="min-w-0 truncate">{g.nom}</span>
+              <span className="shrink-0 tabular-nums text-ink-3">{euros(g.total)}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <input aria-label="Nom du groupe" value={nom} onChange={(e) => setNom(e.target.value)} className={CHAMP} />
+      <div className="mt-2 flex gap-1.5">
+        <button disabled={envoi || !cible || !nom.trim()} onClick={() => void regrouper()} className={BTN_OK}>Regrouper</button>
+        <button onClick={() => setFusion(false)} className={BTN_NEUTRE}>Annuler</button>
+      </div>
+    </div>
+  )
+  return (
+    <div data-testid="panneau-edition" className="my-1.5 rounded-lg border border-line-2 bg-panel-2 p-2">
+      {sel.type === 'op' && <p className="truncate text-[10.5px] text-ink-3" title={sel.tx.label}>{sel.tx.label}</p>}
+      <input aria-label={sel.type === 'op' ? 'Intitulé' : 'Nom du groupe'} value={nom}
+        onChange={(e) => setNom(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void renommer() }} className={CHAMP} />
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <button disabled={envoi} onClick={() => void renommer()} className={BTN_OK}>Renommer</button>
+        {autres.length > 0 && <button onClick={() => { setNom(groupe.nom); setFusion(true) }} className={BTN_NEUTRE}>Regrouper avec…</button>}
+        {sel.type === 'groupe' && groupe.manuel && (
+          <button disabled={envoi} onClick={() => void separer()} className={`${BTN} border-[#eda145]/70 text-[#eda145]`}>Séparer</button>)}
+      </div>
+    </div>
+  )
+}
+
+/** Groupes marchand : « Carrefour 6 » repliable, opérations isolées une par une.
+ *  Toucher le nom d'un groupe ouvert, ou une opération, ouvre le panneau d'édition. */
 function MarchandsLecture({ operations, nomCategorie }: { operations: FinTransaction[]; nomCategorie: string }) {
   const regles = useHorizon((s) => s.finGroups)
   const reco = useReconnaissance()
   const [ouverts, setOuverts] = useState<Set<string>>(new Set())
+  const [sel, setSel] = useState<Selection | null>(null)
   const nom = (tx: FinTransaction) => (reco.estLocal(tx) ? reco.libelle(tx) : nomLisible(tx.label)) || '(sans libellé)'
   const groupes = useMemo(() => aplatirGroupes(
     grouperParIntitule(operations, regles, (tx) => (reco.estLocal(tx) ? reco.libelle(tx) : null)), nomCategorie),
   [operations, regles, reco, nomCategorie])
-  const bascule = (k: string) => { const s = new Set(ouverts); if (s.has(k)) s.delete(k); else s.add(k); setOuverts(s) }
+  const bascule = (k: string) => {
+    const s = new Set(ouverts)
+    if (s.has(k)) { s.delete(k); if (sel?.groupe === k) setSel(null) } else s.add(k)
+    setOuverts(s)
+  }
+  const choisir = (n: Selection) => setSel(sel && sel.type === n.type && sel.groupe === n.groupe
+    && (n.type === 'groupe' || (sel.type === 'op' && sel.tx.id === n.tx.id)) ? null : n)
   const m = (v: number) => <span className="shrink-0 tabular-nums">{v < 0 ? '+' : ''}{euros(Math.abs(v))}</span>
-  const op = (tx: FinTransaction) => (
-    <li key={tx.id} className="flex items-baseline gap-3 py-1 text-[12px] text-ink-2">
-      <span className="w-11 shrink-0 tabular-nums text-ink-3">{dateCourte(tx.date)}</span>
-      <span className="min-w-0 flex-1 truncate">{nom(tx)}</span>
-      {m(-Number(tx.amount))}
-    </li>
+  const panneau = (g: GroupeIntitules) => sel?.groupe === g.cle && (
+    <PanneauEdition key={sel.type === 'op' ? sel.tx.id : 'g'} sel={sel} groupe={g} onClose={() => setSel(null)}
+      autres={groupes.filter((x) => x.cle !== g.cle)} nomAffiche={sel.type === 'op' ? nom(sel.tx) : g.nom} />
   )
   return (
     <ul className="py-0.5">
       {groupes.map((g) => {
-        if (g.operations.length === 1) return op(g.operations[0]!)
+        if (g.operations.length === 1) {
+          const tx = g.operations[0]!
+          const actif = sel?.type === 'op' && sel.tx.id === tx.id
+          return (
+            <li key={g.cle}>
+              <button data-testid="souscat-op" onClick={() => choisir({ type: 'op', tx, groupe: g.cle })}
+                className={`flex w-full items-baseline gap-3 py-1 text-left text-[12px] ${actif ? 'text-[#eda145]' : 'text-ink-2'}`}>
+                <span className={`w-11 shrink-0 tabular-nums ${actif ? '' : 'text-ink-3'}`}>{dateCourte(tx.date)}</span>
+                <span className="min-w-0 flex-1 truncate">{nom(tx)}</span>
+                {m(-Number(tx.amount))}
+              </button>
+              {panneau(g)}
+            </li>
+          )
+        }
         const ouvert = ouverts.has(g.cle)
         return (
           <li key={g.cle}>
-            <button data-testid="souscat-groupe" onClick={() => bascule(g.cle)} aria-expanded={ouvert}
-              className="flex w-full items-baseline gap-3 py-1 text-left text-[12px] text-ink">
-              <span className="w-11 shrink-0 text-ink-3">{ouvert ? <ChevronDown size={12} className="inline" /> : <ChevronRight size={12} className="inline" />}</span>
-              <span className="min-w-0 flex-1 truncate">
+            <div className="flex w-full items-baseline gap-3 py-1 text-[12px] text-ink">
+              <button data-testid="souscat-groupe" onClick={() => bascule(g.cle)} aria-expanded={ouvert} className="w-11 shrink-0 text-left text-ink-3">
+                {ouvert ? <ChevronDown size={12} className="inline" /> : <ChevronRight size={12} className="inline" />}
+              </button>
+              <button data-testid="souscat-groupe-nom" onClick={() => (ouvert ? choisir({ type: 'groupe', groupe: g.cle }) : bascule(g.cle))}
+                className={`min-w-0 flex-1 truncate text-left ${sel?.type === 'groupe' && sel.groupe === g.cle ? 'text-[#eda145]' : ''}`}>
                 {g.nom}
                 <span className="ml-1.5 rounded-full bg-[#c9b48a]/20 px-1.5 text-[10px] text-[#d8c7a3]">{g.operations.length}</span>
-              </span>
+              </button>
               {m(g.total)}
-            </button>
+            </div>
             {ouvert && (
               <div className="flex flex-wrap gap-1.5 pb-1.5 pl-14">
-                  {g.operations.map((tx) => (
-                    <span key={tx.id} className="rounded-md bg-[#c9b48a]/10 px-1.5 py-0.5 text-[11px] tabular-nums text-ink-2">
+                {g.operations.map((tx) => {
+                  const actif = sel?.type === 'op' && sel.tx.id === tx.id
+                  return (
+                    <button key={tx.id} data-testid="souscat-chip" onClick={() => choisir({ type: 'op', tx, groupe: g.cle })}
+                      className={`rounded-md px-1.5 py-0.5 text-[11px] tabular-nums ${actif ? 'bg-[#eda145]/10 text-[#eda145] ring-1 ring-[#eda145]/60' : 'bg-[#c9b48a]/10 text-ink-2'}`}>
                       {dateCourte(tx.date)} · {euros(-Number(tx.amount))}
-                    </span>
-                  ))}
-                </div>)}
+                    </button>
+                  )
+                })}
+              </div>)}
+            {ouvert && panneau(g)}
           </li>
         )
       })}
@@ -143,9 +245,9 @@ function MarchandsLecture({ operations, nomCategorie }: { operations: FinTransac
 }
 
 /**
- * Version LECTURE SEULE du détail (tuiles du Résumé) : catégorie → sous-catégorie et leur somme du mois.
+ * Détail des tuiles (tuiles du Résumé) : catégorie → sous-catégorie et leur somme du mois.
  * Toucher une sous-catégorie (ou une catégorie sans sous-catégorie) montre ses opérations, regroupées par marchand.
- * Aucune édition, aucune barre : seulement les sommes.
+ * Catégories et montants en lecture seule, sans barre ; intitulés et regroupements modifiables.
  */
 export function DetailLigneLecture({ cle, couleur, barres = false }: { cle: string; couleur: string; barres?: boolean }) {
   const { mois, filtre } = useFin()

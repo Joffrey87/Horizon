@@ -353,34 +353,30 @@ describe('regroupements d’intitulés', () => {
     const g = grouperParIntitule(ops, groupes)
     expect(g.map((x) => [x.nom, x.operations.length])).toEqual([['Abonnements', 2], ['Orange', 1]])
   })
-  it('dans un groupe manuel, les opérations semblables sont regroupées à leur tour', () => {
-    const ops = [
-      op(joint.id, '2026-09-10', -40, { label: 'ORANGE SA fibre 1 RUM MANDAT-A' }),
-      op(joint.id, '2026-09-12', -20, { label: 'ORANGE SA-ORANGE mobile 2 RUM MANDAT-B' }),
-      op(joint.id, '2026-09-15', -9, { label: 'SYNDICAT EXEMPLE cotisation RUM ADH-1' }),
-    ]
-    const groupes = ['rum:mandat-a', 'rum:mandat-b', 'rum:adh-1']
-      .map((pattern, i) => ({ id: `g${i}`, user_id: 'u', pattern, name: 'Abonnements', created_at: '' }))
-    const [abo] = grouperParIntitule(ops, groupes)
-    expect(abo!.nom).toBe('Abonnements')
-    expect(abo!.sousGroupes!.map((x) => [x.nom, x.operations.length, x.total])).toEqual([['Orange', 2, 60], ['Syndicat Exemple cotisation', 1, 9]])
-    // Sur plusieurs mois : les sous-groupes ont aussi leurs montants par mois.
-    const [p] = detailPeriode({ cle: NON_CLASSE, mois: ['2026-09'], transactions: ops, idx, filtre: 'foyer', groupes })
-    expect(p!.sousGroupes!.map((x) => x.parMois)).toEqual([[60], [9]])
-  })
-  it('dans une catégorie, un groupe manuel du même nom (ou seul) laisse place à ses intitulés', () => {
+  it('un groupe manuel forme un seul groupe à plat, sans sous-groupes, partout', () => {
     const ops = [
       op(joint.id, '2026-09-10', -40, { label: 'ORANGE SA fibre 1 RUM MANDAT-A' }),
       op(joint.id, '2026-09-12', -20, { label: 'ORANGE SA-ORANGE mobile 2 RUM MANDAT-B' }),
       op(joint.id, '2026-09-15', -9, { label: 'SYNDICAT EXEMPLE cotisation RUM ADH-1' }),
       op(joint.id, '2026-09-16', -70, { label: 'AUTRE CHOSE' }),
     ]
-    const regles = ['rum:mandat-a', 'rum:mandat-b', 'rum:adh-1']
+    const groupes = ['rum:mandat-a', 'rum:mandat-b', 'rum:adh-1']
       .map((pattern, i) => ({ id: `g${i}`, user_id: 'u', pattern, name: 'Abonnements', created_at: '' }))
-    const g = grouperParIntitule(ops, regles)
-    expect(aplatirGroupes(g, 'Abonnement').map((x) => x.nom)).toEqual(['Autre Chose', 'Orange', 'Syndicat Exemple cotisation'])
-    expect(aplatirGroupes(g, 'Téléphone').map((x) => x.nom)).toEqual(['Autre Chose', 'Abonnements'])
-    expect(aplatirGroupes(grouperParIntitule(ops.slice(0, 3), regles)).map((x) => x.nom)).toEqual(['Orange', 'Syndicat Exemple cotisation'])
+    const g = grouperParIntitule(ops, groupes)
+    expect(g.map((x) => [x.nom, x.operations.length, x.total, !!x.sousGroupes])).toEqual([['Abonnements', 3, 69, false], ['Autre Chose', 1, 70, false]].sort((a, b) => (b[2] as number) - (a[2] as number)))
+    expect(aplatirGroupes(g, 'Abonnement').map((x) => x.nom)).toEqual(['Autre Chose', 'Abonnements'])
+    const [p] = detailPeriode({ cle: NON_CLASSE, mois: ['2026-09'], transactions: ops.slice(0, 3), idx, filtre: 'foyer', groupes })
+    expect([p!.nom, p!.parMois, p!.sousGroupes]).toEqual(['Abonnements', [69], undefined])
+  })
+  it('un commerçant renommé (fin_merchant_alias) vaut pour toutes ses opérations, après l’intitulé propre', () => {
+    const alias = [{ pattern: 'enseigne:carrefour', label: 'Courses Carrefour' }]
+    const r = creerReconnaissance([{ id: 'l1', user_id: 'u', pattern: 'carrefour market', label: 'Market', created_at: '' }], alias)
+    const a = op(joint.id, '2026-09-03', -40, { label: 'CARREFOUR CITY CB*1111' })
+    const b = op(joint.id, '2026-09-04', -60, { label: 'CARREFOUR MARKET' })
+    const c = op(joint.id, '2026-09-05', -5, { label: 'CRF REIMS', label_local: 'Pique-nique' })
+    expect([r.libelle(a), r.libelle(b), r.libelle(c)]).toEqual(['Courses Carrefour', 'Courses Carrefour', 'Pique-nique'])
+    const g = grouperParIntitule([a, b], [], (t) => (r.estLocal(t) ? r.libelle(t) : null))
+    expect(g.map((x) => [x.nom, x.operations.length])).toEqual([['Courses Carrefour', 2]])
   })
   it('une opération sans intitulé local rejoint celles qui en ont un au même intitulé bancaire', () => {
     const ops = [

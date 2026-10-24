@@ -33,7 +33,8 @@ export function useIndex(): IndexFinances {
 /** Reconnaissance des intitulés locaux, recalculée quand les règles changent. */
 export function useReconnaissance() {
   const regles = useHorizon((s) => s.finLabels)
-  return useMemo(() => creerReconnaissance(regles), [regles])
+  const alias = useHorizon((s) => s.finMerchantAlias)
+  return useMemo(() => creerReconnaissance(regles, alias), [regles, alias])
 }
 
 /** Catégories en groupes : chaque catégorie principale, puis ses sous-catégories.

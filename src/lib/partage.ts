@@ -19,7 +19,7 @@ export const ONGLETS_PARTAGE: { cle: OngletPartage; label: string; route: string
 export const FINANCES_PARTAGEES = ['/finances', '/finances/budget', '/finances/bilan', '/finances/patrimoine']
 
 /** Tables qu'un membre peut modifier (s'il peut ranger les opérations). */
-const MODIFIABLES = ['fin_transactions', 'fin_labels', 'fin_groups']
+const MODIFIABLES = ['fin_transactions', 'fin_labels', 'fin_groups', 'fin_merchant_alias']
 
 /** La vue partagée en cours : celle reçue (membre), sinon l'aperçu du propriétaire. */
 export function vueActive(opts: { partages: Partage[]; moi: string | null; apercu: string | null }): Partage | null {

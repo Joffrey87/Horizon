@@ -596,6 +596,15 @@ export interface FinGroup {
   created_at: string
 }
 
+/** Commerçant renommé : clé automatique (cleGroupe) → intitulé affiché, pour toutes ses opérations. */
+export interface FinMerchantAlias {
+  id: UUID
+  user_id: UUID
+  pattern: string             // clé automatique, correspondance exacte
+  label: string
+  created_at: string
+}
+
 export interface FinBudget {
   id: UUID
   user_id: UUID

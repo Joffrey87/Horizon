@@ -13,7 +13,7 @@
 // ================================================================
 import type {
   FinAccount, FinAccountKind, FinAssetClass, FinBudget, FinCategory, FinHolding, FinLine, FinOwner, FinPlanned,
-  FinTarget, FinTransaction, FinLabel, FinGroup, FinEcheance, FinLoan,
+  FinTarget, FinTransaction, FinLabel, FinGroup, FinMerchantAlias, FinEcheance, FinLoan,
 } from './types'
 import { motifPrelevement } from './prets'
 import { todayIso } from './logic'
@@ -829,15 +829,19 @@ export function libelleEngie(tx: Pick<FinTransaction, 'label' | 'amount' | 'date
   return jour >= 22 ? 'Engie Reims Gaz&Electricité' : 'Engie Taissy Electricité'
 }
 
-export function creerReconnaissance(regles: FinLabel[]) {
+export function creerReconnaissance(regles: FinLabel[], alias: Pick<FinMerchantAlias, 'pattern' | 'label'>[] = []) {
   const parMotif = new Map(regles.filter((r) => r.pattern.trim()).map((r) => [r.pattern.trim(), r]))
   const regleDe = (label: string): FinLabel | null => parMotif.get(normaliserLibelle(label)) ?? null
+  const parCle = new Map(alias.filter((a) => a.label.trim()).map((a) => [a.pattern, a.label.trim()]))
+  /** Intitulé du commerçant (fin_merchant_alias), par sa clé automatique. */
+  const aliasDe = (label: string): string | null => parCle.size ? parCle.get(cleGroupe(label).cle) ?? null : null
   return {
     regleDe,
-    /** Ce qu'on affiche pour une opération. */
-    libelle: (tx: FinTransaction): string => tx.label_local?.trim() || regleDe(tx.label)?.label || libelleEngie(tx) || tx.label,
-    /** Vrai si l'opération a un intitulé local (propre ou par règle). */
-    estLocal: (tx: FinTransaction): boolean => !!tx.label_local?.trim() || !!regleDe(tx.label) || !!libelleEngie(tx),
+    aliasDe,
+    /** Ce qu'on affiche : intitulé propre, puis commerçant renommé, puis règle, puis Engie, puis la banque. */
+    libelle: (tx: FinTransaction): string => tx.label_local?.trim() || aliasDe(tx.label) || regleDe(tx.label)?.label || libelleEngie(tx) || tx.label,
+    /** Vrai si l'opération a un intitulé local (propre, commerçant ou par règle). */
+    estLocal: (tx: FinTransaction): boolean => !!tx.label_local?.trim() || !!aliasDe(tx.label) || !!regleDe(tx.label) || !!libelleEngie(tx),
   }
 }
 
@@ -987,8 +991,7 @@ export interface GroupeIntitules {
   cles: string[]             // clés automatiques réunies dans ce groupe
   total: number              // dépensé (sorties positives, remboursements déduits)
   operations: FinTransaction[]
-  /** Groupe manuel : ses opérations regroupées à leur tour par intitulé semblable
-   *  (absent s'il n'y en a qu'un : les opérations s'affichent alors directement). */
+  /** Toujours absent : un regroupement manuel forme un seul groupe à plat. */
   sousGroupes?: GroupeIntitules[]
 }
 
@@ -1042,12 +1045,11 @@ export function grouperParIntitule(
   }
   return [...parCle.values()].map(({ nomAuto, recente: _r, local, ...g }) => {
     const enseigne = g.cles.length === 1 && g.cles[0]!.startsWith('enseigne:')
-    const sous = g.manuel ? grouperParIntitule(g.operations, [], libelleLocal) : []
+    const renomme = enseigne && local?.trim() && g.operations.every((tx) => libelleLocal?.(tx)?.trim() === local.trim())
     return {
       ...g,
-      nom: g.manuel || enseigne ? g.nom : local?.trim() || nomAuto,
+      nom: g.manuel || (enseigne && !renomme) ? g.nom : local?.trim() || nomAuto,
       operations: g.operations.sort((a, b) => b.date.localeCompare(a.date)),
-      ...(sous.length > 1 ? { sousGroupes: sous } : {}),
     }
   }).sort((a, b) => b.total - a.total || a.nom.localeCompare(b.nom, 'fr'))
 }
