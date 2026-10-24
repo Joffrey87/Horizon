@@ -1,3 +1,4 @@
+import { moisBudget } from './moisPaie'
 import type { FinAccount, FinTransaction } from './types'
 
 /**
@@ -43,7 +44,7 @@ export function epargneUtilisee(
   const virements: VirementEpargne[] = []
   const sansOrigine: { t: FinTransaction; dest: FinAccount }[] = []
   for (const t of transactions) {
-    if (!t.internal || t.amount <= 0 || !t.date.startsWith(mois)) continue
+    if (!t.internal || t.amount <= 0 || moisBudget(t.date) !== mois) continue
     const dest = parId.get(t.account_id)
     if (!dest || dest.kind !== 'courant' || estCompteEpargne(dest) || EXCLUS.test(dest.name)) continue
     const regle = regles.find((r) => (r.id ? r.id === t.id : r.libelle?.test(t.label) ?? false) && (r.montant === undefined || r.montant === t.amount))

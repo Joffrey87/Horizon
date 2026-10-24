@@ -210,3 +210,9 @@ a, button, [role="button"], label, summary { touch-action: manipulation; }
 @media (pointer: coarse) {
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea, select { font-size: 16px; }
 }
+
+/* Résumé mobile : lignes d'un même bloc collées (le bloc porte le cadre arrondi). */
+.bloc-lignes > * > div { border-radius: 0 !important; border-left-width: 0 !important; border-right-width: 0 !important; }
+.bloc-lignes > * > div:first-child { border-top-width: 0 !important; }
+.bloc-lignes > * > div:last-child:not(:first-child) { border-bottom-width: 0 !important; }
+.bloc-lignes > * > div:only-child { border-bottom-width: 0 !important; }

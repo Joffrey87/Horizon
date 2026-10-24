@@ -298,9 +298,10 @@ function MarchandsLecture({ operations, nomCategorie }: { operations: FinTransac
  * Toucher une sous-catégorie (ou une catégorie sans sous-catégorie) montre ses opérations, regroupées par marchand.
  * Catégories et montants en lecture seule, sans barre ; intitulés et regroupements modifiables.
  */
-export function DetailLigneLecture({ cle, couleur, barres = false }: { cle: string; couleur: string; barres?: boolean }) {
+export function DetailLigneLecture({ cle, couleur, barres = false, aplat = false, exclure }: { cle: string; couleur: string; barres?: boolean; aplat?: boolean; exclure?: Set<string> }) {
   const { mois, filtre } = useFin()
-  const transactions = useHorizon((s) => s.finTransactions)
+  const toutes = useHorizon((s) => s.finTransactions)
+  const transactions = useMemo(() => exclure?.size ? toutes.filter((t) => !exclure.has(t.id)) : toutes, [toutes, exclure])
   const idx = useIndex()
   // Même chiffre que la tuile : le capital des prêts est retiré (il est compté dans l'Épargné).
   const { capitalMois } = useTuilesMois()
@@ -353,7 +354,7 @@ export function DetailLigneLecture({ cle, couleur, barres = false }: { cle: stri
       ))}
       {noeuds.length > 1 && noeuds.map((n) => (
         <li key={n.nom}>
-          {n.enfants.length > 1
+          {n.enfants.length > 1 && !aplat
             ? <div className="flex items-center gap-3 py-1.5 text-sm">
                 <span className="min-w-0 flex-1 truncate" title={n.nom}>{n.nom}</span>
                 {part(0, total)}
@@ -365,7 +366,7 @@ export function DetailLigneLecture({ cle, couleur, barres = false }: { cle: stri
                 <span className="w-16 text-right font-medium tabular-nums">{euros(n.total)}</span>
               </>, opsNoeud(groupes, n.nom), n.nom, 'py-1.5 text-sm')}
           {n.enfants.length <= 1 && pastilles(n.nom)}
-          {n.enfants.length > 1 && n.enfants.map((e) => (
+          {n.enfants.length > 1 && !aplat && n.enfants.map((e) => (
             <div key={e.nom}>
               {ligne(n.nom + '\u0000' + e.nom, <>
                 <span className="min-w-0 flex-1 truncate" title={`${n.nom} › ${e.nom}`}>{e.nom}</span>

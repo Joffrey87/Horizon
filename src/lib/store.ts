@@ -1,3 +1,4 @@
+import { installerPaies } from './moisPaie'
 // ================================================================
 // HORIZON — store global (zustand) : une seule source de vérité
 // Les vues sont des projections de ces données, jamais des copies.
@@ -607,3 +608,6 @@ export const useHorizon = create<HorizonState>((set, get) => ({
 
   signOut: async () => { await supabase.auth.signOut() },
 }))
+
+// Mois de paie à paie : les dates des paies suivent la liste des opérations (voir moisPaie.ts).
+useHorizon.subscribe((s) => installerPaies(s.finTransactions))

@@ -1,3 +1,4 @@
+import { moisBudget } from './moisPaie'
 // ================================================================
 // Finances — règles pures (sans réseau) : budget du mois, bilan,
 // patrimoine, allocation, provisions. Testées dans finances.test.ts.
@@ -185,7 +186,7 @@ export function agreger(transactions: FinTransaction[], idx: IndexFinances, filt
     if (!correspond(filtre, titulaireDe(tx, idx))) continue
     const c = classer(tx, idx)
     if (c.type === 'ignoree') continue
-    const m = moisDe(tx.date)
+    const m = moisBudget(tx.date)
     let mois = agg.get(m)
     if (!mois) { mois = { lignes: new Map(), entrees: 0 }; agg.set(m, mois) }
     const montant = Number(tx.amount)
@@ -450,13 +451,13 @@ export function capitalDuMois(opts: OptionsCapital & { mois: string }): CapitalM
         if (c.type === 'ignoree' && c.raison === 'compte') {
           if (!correspond(filtre, titulaireDe(tx, idx))) continue
           horsBudgetVu = true
-          if (moisDe(tx.date) === mois) { debiteHors -= Number(tx.amount); operations.push({ id: tx.id, date: tx.date, montant: -Number(tx.amount) }) }
+          if (moisBudget(tx.date) === mois) { debiteHors -= Number(tx.amount); operations.push({ id: tx.id, date: tx.date, montant: -Number(tx.amount) }) }
           continue
         }
         if (c.type !== 'ligne' || !correspond(filtre, titulaireDe(tx, idx))) continue
         budgetVu = true
         ligneVue = c.ligne
-        if (moisDe(tx.date) === mois) { debite -= Number(tx.amount); ligneId = c.ligne; operations.push({ id: tx.id, date: tx.date, montant: -Number(tx.amount) }) }
+        if (moisBudget(tx.date) === mois) { debite -= Number(tx.amount); ligneId = c.ligne; operations.push({ id: tx.id, date: tx.date, montant: -Number(tx.amount) }) }
       }
     }
     const surCompteBudget = (pret.debit_account_ids ?? []).some((id) => idx.comptes.get(id)?.in_budget)
@@ -598,7 +599,7 @@ export function entreesPrevues(opts: {
   const rang = new Map(precedents.map((m, i) => [m, i]))
   const parCle = new Map<string, { nom: string; parMois: number[] }>()
   for (const tx of opts.transactions) {
-    const i = rang.get(moisDe(tx.date))
+    const i = rang.get(moisBudget(tx.date))
     if (i === undefined || !correspond(opts.filtre, titulaireDe(tx, opts.idx))) continue
     if (classer(tx, opts.idx).type !== 'revenu' || Number(tx.amount) <= 0) continue
     const { cle, nom } = cleGroupe(tx.label)
@@ -643,7 +644,7 @@ export function depensesAVenir(opts: {
     if (!correspond(opts.filtre, titulaireDe(tx, opts.idx))) continue
     const c = classer(tx, opts.idx)
     if (c.type !== 'ligne') continue
-    const m = moisDe(tx.date)
+    const m = moisBudget(tx.date)
     const i = rang.get(m)
     if (c.ligne === courses) {
       if (i !== undefined) coursesParMois[i]! -= Number(tx.amount)
@@ -750,7 +751,7 @@ export function detailLigne(opts: {
   const { cle, mois, transactions, idx, filtre } = opts
   const groupes = new Map<string, GroupeCategorie>()
   for (const tx of transactions) {
-    if (moisDe(tx.date) !== mois || !correspond(filtre, titulaireDe(tx, idx))) continue
+    if (moisBudget(tx.date) !== mois || !correspond(filtre, titulaireDe(tx, idx))) continue
     const c = classer(tx, idx)
     const k = c.type === 'ligne' ? c.ligne : c.type === 'non_classe' ? NON_CLASSE : null
     if (k !== cle) continue
@@ -1141,13 +1142,13 @@ export function detailPeriode(opts: {
   const { cle, mois, transactions, idx, filtre } = opts
   const rang = new Map(mois.map((m, i) => [m, i]))
   const retenues = transactions.filter((tx) => {
-    if (!rang.has(moisDe(tx.date)) || !correspond(filtre, titulaireDe(tx, idx))) return false
+    if (!rang.has(moisBudget(tx.date)) || !correspond(filtre, titulaireDe(tx, idx))) return false
     const c = classer(tx, idx)
     return (c.type === 'ligne' ? c.ligne : c.type === 'non_classe' ? NON_CLASSE : null) === cle
   })
   const parPeriode = (g: GroupeIntitules): GroupePeriode => {
     const parMois = mois.map(() => 0)
-    for (const tx of g.operations) parMois[rang.get(moisDe(tx.date))!]! -= Number(tx.amount)
+    for (const tx of g.operations) parMois[rang.get(moisBudget(tx.date))!]! -= Number(tx.amount)
     const { sousGroupes, ...reste } = g
     return {
       ...reste, parMois, moyenne: mois.length ? g.total / mois.length : 0,

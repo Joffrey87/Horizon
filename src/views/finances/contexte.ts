@@ -5,9 +5,10 @@ import { useOutletContext } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { useHorizon, vueCourante } from '../../lib/store'
-import { creerReconnaissance, indexer, moisDe, type FiltreTitulaire, type IndexFinances } from '../../lib/finances'
+import { creerReconnaissance, indexer, type FiltreTitulaire, type IndexFinances } from '../../lib/finances'
 import type { FinCategory } from '../../lib/types'
 import { todayIso } from '../../lib/logic'
+import { moisBudget } from '../../lib/moisPaie'
 
 export interface FinContexte {
   mois: string
@@ -17,7 +18,7 @@ export interface FinContexte {
 }
 export const useFin = () => useOutletContext<FinContexte>()
 
-export const moisCourant = () => moisDe(todayIso())
+export const moisCourant = () => moisBudget(todayIso())
 
 /** Vue partagée en cours (compte invité ou aperçu), sinon null. */
 export const useVue = () => useHorizon((s) => vueCourante(s))

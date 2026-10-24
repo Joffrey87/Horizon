@@ -1,9 +1,10 @@
+import { moisBudget } from '../../lib/moisPaie'
 // Recherche d'opérations de la page Budget : champ (à droite du choix du mois)
 // et résultats sur tous les mois, regroupés par mois.
 import { useMemo, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
-import { euros, libelleMois, moisDe, rechercherOperations } from '../../lib/finances'
+import { euros, libelleMois, rechercherOperations } from '../../lib/finances'
 import type { FinTransaction } from '../../lib/types'
 import { LigneOperation } from './partage'
 import { useFin, useIndex, useReconnaissance } from './contexte'
@@ -47,7 +48,7 @@ export function ResultatsRecherche({ requete }: { requete: string }) {
     [transactions, requete, idx, filtre, reco])
   const parMois = useMemo(() => {
     const m = new Map<string, FinTransaction[]>()
-    for (const tx of liste.slice(0, limite)) m.set(moisDe(tx.date), [...(m.get(moisDe(tx.date)) ?? []), tx])
+    for (const tx of liste.slice(0, limite)) m.set(moisBudget(tx.date), [...(m.get(moisBudget(tx.date)) ?? []), tx])
     return [...m.entries()]
   }, [liste, limite])
   const total = liste.reduce((s, tx) => s + Number(tx.amount), 0)
