@@ -9,6 +9,7 @@ import { DetailAuDela, DetailEpargne, DetailEpargneUtilisee, lignesAuDela } from
 import { epargneUtilisee } from '../../lib/epargneUtilisee'
 import { useTuilesMois } from './tuilesMois'
 import { useFin } from './contexte'
+import { estMoisSansObjectif, LIGNE_AVEC_ANNEAU } from '../../lib/moisSansObjectif'
 import { MontantBudget, useBudgetMois } from './budgetMois'
 import { DetailLigneLecture } from './DetailLigne'
 import { DernieresOperations } from './DernieresOperations'
@@ -22,9 +23,10 @@ const ICONES: Record<string, LucideIcon> = {
 export const CIBLE_EPARGNE = 1800
 
 /** Anneau de part consommée (plafonnée à 100 % pour le tracé), l'icône du budget au centre. Aucun chiffre dedans. */
-function Anneau({ ratio, couleur, taille, trait = 4, halo = false, children }: {
-  ratio: number | null; couleur: string; taille: number; trait?: number; halo?: boolean; children: ReactNode
+function Anneau({ ratio, couleur, taille, trait = 4, halo = false, sansTrace = false, children }: {
+  ratio: number | null; couleur: string; taille: number; trait?: number; halo?: boolean; sansTrace?: boolean; children: ReactNode
 }) {
+  if (sansTrace) return <span className="relative inline-flex shrink-0 items-center justify-center" style={{ width: taille, height: taille }}>{children}</span>
   const r = taille / 2 - trait / 2
   const circ = 2 * Math.PI * r
   const trace = ratio === null ? 0 : Math.min(1, ratio) * circ
@@ -51,27 +53,31 @@ function CorpsTuile({ t, edition, bureau }: { t: TuileBudget; edition: ReturnTyp
   const depasse = t.ton === 'depasse'
   const clair = eclaircie(t.rvb, 0.24)
   const ouvrir = edition.peutModifier && t.ligneId ? () => edition.ouvrir({ id: t.ligneId!, name: t.titre }, t.budget) : undefined
-  const negatif = t.restant !== null && t.restant < 0
+  const { mois } = useFin()
+  // Mois sans objectif : seulement le dépensé ; Frais fixe garde son anneau, les autres n'en ont pas.
+  const sansObjectif = estMoisSansObjectif(mois)
+  const sansAnneau = sansObjectif && t.cle !== LIGNE_AVEC_ANNEAU
+  const negatif = !sansObjectif && t.restant !== null && t.restant < 0
   return (
     <>
-      <Anneau ratio={t.ratio} couleur={depasse ? COULEURS_ANNEAU.depasse : clair} taille={bureau ? 36 : 38} trait={bureau ? 2 : 3} halo={bureau}>
+      <Anneau sansTrace={sansAnneau} ratio={sansAnneau ? null : t.ratio} couleur={depasse ? COULEURS_ANNEAU.depasse : clair} taille={bureau ? 36 : 38} trait={bureau ? 2 : 3} halo={bureau}>
         <Icone size={bureau ? 15 : 16} color={clair} strokeWidth={1.8} />
       </Anneau>
       <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
         <p className={`truncate font-semibold text-ink-2 ${bureau ? 'text-[15px]' : 'text-[13px]'}`}>{t.titre}</p>
-        <p className={`whitespace-nowrap font-medium tabular-nums text-ink-3 ${bureau ? 'text-[12px]' : 'text-[11.5px]'}`}>
+        {!sansObjectif && <p className={`whitespace-nowrap font-medium tabular-nums text-ink-3 ${bureau ? 'text-[12px]' : 'text-[11.5px]'}`}>
           {t.budget !== null ? (
             <>{euros(t.depense)} / <MontantBudget montant={t.budget} ajustement={edition.ajustement(t.ligneId)} onOuvrir={ouvrir} discret pointille /></>
           ) : ouvrir ? (
             <button type="button" onClick={ouvrir} data-testid="budget-fixer" className="-m-1 p-1 text-sun-soft/80 underline decoration-dotted decoration-sun-soft/60 underline-offset-2 hover:text-sun-soft">fixer un budget</button>
           ) : null}
-        </p>
+        </p>}
       </div>
       <div className="shrink-0 text-right">
-        <p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">{t.restant === null ? 'Dépensé' : 'Reste'}</p>
+        <p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">{sansObjectif || t.restant === null ? 'Dépensé' : 'Reste'}</p>
         <b className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[22px]' : 'text-[20px]'}`}
           style={{ color: negatif ? COULEURS_ANNEAU.depasse : 'var(--color-ink)' }}>
-          {euros(t.restant ?? t.depense)}
+          {euros(sansObjectif ? t.depense : t.restant ?? t.depense)}
         </b>
       </div>
     </>

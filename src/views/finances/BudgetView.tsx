@@ -14,6 +14,7 @@ import { DetailTroisMois } from './DetailTroisMois'
 import { ChampRecherche, ResultatsRecherche } from './RechercheOperations'
 import { useFin, useIndex, useVue } from './contexte'
 import { MontantBudget, useBudgetMois } from './budgetMois'
+import { estFraisFixe, estMoisSansObjectif } from '../../lib/moisSansObjectif'
 import { BoutonDetails, DetailLigne, type Niveau } from './DetailLigne'
 
 const CLE_PREV = 'horizon.finances.voirPrevision'
@@ -66,6 +67,8 @@ export function BudgetView() {
   const enRetour = retour !== null && retour > mois
   const reste = s.total.budget !== null ? s.total.budget - s.total.reel : null
   const [detailTuile, setDetailTuile] = useState<'reste' | 'epargne' | null>(null)
+  // Mois sans objectif : pas de barre, pas de budget ni de reste par ligne ; « Dépensé » à la place du reste, anneau pour Frais fixe.
+  const sansObjectif = estMoisSansObjectif(mois)
 
   if (!lines.length) {
     return <EmptyState hint="Crée tes lignes (Frais fixe, Courses…) dans Réglages.">Aucune ligne de budget pour l’instant.</EmptyState>
@@ -115,7 +118,11 @@ export function BudgetView() {
               <BoutonDetails niveau={ouvert === 'mois' && niveauTous?.cle === l.cle ? niveauTous.n : 0} onChange={(n) => reglerTous(l.cle, n)} />
             </div>
           </td>
-          <td className="w-52 px-2">
+          {sansObjectif ? (
+            <td className="w-52 px-2">
+              {estFraisFixe(l.ligne?.name) && aBudget && <AnneauRemplissage ratio={l.reel / l.budget!} depasse={depasse} />}
+            </td>
+          ) : <td className="w-52 px-2">
             <div className="flex items-center gap-1.5">
               <div className="min-w-0 flex-1">
                 <BarreBudget reel={l.reel} budget={l.budget} depasse={depasse}
@@ -126,11 +133,12 @@ export function BudgetView() {
                   onOuvrir={editable ? () => budgetMois.ouvrir(l.ligne!, l.budget) : undefined} />
               )}
             </div>
-          </td>
+          </td>}
+          {sansObjectif ? <td className="px-2 text-right tabular-nums text-ink-2" data-testid="depense-ligne">{euros(l.reel)}</td> :
           <td className={`px-2 text-right tabular-nums ${depasse ? 'text-[#eda145]' : 'text-ink-2'}`}>
             {ecart !== null ? (depasse ? `+${euros(-ecart)} au-delà` : euros(ecart))
               : l.ligne && foyer && l.reel > 0 ? <span className="text-xs text-ink-3">sans budget</span> : '—'}
-          </td>
+          </td>}
           <td className="px-2 text-right">
             <button onClick={() => basculer(l.cle, 'moy3')} aria-expanded={ouvert === 'moy3'}
               title="Détail des 3 mois précédents, regroupé par intitulé"
@@ -168,8 +176,8 @@ export function BudgetView() {
     return (
       <tr className="border-t border-line text-xs text-ink-3">
         <td className="py-1.5 pr-2 uppercase tracking-wider">{titre}</td>
-        <td className="px-2"><BarreBudget reel={reel} budget={budget} depasse={budget !== null && budget > 0 && reel > budget + 0.5} discret /></td>
-        <td className="px-2 text-right tabular-nums">{budget !== null ? euros(budget - reel) : ''}</td>
+        <td className="px-2">{!sansObjectif && <BarreBudget reel={reel} budget={budget} depasse={budget !== null && budget > 0 && reel > budget + 0.5} discret />}</td>
+        <td className="px-2 text-right tabular-nums">{sansObjectif ? euros(reel) : budget !== null ? euros(budget - reel) : ''}</td>
         <td className="px-2 text-right tabular-nums">{euros(somme(ls, (l) => l.moyenne3))}</td>
         <td className="px-2 text-right">{voirM1 && montantPrecedent(somme(ls, (l) => l.precedent))}</td>
         <td className="pl-2 text-right tabular-nums">{voirPrev && budget !== null ? euros(somme(ls, (l) => l.prevision)) : ''}</td>
@@ -218,8 +226,8 @@ export function BudgetView() {
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wider text-ink-3">
                   <th className="pb-2 pr-2 font-medium" aria-label="Ligne" />
-                  <th className="px-2 pb-2 font-medium">Réel / budget</th>
-                  <th className="px-2 pb-2 text-right font-medium">Reste</th>
+                  <th className="px-2 pb-2 font-medium">{sansObjectif ? '' : 'Réel / budget'}</th>
+                  <th className="px-2 pb-2 text-right font-medium">{sansObjectif ? 'Dépensé' : 'Reste'}</th>
                   <th className="px-2 pb-2 text-right font-medium">Moy. 3 mois</th>
                   <th className="px-2 pb-2 text-right font-medium">
                     <span className="inline-flex items-center gap-1">
@@ -270,10 +278,10 @@ export function BudgetView() {
                 <tr className="border-t-2 border-line-2 font-semibold">
                   <td className="py-2 pr-2">Total</td>
                   <td className="px-2">
-                    <BarreBudget reel={s.total.reel} budget={s.total.budget}
-                      depasse={s.total.budget !== null && s.total.budget > 0 && s.total.reel > s.total.budget + 0.5} />
+                    {!sansObjectif && <BarreBudget reel={s.total.reel} budget={s.total.budget}
+                      depasse={s.total.budget !== null && s.total.budget > 0 && s.total.reel > s.total.budget + 0.5} />}
                   </td>
-                  <td className="px-2 text-right tabular-nums">{reste === null ? '—' : reste < 0 ? `+${euros(-reste)} au-delà` : euros(reste)}</td>
+                  <td className="px-2 text-right tabular-nums">{sansObjectif ? euros(s.total.reel) : reste === null ? '—' : reste < 0 ? `+${euros(-reste)} au-delà` : euros(reste)}</td>
                   <td className="px-2 text-right tabular-nums">{euros(s.total.moyenne3)}</td>
                   <td className="px-2 text-right">{voirM1 && montantPrecedent(s.total.precedent)}</td>
                   <td className="pl-2 text-right tabular-nums">{!voirPrev ? '' : s.total.prevision !== null ? euros(s.total.prevision) : '—'}</td>
@@ -361,5 +369,17 @@ function BarreBudget({ reel, budget, depasse, modifiable = false, onClic, discre
         document.body,
       )}
     </>
+  )
+}
+
+/** Mois sans objectif : petit anneau de remplissage (dépensé / budget, plafonné), sans chiffre. */
+function AnneauRemplissage({ ratio, depasse }: { ratio: number; depasse: boolean }) {
+  const t = 18, tr = 2.5, r = t / 2 - tr / 2, c = 2 * Math.PI * r, v = Math.max(0, Math.min(1, ratio)) * c
+  return (
+    <svg data-testid="anneau-frais-fixe" data-ratio={Math.round(Math.min(1, ratio) * 100)} width={t} height={t} viewBox={`0 0 ${t} ${t}`} aria-hidden>
+      <circle cx={t / 2} cy={t / 2} r={r} fill="none" stroke="rgba(255,255,255,.12)" strokeWidth={tr} />
+      <circle cx={t / 2} cy={t / 2} r={r} fill="none" stroke={depasse ? '#ef5a36' : '#c9bf86'} strokeWidth={tr} strokeLinecap="round"
+        strokeDasharray={`${v.toFixed(1)} ${c.toFixed(1)}`} transform={`rotate(-90 ${t / 2} ${t / 2})`} />
+    </svg>
   )
 }
