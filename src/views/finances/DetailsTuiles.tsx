@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { euros, type LigneBudget, type listeEpargnes } from '../../lib/finances'
+import type { epargneUtilisee } from '../../lib/epargneUtilisee'
 
 /** Une ligne compacte du détail d'une tuile : libellé à gauche, montant à droite. */
 function LigneDetail({ nom, montant, signe, fin = false, sous = false }: { nom: ReactNode; montant: number; signe?: '−' | '+'; fin?: boolean; sous?: boolean }) {
@@ -158,6 +159,61 @@ export function DetailAuDela({ lignes, variante = VARIANTE_AU_DELA }: { lignes: 
       </div>
       {prevu.length > 0 && <>{titre('Prévu')}{prevu.map((d, i) => <Ligne key={i} {...d} />)}</>}
       <div className="border-t border-line pt-1.5"><Ligne gras nom={titreTotal} montant={total} vertSiPositif={false} /></div>
+    </div>
+  )
+}
+
+/** Variante retenue pour la tuile « Épargne utilisée » (A, B ou C). */
+export const VARIANTE_EPARGNE_UTILISEE: 'A' | 'B' | 'C' = 'A'
+
+/** Détail « Épargne utilisée » : les virements sortis d'une épargne vers un compte courant, plus récents d'abord. */
+export function DetailEpargneUtilisee({ donnees, variante = VARIANTE_EPARGNE_UTILISEE }: { donnees: ReturnType<typeof epargneUtilisee>; variante?: 'A' | 'B' | 'C' }) {
+  const { virements, total, parOrigine } = donnees
+  const vide = virements.length === 0 && <p className="text-ink-3">Aucune épargne utilisée ce mois-ci.</p>
+  if (variante === 'B') {
+    return (
+      <div data-testid="detail-epargne-utilisee" className="card mx-auto w-full max-w-md px-4 py-3 text-sm">
+        {vide}
+        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-1">
+          {virements.map((v) => (
+            <div key={v.id} className="contents">
+              <span className="whitespace-nowrap text-xs tabular-nums text-ink-3">{dateJour(v.date)}</span>
+              <span className="min-w-0"><span className="block truncate">{v.origine}</span><span className="block truncate text-[11px] text-ink-3">{v.libelle}</span></span>
+              <span className="tabular-nums">{euros(v.montant)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-1.5"><LigneDetail fin nom="Total" montant={total} /></div>
+      </div>
+    )
+  }
+  if (variante === 'C') {
+    return (
+      <div data-testid="detail-epargne-utilisee" className="card mx-auto w-full max-w-md space-y-1.5 px-4 py-3 text-sm">
+        {vide}
+        {parOrigine.map((g) => (
+          <div key={g.origine} className="space-y-0.5">
+            <LigneDetail nom={<span className="font-medium">{g.origine}</span>} montant={g.total} />
+            {g.virements.map((v) => <LigneDetail key={v.id} sous nom={`${dateJour(v.date)} · ${v.libelle}`} montant={v.montant} />)}
+          </div>
+        ))}
+        <LigneDetail fin nom="Total" montant={total} />
+      </div>
+    )
+  }
+  return (
+    <div data-testid="detail-epargne-utilisee" className="card mx-auto w-full max-w-md space-y-1 px-4 py-3 text-sm">
+      {vide}
+      {virements.map((v) => (
+        <div key={v.id} className="flex items-baseline justify-between gap-3">
+          <span className="min-w-0">
+            <span className="block truncate">{v.libelle}</span>
+            <span className="block truncate text-[11px] text-ink-3">{dateJour(v.date)} · {v.origine} → {v.compte}</span>
+          </span>
+          <span className="shrink-0 tabular-nums">{euros(v.montant)}</span>
+        </div>
+      ))}
+      <LigneDetail fin nom="Total" montant={total} />
     </div>
   )
 }

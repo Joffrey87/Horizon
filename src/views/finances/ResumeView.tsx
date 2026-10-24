@@ -5,7 +5,8 @@ import { euros } from '../../lib/finances'
 import { COULEURS_ANNEAU, eclaircie, rgba, tuilesBudgets, type TuileBudget } from '../../lib/resume'
 import { EmptyState } from '../../components/ui'
 import { FiltreSeg, NavMois } from './partage'
-import { DetailAuDela, DetailEpargne, lignesAuDela } from './DetailsTuiles'
+import { DetailAuDela, DetailEpargne, DetailEpargneUtilisee, lignesAuDela, VARIANTE_EPARGNE_UTILISEE } from './DetailsTuiles'
+import { epargneUtilisee } from '../../lib/epargneUtilisee'
 import { useTuilesMois } from './tuilesMois'
 import { useFin, useVue } from './contexte'
 import { MontantBudget, useBudgetMois } from './budgetMois'
@@ -141,13 +142,17 @@ function LigneVerre({ t, edition, ouvert, onBasculer }: {
 /** Démo : ?variante=A|B|C force une variante du détail « Au-delà du budget ». */
 const varianteDemo = () => { const v = new URLSearchParams(location.search).get('variante'); return v === 'A' || v === 'B' || v === 'C' ? v : undefined }
 
+/** Démo : ?epargne=A|B|C force une variante de la tuile « Épargne utilisée ». */
+const varianteEpargneDemo = () => { const v = new URLSearchParams(location.search).get('epargne'); return v === 'A' || v === 'B' || v === 'C' ? v : VARIANTE_EPARGNE_UTILISEE }
+const COULEUR_UTILISEE = '#eda145'
+
 export function ResumeView() {
   const { mois, setMois, filtre, setFiltre } = useFin()
   const vue = useVue()
   const lines = useHorizon((s) => s.finLines)
   const foyer = filtre === 'foyer'
   const [recents, setRecents] = useState(false)
-  const [detail, setDetail] = useState<'reste' | 'epargne' | null>(null)
+  const [detail, setDetail] = useState<'reste' | 'epargne' | 'utilisee' | null>(null)
   // Tuiles de budget dépliées (détail par catégorie).
   const [ouvertes, setOuvertes] = useState<Set<string>>(new Set())
   const basculerTuile = (cle: string) => setOuvertes((o) => { const n = new Set(o); if (n.has(cle)) n.delete(cle); else n.add(cle); return n })
@@ -157,6 +162,10 @@ export function ResumeView() {
   const avenir = epargnes.filter((l) => estAvenir(l.ligne?.name)).reduce((a, l) => a + l.reel, 0)
   const resteValable = resteTuile !== null
   const edition = useBudgetMois()
+  const transactions = useHorizon((st) => st.finTransactions)
+  const comptes = useHorizon((st) => st.finAccounts)
+  const utilisee = useMemo(() => epargneUtilisee({ transactions, comptes, mois }), [transactions, comptes, mois])
+  const vEp = varianteEpargneDemo()
   const aPayer = aVenir.total + epPrevues.total
 
   // Bureau (≥ md, là où la barre latérale est affichée) : panneaux de verre ; téléphone : tuiles teintées.
@@ -167,13 +176,15 @@ export function ResumeView() {
     return <EmptyState hint="Crée tes lignes (Frais fixe, Courses…) dans Réglages.">Aucune ligne de budget pour l’instant.</EmptyState>
   }
 
+  const serre = !bureau && !vue && vEp === 'A' && utilisee.total > 0.5
+  const tailleMontant = bureau ? 'text-[24px] leading-tight' : serre ? 'text-[17px] leading-tight' : 'text-[21px] leading-tight'
   const resteBtn = !vue && (
     <button type="button" data-testid="tuile-reste" aria-expanded={detail === 'reste'} disabled={!resteValable}
       onClick={() => setDetail(detail === 'reste' ? null : 'reste')} title="Voir le détail du calcul"
       className={`${bureau ? 'verre verre-tuile !py-2' : 'card px-3 py-2'} text-left disabled:cursor-default`}
       style={bureau ? undefined : { borderColor: 'rgba(245,158,11,.4)', background: 'linear-gradient(135deg, rgba(245,158,11,.14), rgba(25,21,18,.9) 70%)' }}>
       <p className="block-title overflow-hidden text-ellipsis whitespace-nowrap max-md:!tracking-[.04em]" data-testid="titre-reste">{resteTuile !== null && resteTuile < 0 ? 'Au-delà du budget' : 'Reste'}</p>
-      <p className={`whitespace-nowrap font-bold tabular-nums ${bureau ? 'text-[24px] leading-tight' : 'text-[21px] leading-tight'}`}
+      <p className={`whitespace-nowrap font-bold tabular-nums ${tailleMontant}`}
         style={{ color: resteTuile === null ? '#857c6d' : resteTuile < 0 ? COULEURS_ANNEAU.depasse : COULEURS_ANNEAU.ok }}>
         {resteTuile === null ? '—' : euros(Math.abs(resteTuile))}
       </p>
@@ -188,12 +199,12 @@ export function ResumeView() {
       className={`${bureau ? 'verre verre-tuile !py-2' : 'card px-3 py-2'} text-left`}>
       <p className="block-title">Épargné</p>
       <div className="flex items-center gap-2">
-        <span data-testid="anneau-epargne" data-avenir={Math.round(avenir)}>
+        <span data-testid="anneau-epargne" className={serre ? 'hidden' : undefined} data-avenir={Math.round(avenir)}>
           <Anneau ratio={Math.max(0, avenir) / CIBLE_EPARGNE_AVENIR} couleur={COULEURS_ANNEAU.ok} taille={bureau ? 28 : 26} trait={2} halo={bureau}>
             <PiggyBank size={bureau ? 13 : 12} style={{ color: COULEURS_ANNEAU.ok }} aria-hidden />
           </Anneau>
         </span>
-        <p className={`whitespace-nowrap font-bold tabular-nums ${bureau ? 'text-[24px] leading-tight' : 'text-[21px] leading-tight'}`} style={{ color: COULEURS_ANNEAU.ok }}>{euros(epargne)}</p>
+        <p className={`whitespace-nowrap font-bold tabular-nums ${tailleMontant}`} style={{ color: COULEURS_ANNEAU.ok }}>{euros(epargne)}</p>
       </div>
     </button>
   )
@@ -203,17 +214,45 @@ export function ResumeView() {
       <Search size={bureau ? 18 : 16} strokeWidth={2} />
     </button>
   )
+  const montantCls = `whitespace-nowrap font-bold tabular-nums ${tailleMontant}`
+  const basculerUtilisee = () => setDetail(detail === 'utilisee' ? null : 'utilisee')
+  const carte = bureau ? 'verre verre-tuile !py-2' : 'card px-3 py-2'
+  // A : 3e tuile de la rangée du haut ; B : bandeau compact pleine largeur ; C : petite tuile sous Épargné.
+  const utiliseeBtn = !vue && utilisee.total > 0.5 && (vEp === 'A' ? (
+    <button type="button" data-testid="tuile-epargne-utilisee" aria-expanded={detail === 'utilisee'} onClick={basculerUtilisee}
+      title="Voir les virements depuis l'épargne" className={`${carte} min-w-0 text-left`}>
+      <p className="block-title overflow-hidden text-ellipsis whitespace-nowrap max-md:!tracking-[.04em]">Épargne utilisée</p>
+      <p className={montantCls} style={{ color: COULEUR_UTILISEE }}>{euros(utilisee.total)}</p>
+    </button>
+  ) : vEp === 'B' ? (
+    <button type="button" data-testid="tuile-epargne-utilisee" aria-expanded={detail === 'utilisee'} onClick={basculerUtilisee}
+      title="Voir les virements depuis l'épargne" className={`${bureau ? 'verre verre-tuile !py-1.5' : 'card px-3 py-1.5'} col-span-full flex items-center justify-between text-left`}>
+      <span className="block-title !mb-0">Épargne utilisée</span>
+      <span className="font-bold tabular-nums" style={{ color: COULEUR_UTILISEE }}>{euros(utilisee.total)}</span>
+    </button>
+  ) : (
+    <button type="button" data-testid="tuile-epargne-utilisee" aria-expanded={detail === 'utilisee'} onClick={basculerUtilisee}
+      title="Voir les virements depuis l'épargne" className={`${bureau ? 'verre verre-tuile !py-1' : 'card px-3 py-1'} col-start-2 flex items-baseline justify-between gap-2 text-left`}>
+      <span className="truncate text-[11px] text-ink-3">Utilisée</span>
+      <span className="text-[15px] font-semibold tabular-nums" style={{ color: COULEUR_UTILISEE }}>− {euros(utilisee.total)}</span>
+    </button>
+  ))
+  const colonnes = vue ? 'grid-cols-[minmax(0,1fr)_auto]'
+    : utiliseeBtn && vEp === 'A' ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]' : 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]'
   const hautDeVue = (
-    <div className={`grid gap-2.5 ${bureau ? 'gap-3' : ''} ${vue ? 'grid-cols-[minmax(0,1fr)_auto]' : 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]'}`}>
+    <div className={`grid gap-2.5 ${bureau ? 'gap-3' : ''} ${colonnes}`}>
       {resteBtn}
       {epargneBtn}
+      {vEp === 'A' && utiliseeBtn}
       {loupeBtn}
+      {vEp !== 'A' && utiliseeBtn}
       {detail === 'reste' && resteTuile !== null && (
         <div className="col-span-full flex justify-center">
           <DetailAuDela lignes={lignesAuDela(depenses, aVenir, epPrevues)} variante={varianteDemo()} />
         </div>
       )}
       {detail === 'epargne' && <div className="col-span-full flex justify-center"><DetailEpargne liste={listeEp} /></div>}
+      {detail === 'utilisee' && <div className="col-span-full flex justify-center"><DetailEpargneUtilisee donnees={utilisee} variante={vEp} /></div>}
     </div>
   )
   const noteFiltre = !foyer && <p className="-mt-1 text-[11px] text-ink-3">Les budgets sont ceux du foyer : ici, ce que {filtre === 'commun' ? 'le compte commun' : filtre === 'joffrey' ? 'Joffrey' : 'Honorine'} a dépensé. Choisis Foyer pour voir le restant.</p>
