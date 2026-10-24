@@ -526,7 +526,7 @@ export function epargnesPrevues(opts: {
   }
   for (const p of opts.capital?.prets ?? []) {
     // Un prêt payé hors budget n'est pas retiré du Reste (qui vient du budget) : il figure seulement dans la liste de l'Épargné.
-    if (p.etat === 'prevu' && !p.horsBudget && p.prevu > 0.5) details.push({ nom: `Capital · ${p.nom}`, montant: p.prevu, type: 'capital' })
+    if (p.etat === 'prevu' && !p.horsBudget && p.prevu > 0.5) details.push({ nom: `Capital ${p.nom}`, montant: p.prevu, type: 'capital' })
   }
   return { total: details.reduce((s, d) => s + d.montant, 0), details }
 }
@@ -567,7 +567,7 @@ export function listeEpargnes(opts: {
       reims.pastilles!.push(...pastillesPret(p))
       continue
     }
-    lignes.push({ nom: `Capital · ${p.nom}`, montant: p.extrait, etat: 'fait', type: 'capital' })
+    lignes.push({ nom: `Capital ${p.nom}`, montant: p.extrait, etat: 'fait', type: 'capital' })
   }
   if (reims) {
     const ordre = { operation: 0, interets: 1, assurance: 2 }
@@ -577,7 +577,7 @@ export function listeEpargnes(opts: {
   for (const d of prevues.details) lignes.push({ nom: d.nom, montant: d.montant, etat: 'prevu', type: d.type })
   if (opts.mois >= opts.moisCourant) {
     for (const p of opts.capital?.prets ?? []) {
-      if (p.etat === 'prevu' && p.horsBudget && p.prevu > 0.5) lignes.push({ nom: `Capital · ${p.nom}`, montant: p.prevu, etat: 'prevu', type: 'capital' })
+      if (p.etat === 'prevu' && p.horsBudget && p.prevu > 0.5) lignes.push({ nom: `Capital ${p.nom}`, montant: p.prevu, etat: 'prevu', type: 'capital' })
     }
   }
   const somme = (etat: EpargneLigne['etat']) => lignes.filter((x) => x.etat === etat).reduce((s, x) => s + x.montant, 0)

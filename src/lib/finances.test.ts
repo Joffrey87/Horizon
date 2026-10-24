@@ -624,7 +624,7 @@ describe('épargnes prévues et liste des épargnes', () => {
   it('budget d’épargne restant + capital à venir ; rien pour un mois passé', () => {
     const c = capital([{ etat: 'prevu', prevu: 850, nom: 'Prêt A' }, { etat: 'fait', extrait: 200 }])
     const r = epargnesPrevues({ mois: '2026-10', moisCourant: '2026-10', lignes: lignesB, capital: c })
-    expect(r.details.map((d) => [d.nom, d.montant])).toEqual([['Capital · Prêt A', 850]])
+    expect(r.details.map((d) => [d.nom, d.montant])).toEqual([['Capital Prêt A', 850]])
     expect(r.total).toBe(850)
     expect(epargnesPrevues({ mois: '2026-09', moisCourant: '2026-10', lignes: lignesB, capital: c }).total).toBe(0)
   })
@@ -632,8 +632,8 @@ describe('épargnes prévues et liste des épargnes', () => {
     const c = capital([{ etat: 'fait', extrait: 850, nom: 'Prêt A' }, { etat: 'prevu', prevu: 200, nom: 'Prêt B' }, { etat: 'fait', horsBudget: true, extrait: 500, capital: 500, nom: 'Prêt Airbnb' }])
     const l = listeEpargnes({ mois: '2026-10', moisCourant: '2026-10', lignes: lignesB, capital: c })
     expect(l.lignes.map((x) => [x.nom, x.montant, x.etat])).toEqual([
-      ['Épargne avenir', 300, 'fait'], ['Capital · Prêt A', 850, 'fait'], ['Capital · Prêt Airbnb', 500, 'fait'],
-      ['Capital · Prêt B', 200, 'prevu'],
+      ['Épargne avenir', 300, 'fait'], ['Capital Prêt A', 850, 'fait'], ['Capital Prêt Airbnb', 500, 'fait'],
+      ['Capital Prêt B', 200, 'prevu'],
     ])
     expect(l.fait).toBe(1650)
     expect(l.prevu).toBe(200)
