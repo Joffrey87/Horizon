@@ -53,6 +53,10 @@ function Anneau({ ratio, couleur, taille, trait = 4, halo = false, sansTrace = f
  * « dépensé / budget » (le budget est cliquable : il change celui de ce mois) ; à droite, alignés à droite, « Reste » en petit
  * libellé et le montant restant, gros et gras (rouge-orangé au-delà du budget, anneau plein). Sans budget : « fixer un budget ».
  */
+/** Ambre : montants des dépenses de vie (courantes, exceptionnelles, aménagement) et Reste négatif. */
+const AMBRE = '#eda145'
+const CLES_AMBRE = new Set(['courantes', 'exceptionnelles', 'amenagement'])
+
 function CorpsTuile({ t, edition, bureau }: { t: TuileBudget; edition: ReturnType<typeof useBudgetMois>; bureau: boolean }) {
   const Icone = ICONES[t.cle] ?? Wallet
   const depasse = t.ton === 'depasse'
@@ -81,7 +85,7 @@ function CorpsTuile({ t, edition, bureau }: { t: TuileBudget; edition: ReturnTyp
       <div className="shrink-0 text-right">
         <p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">{sansObjectif || t.restant === null ? 'Dépensé' : 'Reste'}</p>
         <b className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[22px]' : 'text-[20px]'}`}
-          style={{ color: negatif ? COULEURS_ANNEAU.depasse : 'var(--color-ink)' }}>
+          style={{ color: negatif ? COULEURS_ANNEAU.depasse : CLES_AMBRE.has(t.cle) ? AMBRE : 'var(--color-ink)' }}>
           {euros(sansObjectif ? t.depense : t.restant ?? t.depense)}
         </b>
       </div>
@@ -363,7 +367,13 @@ export function ResumeView() {
     const bloc1: ReactNode[] = [ffTot && rendu(ffTot), ligneEpargne, ligneEpDep, ligneVac, courses && rendu(courses)]
     const ordre2 = ['courantes', 'exceptionnelles', 'amenagement'].map(par).filter(Boolean) as TuileBudget[]
     const apart = tuiles.filter((t) => t.separe)
-    return [bloc1.filter(Boolean), ordre2.map(rendu), apart.map(rendu)].filter((g) => g.length)
+    // Ligne « Reste » en tête du bloc des dépenses de vie : même valeur que la tuile Reste, verte si positive, ambre sinon.
+    const ligneReste = ordre2.length > 0 && resteTuile !== null && ligneMaison('reste', [76, 199, 154],
+      corpsMaison(Wallet, COULEURS_ANNEAU.ok, 'Reste', 0,
+        <div className="shrink-0 text-right"><p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">Reste</p>
+          <b data-testid="montant-ligne-reste" className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[22px]' : 'text-[20px]'}`} style={{ color: resteTuile < 0 ? AMBRE : COULEURS_ANNEAU.ok }}>{euros(resteTuile)}</b></div>),
+      detail === 'reste', () => setDetail(detail === 'reste' ? null : 'reste'), null)
+    return [bloc1.filter(Boolean), apart.map(rendu), [ligneReste, ...ordre2.map(rendu)].filter(Boolean)].filter((g) => g.length)
   }
   // Mois sans objectif : total du dépensé en bas des lignes (l'épargne n'est pas une dépense : exclue).
   const totalDepense = tuiles.reduce((n, t) => n + t.depense, 0)
