@@ -1,7 +1,7 @@
-import { Fragment, useMemo, useState, type ReactNode } from 'react'
-import { Heart, PiggyBank, Receipt, Search, Plane, ShoppingCart, Sofa, Wallet, Zap, type LucideIcon } from 'lucide-react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Heart, PiggyBank, Receipt, Plane, ShoppingCart, Sofa, Wallet, Zap, type LucideIcon } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
-import { entreesPrevues, euros } from '../../lib/finances'
+import { budgetDe, BUDGET_MOIS_DEFAUT, entreesPrevues, euros } from '../../lib/finances'
 import { COULEURS_ANNEAU, eclaircie, rgba, tuilesBudgets, type TuileBudget } from '../../lib/resume'
 import { EmptyState } from '../../components/ui'
 import { FiltreSeg, NavMois } from './partage'
@@ -11,7 +11,6 @@ import { epargneDepenses, epargneVacances, estCompteEpargneDepenses } from '../.
 import { decaleMois } from '../../lib/finances'
 import { partiesEpargne, soldesComptes } from '../../lib/soldes'
 import { FenetreSoldes } from './SoldesComptes'
-import { IconeDeCompte } from './IconeCompte'
 import { useTuilesMois } from './tuilesMois'
 import { moisCourant, useFin, useIndex, useTransactionsBudget } from './contexte'
 import { estMoisSansObjectif, LIGNE_AVEC_ANNEAU } from '../../lib/moisSansObjectif'
@@ -189,14 +188,20 @@ export function ResumeView() {
   // Tuiles de budget dépliées (détail par catégorie).
   const [ouvertes, setOuvertes] = useState<Set<string>>(new Set())
   const [totalOuvert, setTotalOuvert] = useState(false)
+  // « Total dépensé » ouvert : la page défile pour montrer tout le détail qui vient de s'afficher.
+  const syntheseRef = useRef<HTMLDivElement>(null)
+  useEffect(() => { if (totalOuvert) syntheseRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' }) }, [totalOuvert])
   const basculerTuile = (cle: string) => setOuvertes((o) => { const n = new Set(o); if (n.has(cle)) n.delete(cle); else n.add(cle); return n })
 
   // Mêmes chiffres que le Budget : un seul calcul (tuilesMois.ts), capital de prêt compté en épargne et non en dépense.
-  const { s, listeEp, epargne, budgetDepenses, epargnes, capitalMois } = useTuilesMois()
+  const { s, listeEp, epargne, epargnes, capitalMois } = useTuilesMois()
   // Budget de la tuile du haut : budgets des dépenses + budgets d'épargne comptés (Épargne avenir…, pas Épargne vacances).
   // Épargne exceptionnelle du mois (Matelas sécurité) : affichée à part, « 800 + le reste habituel » (PER, capital des prêts…).
   const exceptionnelle = epargnes.filter((l) => /matelas/i.test(l.ligne?.name ?? '')).reduce((n, l) => n + l.reel, 0)
-  const budgetTuile = budgetDepenses + epargnes.reduce((n, l) => n + (l.budget ?? 0), 0)
+  // Budget du mois : indépendant des budgets des lignes — 7 000 € par défaut, modifiable pour un seul mois en cliquant dessus.
+  const budgetMoisId = useHorizon((st) => st.finBudgetMoisId)
+  const tousBudgets = useHorizon((st) => st.finBudgets)
+  const budgetTuile = (budgetMoisId ? budgetDe(budgetMoisId, mois, tousBudgets) : null) ?? BUDGET_MOIS_DEFAUT
   const edition = useBudgetMois()
   const transactions = useTransactionsBudget()
   const comptes = useHorizon((st) => st.finAccounts)
@@ -325,18 +330,27 @@ export function ResumeView() {
       )}
     </>
   )
+  // Dernières opérations : titre « Dépenses » comme « Comptes », avec une loupe posée sur une liste.
   const loupeBtn = (
-    <button type="button" data-testid="tuile-loupe" aria-label="Dernières opérations" onClick={() => setRecents(true)}
-      className={`${bureau ? 'verre verre-tuile !px-0' : 'card'} flex items-center justify-center text-ink-2 hover:text-ink`}>
-      <Search size={bureau ? 18 : 16} strokeWidth={2} />
+    <button type="button" data-testid="tuile-loupe" aria-label="Dernières opérations" title="Dernières opérations" onClick={() => setRecents(true)}
+      className={`${bureau ? 'verre verre-tuile !py-1' : 'card px-2 py-2'} min-w-0 text-center text-ink-2 hover:text-ink`}>
+      <p className="block-title overflow-hidden whitespace-nowrap max-md:!tracking-[.04em]">Dépenses</p>
+      <svg width={bureau ? 22 : 20} height={bureau ? 22 : 20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="mx-auto mt-0.5">
+        <path d="M4 6h13M4 12h6M4 18h6" /><circle cx="16" cy="15" r="3.2" /><path d="m18.4 17.4 2.6 2.6" />
+      </svg>
     </button>
   )
   const colonnes = 'grid-cols-3'
   const salaireTuile = salaireOuverture ?? (prevues ? Math.round(prevues.montant / 100) * 100 : null)
   const salaireBtn = (
-    <div data-testid="tuile-salaire" className={`${bureau ? 'verre verre-tuile !py-1' : 'card px-2 py-2'} min-w-0 text-left`}>
+    <div data-testid="tuile-salaire" className={`${bureau ? 'verre verre-tuile !py-1' : 'card px-2 py-2'} min-w-0 text-center`}>
       <p className="block-title overflow-hidden text-ellipsis whitespace-nowrap max-md:!tracking-[.04em]">Budget</p>
-      <p data-testid="montant-budget" className={`truncate font-bold tabular-nums ${bureau ? 'text-[17px] leading-tight' : 'text-[15px] leading-tight'}`} style={{ color: foyer && budgetTuile > 0 ? COULEURS_ANNEAU.ok : '#857c6d' }}>{foyer && budgetTuile > 0 ? euros(budgetTuile) : '—'}</p>
+      <p data-testid="montant-budget" className={`truncate font-bold tabular-nums ${bureau ? 'text-[17px] leading-tight' : 'text-[15px] leading-tight'}`} style={{ color: foyer && budgetTuile > 0 ? COULEURS_ANNEAU.ok : '#857c6d' }}>
+        {foyer && budgetTuile > 0
+          ? <MontantBudget montant={budgetTuile} ajustement={edition.ajustement(budgetMoisId)} discret
+              onOuvrir={budgetMoisId && edition.peutModifier ? () => edition.ouvrir({ id: budgetMoisId, name: 'Budget du mois' }, budgetTuile) : undefined} />
+          : '—'}
+      </p>
       <p data-testid="montant-salaire" className="truncate text-[10.5px] leading-snug text-ink-3">{salaireTuile === null ? ' ' : `Salaire ${euros(salaireTuile)}`}</p>
     </div>
   )
@@ -345,9 +359,8 @@ export function ResumeView() {
       {loupeBtn}
       <button type="button" data-testid="soldes-comptes" aria-expanded={detail === 'soldes'} onClick={() => setDetail(detail === 'soldes' ? null : 'soldes')}
         title="Voir le solde de chaque compte"
-        className={`${bureau ? 'verre verre-tuile !py-1' : 'card px-2 py-2'} min-w-0 text-left`}>
-        <p className="block-title flex items-center gap-1.5 overflow-hidden whitespace-nowrap max-md:!tracking-[.04em]">Comptes
-          <span className="flex -space-x-1 max-md:hidden">{soldes.comptes.map((a) => <IconeDeCompte key={a.id} compte={a} taille={12} />)}</span>
+        className={`${bureau ? 'verre verre-tuile !py-1' : 'card px-2 py-2'} min-w-0 text-center`}>
+        <p className="block-title flex items-center justify-center gap-1.5 overflow-hidden whitespace-nowrap max-md:!tracking-[.04em]">Sur les comptes
         </p>
         <p className={`truncate font-bold tabular-nums ${bureau ? 'text-[17px] leading-tight' : 'text-[15px] leading-tight'}`} style={soldes.total < 0 ? { color: COULEURS_ANNEAU.depasse } : undefined}>{euros(soldes.total)}</p>
       </button>
@@ -454,7 +467,7 @@ export function ResumeView() {
         <b className={`font-bold tabular-nums ${bureau ? 'text-[18px]' : 'text-[17px]'}`}>{euros(totalDepense)}</b>
       </button>
       {totalOuvert && (
-        <div data-testid="synthese-total" className="card mx-auto mt-1.5 w-full max-w-sm space-y-1 px-4 py-2.5 text-[13px]">
+        <div ref={syntheseRef} data-testid="synthese-total" className="card scroll-mb-24 mx-auto mt-1.5 w-full max-w-sm space-y-1 px-4 py-2.5 text-[13px]">
           {syntheseTotal.map((l) => (
             <div key={l.nom} className={`flex items-center justify-between gap-3 ${l.fort ? 'border-t border-line/60 pt-1 font-semibold' : 'text-ink-2'}`}>
               <span className="min-w-0 truncate">{l.nom}</span>

@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
-import { Info } from 'lucide-react'
+import { ChevronDown, ChevronRight, Info } from 'lucide-react'
+import { DetailLigneLecture } from './DetailLigne'
 import { euros, type LigneBudget, type listeEpargnes } from '../../lib/finances'
 import type { epargneUtilisee } from '../../lib/epargneUtilisee'
 
@@ -59,6 +60,7 @@ export function DetailEpargne({ liste, utilisee }: { liste: ReturnType<typeof li
       {liste.lignes.map((l) => {
         const cle = `${l.nom}-${l.etat}`
         const detaille = !!l.pastilles?.length
+        const avecOperations = !!l.ligneId && l.etat === 'fait'
         const ouvert = ouverts.has(cle)
         const entete = (
           <>
@@ -72,10 +74,17 @@ export function DetailEpargne({ liste, utilisee }: { liste: ReturnType<typeof li
         )
         return (
           <div key={cle}>
-            {detaille
+            {avecOperations
+              ? <button type="button" data-testid="epargne-ligne-operations" aria-expanded={ouvert} onClick={() => basculer(cle)} title="Voir les opérations"
+                  className="flex w-full items-center justify-between gap-3 text-left">
+                  <span className="flex min-w-0 items-center gap-1.5">{ouvert ? <ChevronDown size={13} className="shrink-0 text-ink-3" /> : <ChevronRight size={13} className="shrink-0 text-ink-3" />}<span className="truncate">{l.nom}</span>{badge(l.etat)}</span>
+                  <span className="shrink-0 tabular-nums">{euros(l.montant)}</span>
+                </button>
+              : detaille
               ? <button type="button" data-testid="epargne-ligne-detail" aria-expanded={ouvert} onClick={() => basculer(cle)} title="Voir le détail"
                   className="flex w-full items-center justify-between gap-3 text-left">{entete}</button>
               : <div className="flex items-center justify-between gap-3">{entete}</div>}
+            {avecOperations && ouvert && <div className="pl-1"><DetailLigneLecture cle={l.ligneId!} couleur="#6ebe78" deplie /></div>}
             {detaille && ouvert && (
               <div data-testid="pastilles-epargne" className="flex flex-wrap gap-1 pl-3">
                 {l.pastilles!.map((p, i) => (

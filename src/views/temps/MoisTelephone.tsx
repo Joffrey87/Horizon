@@ -110,7 +110,7 @@ export function MoisTelephone({ anchor, fenetre, onShift, onOpenDay }: {
               return (
                 <button key={jour.toISOString()} type="button" onClick={() => onOpenDay(jour)}
                   aria-label={format(jour, 'EEEE d MMMM', { locale: fr })}
-                  style={auj ? undefined : { backgroundColor: teinteMois(jour) }}
+                  style={auj ? { background: 'linear-gradient(rgba(245,158,11,.14), rgba(245,158,11,.14)), rgba(15,13,10,.62)' } : { backgroundColor: teinteMois(jour) }}
                   className={`relative flex min-h-0 flex-col overflow-hidden border-b border-r border-line-2/50 text-left ${auj ? 'bg-sun/10 ring-1 ring-inset ring-sun/70' : ''} ${rempla ? 'outline outline-1 -outline-offset-1 outline-dashed outline-[#ef4444]/80' : ''}`}>
                   <span className={`flex shrink-0 items-baseline gap-0.5 px-0.5 text-[11px] leading-[17px] ${auj ? 'font-semibold text-sun-soft' : 'text-ink-2'}`}>
                     {format(jour, 'd')}

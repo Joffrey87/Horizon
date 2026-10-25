@@ -239,6 +239,10 @@ const reelDe = (agg: Agregat, mois: string, cle: string) => agg.get(mois)?.ligne
 // ---------- Budgets ----------
 
 /** Budget d'une ligne pour un mois : le dernier fixé à ce mois ou avant. */
+/** Budget global du mois (tuile « Budget » du Résumé) : une ligne à part, invisible dans les listes, 7 000 € par défaut. */
+export const LIGNE_BUDGET_MOIS = 'Budget du mois'
+export const BUDGET_MOIS_DEFAUT = 7000
+
 export function budgetDe(ligneId: string, mois: string, budgets: FinBudget[]): number | null {
   let trouve: FinBudget | null = null
   for (const b of budgets) {
@@ -577,7 +581,7 @@ export function epargnesPrevues(opts: {
 /** Pastille sous une ligne du détail : une opération réelle, ou une part retirée (intérêts, assurance). */
 export interface PastilleEpargne { texte: string; montant: number; type: 'operation' | 'interets' | 'assurance'; date?: string }
 
-export interface EpargneLigne { nom: string; montant: number; etat: 'fait' | 'prevu'; type: 'ligne' | 'capital'; pastilles?: PastilleEpargne[] }
+export interface EpargneLigne { nom: string; montant: number; etat: 'fait' | 'prevu'; type: 'ligne' | 'capital'; pastilles?: PastilleEpargne[]; /** Ligne de budget d'épargne : ses opérations se déplient (et s'éditent). */ ligneId?: string }
 
 /** Pastilles d'un prêt fait : ses prélèvements réels, puis ce qui en est retiré (intérêts, assurance). */
 export function pastillesPret(p: CapitalPret): PastilleEpargne[] {
@@ -598,7 +602,7 @@ export function listeEpargnes(opts: {
   const lignes: EpargneLigne[] = []
   for (const l of opts.lignes) {
     if (!estEpargneComptee(l.ligne)) continue
-    if (Math.abs(l.reel) >= 0.5) lignes.push({ nom: l.ligne.name, montant: l.reel, etat: 'fait', type: 'ligne' })
+    if (Math.abs(l.reel) >= 0.5) lignes.push({ nom: l.ligne.name, montant: l.reel, etat: 'fait', type: 'ligne', ligneId: l.ligne.id })
   }
   let reims: EpargneLigne | null = null
   for (const p of opts.capital?.prets ?? []) {

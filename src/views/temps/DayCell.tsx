@@ -106,7 +106,7 @@ export function DayCell({ day, sansHoraire, onOpenDay, tint, ruban, rubanCouleur
       onDragLeave={() => setOver(false)}
       onDrop={onDrop}
       onClick={handleVoid}
-      style={{ backgroundColor: !today && !over ? tint : undefined }}
+      style={today && !over ? { background: 'linear-gradient(rgba(245,158,11,.14), rgba(245,158,11,.14)), rgba(15,13,10,.62)' } : { backgroundColor: !over ? tint : undefined }}
       className={`relative flex cursor-pointer flex-col ${sansHoraire ? 'rounded-none border-0 border-b border-r p-1' : 'rounded-lg border p-1.5'} transition-[colors,opacity] ${remplir ? 'min-h-0' : 'min-h-28'} ${fit ? 'w-max max-w-full' : ''} ${dim && !today ? 'opacity-50 hover:opacity-100' : ''} ${
         rempla ? 'border-dashed border-[#ef4444]/80' : today ? `border-sun/50 bg-sun/5${sansHoraire ? ' z-10 ring-1 ring-inset ring-sun/70' : ''}` : over ? 'border-sun/70 bg-sun/10' : sansHoraire ? 'border-line-2/50 hover:bg-panel-2/40' : 'border-line-2/60 hover:bg-panel-2/40'
       }`}>

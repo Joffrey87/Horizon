@@ -9,7 +9,7 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import { capturesEnAttente, depiler } from './capture'
 import { messageFonction } from './functionError'
-import { ecrituresBudgetMois } from './finances'
+import { ecrituresBudgetMois, LIGNE_BUDGET_MOIS } from './finances'
 import { ecriturePermise, projetsVisibles, tachesVisibles, vueActive } from './partage'
 import type {
   Birthday, CalendarFeed, CelesteProposal, CelesteRules, Check, Domain, FinAccount, FinBudget, FinCategory, FinDca,
@@ -67,6 +67,8 @@ interface HorizonState {
    *  (des milliers d'opérations que les autres pages n'utilisent pas). */
   finLoaded: boolean
   finLines: FinLine[]
+  /** Ligne cachée qui porte le budget global du mois (voir LIGNE_BUDGET_MOIS) ; null tant qu'elle n'existe pas. */
+  finBudgetMoisId: string | null
   finAccounts: FinAccount[]
   finCategories: FinCategory[]
   finTransactions: FinTransaction[]
@@ -154,7 +156,7 @@ const LECTURE_SEULE = 'Lecture seule : cette vue partagée ne permet pas de modi
 
 /** Les vides de l'onglet Finances (état initial et déconnexion). */
 const FIN_VIDE = {
-  finLoaded: false, finLines: [], finAccounts: [], finCategories: [], finTransactions: [], finBudgets: [],
+  finLoaded: false, finLines: [], finBudgetMoisId: null, finAccounts: [], finCategories: [], finTransactions: [], finBudgets: [],
   finNetworth: [], finHoldings: [], finTargets: [], finDca: [], finPlanned: [], finLabels: [], finGroups: [], finMerchantAlias: [], finEcheances: [], finLoans: [], finResteAjustements: [], finEnergie: [],
 }
 
@@ -547,6 +549,12 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       if (r.error) echecs.push(`${table} (${r.error})`)
       else (maj as Record<string, unknown>)[cle] = r.data
     })
+    // La ligne du budget global du mois sort des lignes (listes, tuiles, réglages) : seule la tuile « Budget » la lit.
+    if (Array.isArray(maj.finLines)) {
+      const special = maj.finLines.find((l) => l.name === LIGNE_BUDGET_MOIS)
+      maj.finLines = maj.finLines.filter((l) => l !== special)
+      maj.finBudgetMoisId = special?.id ?? null
+    }
     set({ ...maj, finLoaded: echecs.length === 0 || get().finLoaded })
     // Vue partagée : budget, bilan et patrimoine seulement (opérations des comptes du budget).
     const vue = vueCourante(get())
