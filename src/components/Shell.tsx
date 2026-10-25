@@ -1,15 +1,16 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
-  Home, FolderKanban, ListTodo, Compass, CalendarDays, CalendarRange,
+  FolderKanban, ListTodo, Compass, CalendarDays, CalendarRange,
   Repeat, ClipboardCheck, Network, Settings, Plus, LogOut, Menu, ArrowLeft, ShieldCheck, Timer, Newspaper,
-  AlertTriangle, X, RotateCw, Ellipsis, ChevronDown, ChevronRight, ArrowLeftRight, Wallet, Eye, Hourglass, ShoppingCart, Euro, Target, createLucideIcon,
+  AlertTriangle, X, RotateCw, Ellipsis, ChevronDown, ChevronRight, ArrowLeftRight, Wallet, Eye, Hourglass, ShoppingCart, Euro, Target,
 } from 'lucide-react'
 import { useHorizon, vueCourante } from '../lib/store'
 import { ONGLETS_PARTAGE, pageAccueil, routeAutorisee } from '../lib/partage'
 import { PAGES_GLISSANTES, pagesFinancesVisibles } from '../lib/financesNav'
 import { todayIso, wallpaperOfDay } from '../lib/logic'
 import { QuickAdd } from './QuickAdd'
+import { CroixLatine, LivreCroix, PAGES_CHARITE } from './chariteNav'
 import { useMediaQuery } from '../lib/useMediaQuery'
 import { ROUTE_ACCUEIL, ROUTE_COURSES } from '../lib/navigation'
 
@@ -19,14 +20,16 @@ const SYNC_KEY = 'horizon.agenda.sync'
 const SYNC_MS = 30 * 60 * 1000
 
 const NAV = [
-  { to: ROUTE_ACCUEIL, label: 'Accueil', icon: Home },
-  { to: '/projets', label: 'Projets', icon: FolderKanban },
-  { to: '/priorites', label: 'Priorités', icon: ListTodo },
-  { to: '/domaines', label: 'Domaines & objectifs', icon: Compass },
   { to: '/temps', label: 'Agenda', icon: CalendarDays },
+  { to: '/priorites', label: 'Priorités', icon: ListTodo },
+  { to: '/finances', label: 'Finances', icon: Wallet },
+  { to: '/charite', label: 'Charité', icon: CroixLatine },
+  { to: '/verifications/listes', label: 'Listes', icon: ShoppingCart },
+  // Rangés sous « Autres » (voir ROUTES_AUTRES) :
+  { to: '/projets', label: 'Projets', icon: FolderKanban },
+  { to: '/domaines', label: 'Domaines & objectifs', icon: Compass },
   { to: '/planification', label: 'Planification', icon: CalendarRange },
   { to: '/habitudes', label: 'Habitudes', icon: Repeat },
-  { to: '/finances', label: 'Finances', icon: Wallet },
   { to: '/activites', label: 'Activités', icon: Newspaper },
   { to: '/revues', label: 'Revues', icon: ClipboardCheck },
   { to: '/verifications', label: 'Vérifications', icon: ShieldCheck },
@@ -36,7 +39,7 @@ const NAV = [
 ]
 
 /** Pages rangées sous l'onglet « Autres » de la barre latérale. */
-const ROUTES_AUTRES = ['/projets', '/domaines', '/planification', '/habitudes', '/revues', '/heures-controle', '/remplas', '/espace']
+const ROUTES_AUTRES = ['/projets', '/domaines', '/planification', '/habitudes', '/revues', '/heures-controle', '/remplas', '/espace', '/verifications', '/activites']
 
 /** Date du jour, remise à jour à minuit et au retour sur l'onglet : sans ça, un
  *  onglet laissé ouvert la nuit continue d'afficher la veille (les vues lisent
@@ -94,7 +97,9 @@ export function Shell({ children }: { children: ReactNode }) {
   const nav = vue ? NAV.filter((n) => ONGLETS_PARTAGE.some((o) => vue.onglets.includes(o.cle) && o.route === n.to)) : NAV
   const navPrincipal = nav.filter((n) => !ROUTES_AUTRES.includes(n.to))
   const navAutres = nav.filter((n) => ROUTES_AUTRES.includes(n.to))
-  const surAutres = navAutres.some((n) => pathname === n.to || pathname.startsWith(`${n.to}/`))
+  const dans = (to: string) => pathname === to || pathname.startsWith(`${to}/`)
+  // Listes est en accès direct : y être n'ouvre pas « Autres » (même si Vérifications, rangé dedans, partage le début de l'adresse).
+  const surAutres = !navPrincipal.some((n) => dans(n.to)) && navAutres.some((n) => dans(n.to))
   const autresVisible = autresOuvert || surAutres
   useEffect(() => {
     // L'aperçu montre ce qu'elle verra une fois l'accès validé.
@@ -151,7 +156,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3">
           {navPrincipal.map(({ to, label, icon: Icon }) => (
             <Fragment key={to}>
-              <NavLink to={to} end={to === ROUTE_ACCUEIL} onClick={() => setMenuOpen(false)}
+              <NavLink to={to} end={to === ROUTE_ACCUEIL || to === '/verifications'} onClick={() => setMenuOpen(false)}
                 className={({ isActive }) =>
                   `flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors ${
                     isActive ? 'bg-panel-3 text-sun-soft' : 'text-ink-2 hover:bg-panel-2 hover:text-ink'
@@ -164,6 +169,21 @@ export function Shell({ children }: { children: ReactNode }) {
                 <div className="mb-1 ml-5 space-y-0.5 border-l border-line pl-2">
                   {pagesFinancesVisibles(vue).map((p) => (
                     <NavLink key={p.to} to={p.to} end={p.end} onClick={() => setMenuOpen(false)}
+                      className={({ isActive }) =>
+                        `flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors ${
+                          isActive ? 'bg-panel-2 text-sun-soft' : 'text-ink-3 hover:bg-panel-2 hover:text-ink'
+                        }`}>
+                      <p.icon size={14} strokeWidth={1.8} />
+                      {p.label}
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+              {/* Sous-menu de Charité : toujours affiché. */}
+              {to === '/charite' && (
+                <div className="mb-1 ml-5 space-y-0.5 border-l border-line pl-2">
+                  {PAGES_CHARITE.map((p) => (
+                    <NavLink key={p.to} to={p.to} onClick={() => setMenuOpen(false)}
                       className={({ isActive }) =>
                         `flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors ${
                           isActive ? 'bg-panel-2 text-sun-soft' : 'text-ink-3 hover:bg-panel-2 hover:text-ink'
@@ -339,18 +359,11 @@ export function Shell({ children }: { children: ReactNode }) {
   )
 }
 
-/** Livre fermé avec une croix chrétienne sur la couverture (même trait que les icônes lucide). */
-const LivreCroix = createLucideIcon('livre-croix', [
-  ['path', { d: 'M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20', key: 'couv' }],
-  ['path', { d: 'M12 5.5v8', key: 'croix-v' }],
-  ['path', { d: 'M9.5 8h5', key: 'croix-h' }],
-])
-
 const RACCOURCIS = [
   { to: '/finances', label: 'Finances', icon: Euro, actif: (p: string) => p.startsWith('/finances') },
   { to: ROUTE_COURSES, label: 'Liste de courses', icon: ShoppingCart, actif: (p: string) => p.startsWith('/verifications/listes') },
   { to: '/temps', label: 'Agenda', icon: CalendarDays, actif: (p: string) => p.startsWith('/temps') },
-  { to: '/activites/ecritures', label: 'Écritures', icon: LivreCroix, actif: (p: string) => p.startsWith('/activites/ecritures') },
+  { to: '/charite/ecritures', label: 'Écritures', icon: LivreCroix, actif: (p: string) => p.startsWith('/charite') },
   { to: '/priorites', label: 'Priorités', icon: Target, actif: (p: string) => p.startsWith('/priorites') },
 ]
 

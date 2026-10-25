@@ -1,3 +1,6 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/aelf/:path*", "destination": "https://api.aelf.org/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }

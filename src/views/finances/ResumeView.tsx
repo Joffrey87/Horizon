@@ -377,6 +377,13 @@ export function ResumeView() {
       <div className="md:justify-self-end"><FiltreSeg value={filtre} onChange={setFiltre} /></div>
     </header>
   )
+  // Montant d'une ligne de synthèse (Reste, Total dépensé) : dans la colonne « Dépensé », sous celle des lignes au-dessus.
+  const padSynthese = bureau ? 'px-[29px] pt-1' : 'px-[calc(.75rem+1px)] pt-1.5'
+  const colSynthese = (montant: ReactNode) => (
+    <span className="flex shrink-0 justify-end gap-1.5">
+      <span className={`text-center ${largeurCol(bureau, true)}`}>{montant}</span><span className={largeurCol(bureau)} /><span className={largeurCol(bureau)} />
+    </span>
+  )
   // Ordre : Salaire, écart, Frais fixe + Épargné, écart, les autres budgets (Dons encore à part). Écarts = celui avant Dons.
   const groupes = (rendu: (t: TuileBudget) => ReactNode): { noeuds: ReactNode[]; apres?: ReactNode }[] => {
     const par = (cle: string) => tuiles.find((t) => t.cle === cle)
@@ -417,9 +424,9 @@ export function ResumeView() {
     const apportTotal = apportEp ? apportEp.lignes.reduce((n, l) => n + l.montant, 0) : 0
     const reste2 = reste1 === null ? null : reste1 - bloc3.reduce((n, t) => n + t.depense, 0) + apportTotal
     const texteReste = (id: string, v: number | null, ambreSiNegatif = false, titre = 'Reste', calcul?: [string, number][]) => v !== null && (
-      <div data-testid={id} className={`group relative flex items-center justify-between ${bureau ? 'px-0 pt-1' : 'px-3 pt-1.5'}`}>
+      <div data-testid={id} className={`group relative flex items-center justify-between ${padSynthese}`}>
         <span className="text-[11px] font-semibold uppercase tracking-[.06em] text-ink-3">{titre}</span>
-        <b className={`font-bold tabular-nums text-[15px] ${futur ? 'italic' : ''}`} style={{ color: v >= 0 ? COULEURS_ANNEAU.ok : ambreSiNegatif ? AMBRE : 'var(--color-ink)' }}>{euros(v)}</b>
+        {colSynthese(<b className={`font-bold tabular-nums text-[15px] ${futur ? 'italic' : ''}`} style={{ color: v >= 0 ? COULEURS_ANNEAU.ok : ambreSiNegatif ? AMBRE : 'var(--color-ink)' }}>{euros(v)}</b>)}
         {calcul && (
           <div role="tooltip" data-testid={`${id}-calcul`} className="pointer-events-none absolute right-0 top-full z-50 mt-1 hidden w-64 space-y-0.5 rounded-xl border border-line-2 bg-[#1b1611] px-3 py-2 text-[12px] shadow-xl shadow-black/60 group-hover:block">
             {calcul.map(([nom, m]) => (
@@ -459,12 +466,12 @@ export function ResumeView() {
     { nom: 'Total dépensé', montant: totalDepense, fort: true },
   ]
   const ligneTotal = estMoisSansObjectif(mois) && (
-    <div data-testid="total-depense" className={bureau ? 'px-0 pt-1' : 'px-3 pt-1.5'}>
+    <div data-testid="total-depense" className={padSynthese}>
       <button type="button" onClick={() => setTotalOuvert(!totalOuvert)} aria-expanded={totalOuvert}
         title={syntheseTotal.map((l) => `${l.nom} : ${euros(l.montant)}`).join('\n')}
         className="flex w-full items-center justify-between text-left">
         <span className="text-[11px] font-semibold uppercase tracking-[.06em] text-ink-3">Total dépensé</span>
-        <b className={`font-bold tabular-nums ${bureau ? 'text-[18px]' : 'text-[17px]'}`}>{euros(totalDepense)}</b>
+        {colSynthese(<b className={`font-bold tabular-nums ${bureau ? 'text-[18px]' : 'text-[17px]'}`}>{euros(totalDepense)}</b>)}
       </button>
       {totalOuvert && (
         <div ref={syntheseRef} data-testid="synthese-total" className="card scroll-mb-24 mx-auto mt-1.5 w-full max-w-sm space-y-1 px-4 py-2.5 text-[13px]">

@@ -10,6 +10,7 @@ import {
 } from '../lib/tacheForm'
 import { Modal, NoteArea, DomainDot } from './ui'
 import { IconeProjet } from './IconeProjet'
+import { avecSources, notesVisibles } from '../lib/semaine'
 import type { Task } from '../lib/types'
 
 /** Une tâche est ancrée à un projet OU librement à un domaine (jamais nulle part). */
@@ -230,7 +231,8 @@ export function TaskForm({ open, task, defaultDate, defaultIsTask = false, defau
             </div>
           )}
 
-          <NoteArea value={current.notes as string} onChange={(v) => setF('notes', v)}
+          {/* Les marqueurs techniques (« source:… ») restent cachés et sont remis à l'enregistrement. */}
+          <NoteArea value={notesVisibles(current.notes as string)} onChange={(v) => setF('notes', avecSources(v, current.notes as string))}
             placeholder="Note…" rows={2} compact />
 
           {/* Copier sur un autre jour : le geste du téléphone (Ctrl + glisser sur PC). */}

@@ -56,6 +56,17 @@ export function notePropre(notes: string | null | undefined): string | null {
   return l ?? null
 }
 
+/** Notes sans les marqueurs techniques (« source:caps », « source:check:… ») : ce qu'on montre à l'écran. */
+export function notesVisibles(notes: string | null | undefined): string {
+  return (notes ?? '').split('\n').filter((x) => !/^\s*source:/i.test(x)).join('\n')
+}
+
+/** Remet les marqueurs techniques d'origine sous un texte saisi (ils ne sont jamais affichés ni perdus). */
+export function avecSources(visible: string, origine: string | null | undefined): string {
+  const sources = (origine ?? '').split('\n').filter((x) => /^\s*source:/i.test(x))
+  return [visible, ...sources].filter(Boolean).join('\n')
+}
+
 /** Ordre dans la journée : évènements multi-jours, puis « toute la journée », puis ceux à heure (chronologique). */
 export function ordreSemaine(a: Task, b: Task, spanA: boolean, spanB: boolean): number {
   const rang = (t: Task, span: boolean) => (span ? 0 : extractHourMinute(t.title) ? 2 : 1)

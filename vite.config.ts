@@ -5,6 +5,8 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // L'API AELF n'envoie plus d'en-tête CORS : on la sert depuis notre propre domaine (même règle dans vercel.json).
+  server: { proxy: { '/aelf': { target: 'https://api.aelf.org', changeOrigin: true, rewrite: (p) => p.replace(/^\/aelf/, '') } } },
   build: {
     rollupOptions: {
       output: {

@@ -10,7 +10,7 @@ import {
   fmtMinutes, hasMaintainedMasses, isLineValid, isMarketParkingDay, isObligationDay, iso,
   lastControlHoursPeriodEnd, lineTotal, massFitsShift, massesInfoUrl, parseShift, estGardeTravail, notesGarde,
   misselDayName, proposeControlHours, revisionWeek, quadrant, recurrenceDueOn, recurrenceLabel, spanPart, tasksForDay,
-  tripLocationOn, workShiftOn, worksOn,
+  titreAvecHeure, tripLocationOn, workShiftOn, worksOn,
 } from './logic'
 
 // ---- fabriques minimales ------------------------------------------------
@@ -456,5 +456,18 @@ describe('estGardeTravail', () => {
     expect(notesGarde(null)).toBe('source:caps')
     expect(notesGarde('x')).toBe('x source:caps')
     expect(notesGarde('x source:caps')).toBe('x source:caps')
+  })
+})
+
+describe('titreAvecHeure', () => {
+  it('change l’heure de début', () => {
+    expect(titreAvecHeure('14h30 Dentiste', 15 * 60)).toBe('15h Dentiste')
+    expect(titreAvecHeure('9h Réunion', 9 * 60 + 45)).toBe('9h45 Réunion')
+  })
+  it('décale une plage d’autant', () => {
+    expect(titreAvecHeure('14h-15h30 Cours', 16 * 60)).toBe('16h-17h30 Cours')
+  })
+  it('laisse un titre sans heure', () => {
+    expect(titreAvecHeure('Congés', 600)).toBe('Congés')
   })
 })

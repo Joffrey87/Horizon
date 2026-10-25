@@ -96,7 +96,7 @@ export async function fetchMass(date: string): Promise<MassDay> {
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS)
   let res: Response
   try {
-    res = await fetch(`https://api.aelf.org/v1/messes/${date}/france`, { signal: ctrl.signal })
+    res = await fetch(`/aelf/v1/messes/${date}/france`, { signal: ctrl.signal })
   } finally {
     clearTimeout(timer)
   }

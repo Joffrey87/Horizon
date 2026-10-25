@@ -4,7 +4,7 @@ import { fr } from 'date-fns/locale'
 import { APlanifier } from './APlanifier'
 import { AlerteParking } from './AlerteParking'
 import { PX_DEMI_HEURE, PositionsCtx, briqueEnCours, cleBrique, usePositionsBriques } from './positionsBriques'
-import { Church, Layers, Circle, CheckCircle2 } from 'lucide-react'
+import { Church, Layers, Circle, CheckCircle2, Plane, Headset } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import { useMediaQuery } from '../../lib/useMediaQuery'
 import {
@@ -68,7 +68,7 @@ export function SemaineBriques({ anchor, onEdit, onCreate, onStep, onMove, onOpe
 
   return (
     <PositionsCtx.Provider value={positionsBriques}>
-    <Card className="flex min-h-0 min-w-0 flex-1 flex-col !border-line-2/60 !bg-transparent !p-2 max-md:!p-1 md:-mx-3 lg:-mx-6">
+    <Card className="flex min-h-0 min-w-0 flex-1 flex-col !border-line-2/60 !bg-transparent !p-2 max-md:!p-1">
       {telephone && <BandeauxSemaine jours={jours} tel onEdit={onEdit} />}
       <div ref={defile} className="min-h-0 flex-1 overflow-y-auto px-1 [scrollbar-width:none]">
         <div className={`grid min-h-full ${telephone ? 'grid-cols-3 gap-1' : `${COLONNES_BUREAU} gap-x-2 gap-y-0`}`}
@@ -276,9 +276,10 @@ function BandeService({ b, className = '', couleur, onEdit }: { b: NonNullable<R
     <div title={onEdit ? `${b.libelle} — cliquer pour modifier` : b.libelle} role={onEdit ? 'button' : undefined}
       onClick={onEdit ? (e) => { e.stopPropagation(); onEdit() } : undefined}
       className={`flex shrink-0 items-center justify-center whitespace-nowrap text-[10px] font-extrabold ${onEdit ? 'cursor-pointer hover:brightness-110' : ''} ${className}`}
-      // Ordinateur : une seule couleur pour tous les services (celle de la brique d'avant) ; téléphone : couleur du service.
-      style={couleur ? { background: `color-mix(in srgb, ${couleur} 55%, ${FOND})`, color: 'var(--color-ink)' } : { background: b.fond, color: b.texte }}>
-      {b.libelle}
+      // Ordinateur : verre ambré (fond translucide, liseré, texte ambre clair) ; téléphone : couleur du service.
+      style={couleur ? { background: 'rgba(245,158,11,.16)', border: '1px solid rgba(245,158,11,.38)', color: '#fbbf6a' } : { background: b.fond, color: b.texte }}>
+      <Headset size={11} strokeWidth={2.2} className="mr-0.5 shrink-0" aria-hidden />
+      <Plane size={11} strokeWidth={2.2} className="mr-1 shrink-0 -rotate-45" aria-hidden />{b.libelle}
     </div>
   )
 }

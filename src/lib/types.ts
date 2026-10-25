@@ -358,6 +358,8 @@ export interface ShoppingItem {
   section: ShoppingSection | string | null  // rayon / sous-liste (clé d'un rayon connu ou nom libre) ; null sinon
   category: string | null          // sous-groupe (ex. « Viande », « Fruits ») ; null si autonome
   checked: boolean                 // acheté (coché, sans rayer)
+  price_min: number | null         // prix, ou bas de la fourchette
+  price_max: number | null         // haut de la fourchette ; null = prix unique
   sort_order: number
   created_at: string
 }

@@ -813,6 +813,26 @@ export function extractHourMinute(title: string): { hour: number; minute: number
   return { hour, minute }
 }
 
+/** Change l'heure de début écrite dans un titre (« 14h30 Dentiste » → « 15h Dentiste ») ; une plage « 14h-15h » est
+ *  décalée d'autant. Titre sans heure : rendu tel quel. */
+export function titreAvecHeure(title: string, debutMin: number): string {
+  const m = title.match(/(?<!\d)(\d{1,2})[h:](\d{0,2})(?!\d)/i)
+  const h = extractHourMinute(title)
+  if (!m || !h || m.index === undefined) return title
+  const fmt = (min: number) => {
+    const x = ((min % 1440) + 1440) % 1440
+    return `${Math.floor(x / 60)}h${x % 60 ? String(x % 60).padStart(2, '0') : ''}`
+  }
+  const delta = debutMin - (h.hour * 60 + h.minute)
+  const fin = m.index + m[0].length
+  const reste = title.slice(fin)
+  const plage = reste.match(/^(\s*[-–—>→]\s*)(\d{1,2})[h:](\d{0,2})(?!\d)/)
+  const suite = plage
+    ? `${plage[1]}${fmt(Number(plage[2]) * 60 + (plage[3] ? Number(plage[3]) : 0) + delta)}${reste.slice(plage[0].length)}`
+    : reste
+  return `${title.slice(0, m.index)}${fmt(debutMin)}${suite}`
+}
+
 /** Extrait les emojis d'un titre (variantes, séquences ZWJ et drapeaux inclus).
  *  Renvoie la chaîne concaténée des emojis trouvés, sinon ''. Sert à « signer »
  *  visuellement un évènement multi-jours sur chaque case du calendrier. */

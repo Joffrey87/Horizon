@@ -6,7 +6,7 @@ import {
 } from './courses'
 
 const item = (label: string, section: ShoppingItem['section'], over: Partial<ShoppingItem> = {}): ShoppingItem => ({
-  id: label + section, user_id: 'u', list_id: 'l', label, section, category: null, checked: false, sort_order: 0, created_at: '', ...over,
+  id: label + section, user_id: 'u', list_id: 'l', label, section, category: null, checked: false, price_min: null, price_max: null, sort_order: 0, created_at: '', ...over,
 })
 
 describe('tri par catégorie', () => {

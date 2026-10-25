@@ -95,7 +95,8 @@ export function DayCell({ day, sansHoraire, onOpenDay, tint, ruban, rubanCouleur
   const crossMass = showCross ? chosenMassForDay(s.checks, dayIso) : null
 
   const handleVoid = (e: React.MouseEvent<HTMLElement>) => {
-    if (e.target === e.currentTarget) { if (onOpenDay) onOpenDay(day); else onCreate(iso(day)) }
+    // Vide du jour : nouvel évènement ; la date (en-tête) ouvre la journée.
+    if (e.target === e.currentTarget) onCreate(iso(day))
   }
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault(); setOver(false)
@@ -117,9 +118,10 @@ export function DayCell({ day, sansHoraire, onOpenDay, tint, ruban, rubanCouleur
           style={{ background: rubanCouleur }}>{ruban}</span>
       )}
       <header className="mb-1 flex items-center justify-between gap-1" onClick={(e) => e.stopPropagation()}>
-        <p className={`${sansHoraire ? 'text-[10px]' : 'text-xs'} font-medium capitalize ${today ? 'text-sun-soft' : emphasize ? 'text-white/85' : 'text-ink-3'}`}>
+        <button type="button" onClick={() => (onOpenDay ? onOpenDay(day) : onCreate(iso(day)))} title={onOpenDay ? 'Ouvrir la journée' : undefined}
+          className={`rounded px-0.5 ${sansHoraire ? 'text-[10px]' : 'text-xs'} font-medium capitalize hover:bg-panel-2/60 ${today ? 'text-sun-soft' : emphasize ? 'text-white/85' : 'text-ink-3'}`}>
           {format(day, 'EEE d', { locale: fr })}
-        </p>
+        </button>
         <div className="flex items-center gap-1">
           {showCross && (
             <button onClick={(e) => { e.stopPropagation(); openMassPicker(dayIso, feast ?? '') }}

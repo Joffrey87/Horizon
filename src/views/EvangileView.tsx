@@ -22,6 +22,10 @@ const BACK_DAYS = 7        // on peut revenir sur les jours précédents (quiz c
 const WEEK_KEY = (forme: FormeMesse, sunday: string, i: number) =>
   `horizon.gospel.semaine.${forme === 'ordinaire' ? 'ordinaire.' : ''}${sunday}.${i}`
 
+/** Paragraphes d'un passage, chacun d'un seul tenant (les retours à la ligne deviennent des espaces). */
+const enParagraphes = (texte: string) =>
+  texte.split(/\n\s*\n/).map((p) => p.replace(/\s*\n\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()).filter(Boolean)
+
 export function EvangileView() {
   const today = todayIso()
   // On peut revenir sur les jours précédents : le quiz suit la date choisie.
@@ -104,8 +108,9 @@ export function EvangileView() {
 
             <div className="mt-4 border-t border-line pt-3">
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Le texte en entier</p>
-              {reading.text.split('\n\n').map((para, i) => (
-                <p key={i} className="mt-2 whitespace-pre-line text-[15px] leading-relaxed text-ink">{para}</p>
+              {/* Paragraphes continus : les retours à la ligne du lectionnaire (phrases courtes) sont fondus. */}
+              {enParagraphes(reading.text).map((para, i) => (
+                <p key={i} className="mt-2 text-[15px] leading-relaxed text-ink">{para}</p>
               ))}
               <p className="mt-3 text-[11px] text-ink-3">
                 {duMissel ? (
@@ -476,6 +481,15 @@ function SemaineQuizCard({ forme, onClose }: { forme: FormeMesse; onClose: () =>
       )}
 
       {erreur && <p className="mt-3 text-sm text-[#ec7f97]">{erreur}</p>}
+      {quiz && actif !== null && jours[actif] && (
+        <details key={`ev-${actif}`} open className="mt-3 rounded-lg border border-line bg-panel-2/40 px-3 py-2">
+          <summary className="cursor-pointer text-sm font-medium">
+            Évangile du <span className="capitalize">{fmtDate(parseISO(jours[actif].date), 'EEEE d MMMM', { locale: fr })}</span>
+            <span className="ml-1.5 text-ink-3">— {jours[actif].ref}</span>
+          </summary>
+          {enParagraphes(jours[actif].texte).map((para, i) => <p key={i} className="mt-2 text-sm leading-relaxed text-ink-2">{para}</p>)}
+        </details>
+      )}
       {quiz && actif !== null && (
         <Quiz key={`sem-${actif}-${nonce}`} quiz={quiz} level={MAX_LEVEL + 1 + actif}
           onReplay={() => void ouvrir(actif)} />
