@@ -6,19 +6,20 @@ export const CroixLatine = createLucideIcon('croix-latine', [
   ['path', { d: 'M6 8h12', key: 'h' }],
 ])
 
-/** Bible vue en perspective (couverture de biais, tranche des pages) avec une croix latine sur la couverture. */
+/** Bible vue de face, symétrique : couverture, tranche des pages, croix au centre et signet. */
 export const LivreCroix = createLucideIcon('livre-croix', [
-  ['path', { d: 'M4 6l11-3v16L4 22z', key: 'couv' }],
-  ['path', { d: 'M15 3l4 2v16l-4-2', key: 'tranche' }],
-  ['path', { d: 'M4 22l4 1.5 11-2.5', key: 'dos' }],
-  ['path', { d: 'M9.5 8.2v8', key: 'croix-v' }],
-  ['path', { d: 'M7.5 11l4-1', key: 'croix-h' }],
+  ['rect', { x: '5', y: '2.5', width: '14', height: '17', rx: '2', key: 'couv' }],
+  ['path', { d: 'M5 16.5h14', key: 'pages' }],
+  ['path', { d: 'M12 6v7.5M9.5 8.5h5', key: 'croix' }],
+  ['path', { d: 'M10.5 19.5v3l1.5-1.2 1.5 1.2v-3', key: 'signet' }],
 ])
 
 /** Mains jointes en prière (même trait et même couleur que les autres icônes). */
 export const MainsJointes = createLucideIcon('mains-jointes', [
-  ['path', { d: 'M12 17V5.5a1.5 1.5 0 0 1 3 0V10l2.6 3.6a3 3 0 0 1 .4 1.5V18l2 2.5', key: 'droite' }],
-  ['path', { d: 'M12 17V5.5a1.5 1.5 0 0 0-3 0V10l-2.6 3.6a3 3 0 0 0-.4 1.5V18l-2 2.5', key: 'gauche' }],
+  ['path', { d: 'M12 18V4.5c1.4 0 2.2 1 2.6 2.4L17 14v3.5l2.5 3.5', key: 'droite' }],
+  ['path', { d: 'M12 18V4.5c-1.4 0-2.2 1-2.6 2.4L7 14v3.5L4.5 21', key: 'gauche' }],
+  ['path', { d: 'M14.2 9.5l1 3.5M9.8 9.5l-1 3.5', key: 'doigts' }],
+  ['path', { d: 'M14.5 21l2.5-3.5M9.5 21 7 17.5', key: 'manchettes' }],
 ])
 
 /** Pages de Charité : sous-menu de la barre latérale et boutons du haut sur téléphone. */
