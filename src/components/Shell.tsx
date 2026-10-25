@@ -3,14 +3,15 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   FolderKanban, ListTodo, Compass, CalendarDays, CalendarRange,
   Repeat, ClipboardCheck, Network, Settings, Plus, LogOut, Menu, ArrowLeft, ShieldCheck, Timer, Newspaper,
-  AlertTriangle, X, RotateCw, Ellipsis, ChevronDown, ChevronRight, ArrowLeftRight, Wallet, Eye, Hourglass, ShoppingCart, Euro, Target,
+  AlertTriangle, X, RotateCw, Ellipsis, ChevronDown, ChevronRight, ArrowLeftRight, Wallet, Eye, Hourglass, ShoppingCart, Euro, Target, MessagesSquare,
 } from 'lucide-react'
 import { useHorizon, vueCourante } from '../lib/store'
 import { ONGLETS_PARTAGE, pageAccueil, routeAutorisee } from '../lib/partage'
 import { PAGES_GLISSANTES, pagesFinancesVisibles } from '../lib/financesNav'
 import { todayIso, wallpaperOfDay } from '../lib/logic'
 import { QuickAdd } from './QuickAdd'
-import { CroixLatine, LivreCroix, PAGES_CHARITE } from './chariteNav'
+import { PAGES_DISCUSSIONS } from './discussionsNav'
+import { CroixLatine,LivreCroix, PAGES_CHARITE } from './chariteNav'
 import { useMediaQuery } from '../lib/useMediaQuery'
 import { ROUTE_ACCUEIL, ROUTE_COURSES } from '../lib/navigation'
 
@@ -24,6 +25,7 @@ const NAV = [
   { to: '/priorites', label: 'Priorités', icon: ListTodo },
   { to: '/finances', label: 'Finances', icon: Wallet },
   { to: '/charite', label: 'Charité', icon: CroixLatine },
+  { to: '/discussions', label: 'Discussions', icon: MessagesSquare },
   { to: '/verifications/listes', label: 'Listes', icon: ShoppingCart },
   // Rangés sous « Autres » (voir ROUTES_AUTRES) :
   { to: '/projets', label: 'Projets', icon: FolderKanban },
@@ -183,6 +185,21 @@ export function Shell({ children }: { children: ReactNode }) {
               {to === '/charite' && (
                 <div className="mb-1 ml-5 space-y-0.5 border-l border-line pl-2">
                   {PAGES_CHARITE.map((p) => (
+                    <NavLink key={p.to} to={p.to} onClick={() => setMenuOpen(false)}
+                      className={({ isActive }) =>
+                        `flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors ${
+                          isActive ? 'bg-panel-2 text-sun-soft' : 'text-ink-3 hover:bg-panel-2 hover:text-ink'
+                        }`}>
+                      <p.icon size={14} strokeWidth={1.8} />
+                      {p.label}
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+              {/* Sous-menu de Discussions : toujours affiché. */}
+              {to === '/discussions' && (
+                <div className="mb-1 ml-5 space-y-0.5 border-l border-line pl-2">
+                  {PAGES_DISCUSSIONS.map((p) => (
                     <NavLink key={p.to} to={p.to} onClick={() => setMenuOpen(false)}
                       className={({ isActive }) =>
                         `flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors ${

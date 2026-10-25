@@ -17,6 +17,8 @@ import { ActualitesView, ActualitesImportantesView } from './views/ActualitesVie
 import { EvangileView } from './views/EvangileView'
 import { ChariteLayout } from './views/ChariteLayout'
 import { PrieresView } from './views/PrieresView'
+import { DiscussionsLayout } from './views/DiscussionsLayout'
+import { DisputesView } from './views/DisputesView'
 import { ReviewsView } from './views/ReviewsView'
 import { VerificationsLayout } from './views/VerificationsLayout'
 import { VerificationsView } from './views/VerificationsView'
@@ -83,7 +85,11 @@ export function AppRoutes() {
         <Route path="ecritures" element={<EvangileView />} />
         <Route path="prieres" element={<PrieresView />} />
       </Route>
-      <Route path="/revues" element={<ReviewsView />} />
+      <Route path="/discussions" element={<DiscussionsLayout />}>
+        <Route index element={<Navigate to="disputes" replace />} />
+        <Route path="disputes" element={<DisputesView />} />
+      </Route>
+      <Route path="/revues"element={<ReviewsView />} />
       <Route path="/verifications" element={<VerificationsLayout />}>
         <Route index element={<VerificationsView />} />
         <Route path="listes" element={<ListesView />} />
