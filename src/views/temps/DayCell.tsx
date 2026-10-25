@@ -108,7 +108,7 @@ export function DayCell({ day, sansHoraire, onOpenDay, tint, ruban, rubanCouleur
       onClick={handleVoid}
       style={{ backgroundColor: !today && !over ? tint : undefined }}
       className={`relative flex cursor-pointer flex-col ${sansHoraire ? 'rounded-none border-0 border-b border-r p-1' : 'rounded-lg border p-1.5'} transition-[colors,opacity] ${remplir ? 'min-h-0' : 'min-h-28'} ${fit ? 'w-max max-w-full' : ''} ${dim && !today ? 'opacity-50 hover:opacity-100' : ''} ${
-        rempla ? 'border-dashed border-[#ef4444]/80' : today ? 'border-sun/50 bg-sun/5' : over ? 'border-sun/70 bg-sun/10' : sansHoraire ? 'border-line-2/50 hover:bg-panel-2/40' : 'border-line-2/60 hover:bg-panel-2/40'
+        rempla ? 'border-dashed border-[#ef4444]/80' : today ? `border-sun/50 bg-sun/5${sansHoraire ? ' z-10 ring-1 ring-inset ring-sun/70' : ''}` : over ? 'border-sun/70 bg-sun/10' : sansHoraire ? 'border-line-2/50 hover:bg-panel-2/40' : 'border-line-2/60 hover:bg-panel-2/40'
       }`}>
       {ruban && (
         <span className="pointer-events-none absolute right-0 top-0 z-10 rounded-bl-lg rounded-tr-lg px-2 py-0.5 text-[10px] font-bold text-bg"
