@@ -12,7 +12,7 @@ const CLE_TOTAL = 'horizon.finances.bilanTotal'
 
 /** Bilan des 6 mois qui précèdent le mois choisi : mois par mois, puis global. */
 export function BilanView() {
-  const { mois, setMois, filtre, setFiltre } = useFin()
+  const { mois, setMois, filtre, setFiltre, barreHaute } = useFin()
   const transactions = useTransactionsBudget()
   const lines = useHorizon((s) => s.finLines)
   const budgets = useHorizon((s) => s.finBudgets)
@@ -56,9 +56,9 @@ export function BilanView() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-ink-2">Les 6 mois avant</span>
-          <NavMois mois={mois} onChange={setMois} />
+          {!barreHaute && <NavMois mois={mois} onChange={setMois} />}
         </div>
-        <FiltreSeg value={filtre} onChange={setFiltre} />
+        {!barreHaute && <FiltreSeg value={filtre} onChange={setFiltre} />}
       </header>
       <p className="text-xs text-ink-3">
         De {libelleMois(periode[0]!)} à {libelleMois(periode.at(-1)!)}.

@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Newspaper, BookOpen, Star } from 'lucide-react'
 
 const TABS = [
@@ -10,9 +10,11 @@ const TABS = [
 /** Onglet « Activités » : conteneur de plusieurs pages (Actualités, Évangile…),
  *  avec une sous-navigation en haut. */
 export function ActivitesLayout() {
+  // Écritures s'ouvre directement depuis le raccourci Bible : pas de liens vers les Actualités, la page commence tout en haut.
+  const ecritures = useLocation().pathname.startsWith('/activites/ecritures')
   return (
-    <div className="pt-4">
-      <nav className="mb-2 flex flex-wrap gap-1.5 border-b border-line pb-3">
+    <div className={ecritures ? 'pt-1' : 'pt-4'}>
+      {!ecritures && <nav className="mb-2 flex flex-wrap gap-1.5 border-b border-line pb-3">
         {TABS.map(({ to, label, icon: Icon }) => (
           <NavLink key={to} to={to}
             className={({ isActive }) =>
@@ -22,7 +24,7 @@ export function ActivitesLayout() {
             <Icon size={15} /> {label}
           </NavLink>
         ))}
-      </nav>
+      </nav>}
       <Outlet />
     </div>
   )

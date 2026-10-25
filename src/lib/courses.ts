@@ -174,7 +174,7 @@ export function classerArticle(label: string): ArticleClasse {
 }
 
 /** Les articles bio se distinguent des autres (une « Lessive » bio et une « Lessive » classique coexistent). */
-const familleDe = (section: ShoppingSection | null) => (section === 'bio' ? 'bio' : 'std')
+const familleDe = (section: string | null) => (section === 'bio' ? 'bio' : 'std')
 
 export interface PlanCourses {
   /** À créer, avec leur rayon final (choix de l'utilisateur ou règle). */

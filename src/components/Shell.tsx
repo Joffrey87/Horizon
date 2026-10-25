@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { useHorizon, vueCourante } from '../lib/store'
 import { ONGLETS_PARTAGE, pageAccueil, routeAutorisee } from '../lib/partage'
-import { pagesFinancesVisibles } from '../lib/financesNav'
+import { PAGES_GLISSANTES, pagesFinancesVisibles } from '../lib/financesNav'
 import { todayIso, wallpaperOfDay } from '../lib/logic'
 import { QuickAdd } from './QuickAdd'
 import { useMediaQuery } from '../lib/useMediaQuery'
@@ -222,7 +222,10 @@ export function Shell({ children }: { children: ReactNode }) {
               </button>
             </div>
             {/* Finances : ses pages sur la même ligne (défilent de côté si elles ne tiennent pas). */}
-            {pathname.startsWith('/finances') && (
+            {pathname.startsWith('/finances') && PAGES_GLISSANTES.includes(pathname.replace(/\/$/, '')) && (
+              <div id="fin-barre-haut" className="flex min-w-0 flex-1 items-center justify-center" />
+            )}
+            {pathname.startsWith('/finances') && !PAGES_GLISSANTES.includes(pathname.replace(/\/$/, '')) && (
               <nav className="flex min-w-0 flex-1 gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {pagesFinancesVisibles(vue).map((p) => (
                   <NavLink key={p.to} to={p.to} end={p.end}
@@ -237,12 +240,12 @@ export function Shell({ children }: { children: ReactNode }) {
               {/* Agenda : raccourci vers la liste de courses, à côté du logo qui mène à l'accueil. */}
               {/* Téléphone : caddie et € sont dans la barre de raccourcis du bas. */}
               {plusEnHaut && <BoutonPlus onClick={() => setCapture(true)} className="btn-sun flex h-9 w-9 shrink-0 items-center justify-center rounded-full p-0 shadow shadow-black/40" />}
-              <Link to={accueil} aria-label="Retour à l'accueil" className="shrink-0">
+              {!pathname.startsWith('/finances') && <Link to={accueil} aria-label="Retour à l'accueil" className="shrink-0">
                 <span className="block h-8 w-8 overflow-hidden rounded-full ring-1 ring-white/10">
                   <img src="/logo.png" alt="Horizon" className="h-full w-full object-cover"
                     style={{ transform: 'scale(2.1)', transformOrigin: '50% 41%' }} />
                 </span>
-              </Link>
+              </Link>}
             </div>
           </div>
           {/* ---- Bandeau d'erreur : une panne réseau ou une écriture perdue se voit,

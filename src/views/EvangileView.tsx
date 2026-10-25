@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { addDays, format as fmtDate, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { BookOpen, Brain, RefreshCw, RotateCcw, ChevronRight, ChevronLeft, CalendarDays } from 'lucide-react'
+import { Brain, RefreshCw, RotateCcw, ChevronRight, ChevronLeft, CalendarDays } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import { iso, revisionWeek, todayIso } from '../lib/logic'
 import { fetchMass, readingOfDay, readingQuote, useMassOfDay, type MassReading } from '../lib/aelf'
@@ -52,39 +52,30 @@ export function EvangileView() {
   })
 
   return (
-    <div className="rise space-y-4">
-      <header className="flex items-center gap-2.5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-sun/15 text-sun">
-          <BookOpen size={18} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-semibold">Écritures du jour</h1>
-          <p className="text-xs text-ink-3">
-            L’évangile du jour, puis un quiz pour en saisir le sens.
-          </p>
-          {/* Forme de la messe : mémorisée sur l'appareil. */}
-          <div className="mt-1.5 inline-flex rounded-lg border border-line p-0.5 text-xs" role="group" aria-label="Forme de la messe">
-            {([['extraordinaire', 'Missel de 1962'], ['ordinaire', 'Messe actuelle']] as const).map(([f, label]) => (
-              <button key={f} onClick={() => setForme(f)} aria-pressed={forme === f}
-                className={`rounded-md px-2.5 py-1 transition-colors ${
-                  forme === f ? 'bg-sun/15 text-sun-soft' : 'text-ink-3 hover:text-ink'
-                }`}>
-                {label}
-              </button>
-            ))}
-          </div>
+    <div className="rise space-y-2">
+      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        {/* Forme de la messe : mémorisée sur l'appareil. */}
+        <div className="inline-flex rounded-lg border border-line p-0.5 text-xs" role="group" aria-label="Forme de la messe">
+          {([['extraordinaire', 'Missel de 1962'], ['ordinaire', 'Messe actuelle']] as const).map(([f, label]) => (
+            <button key={f} onClick={() => setForme(f)} aria-pressed={forme === f}
+              className={`rounded-md px-2.5 py-1 transition-colors ${
+                forme === f ? 'bg-sun/15 text-sun-soft' : 'text-ink-3 hover:text-ink'
+              }`}>
+              {label}
+            </button>
+          ))}
         </div>
         {/* Revenir sur un jour précédent : la lecture ET son quiz suivent. */}
         <div className="flex shrink-0 items-center gap-1">
           <button onClick={() => decaler(-1)} disabled={date <= plusAncien}
-            className="btn-ghost p-2 disabled:opacity-30" aria-label="Jour précédent" title="Jour précédent">
+            className="btn-ghost p-1.5 disabled:opacity-30" aria-label="Jour précédent" title="Jour précédent">
             <ChevronLeft size={15} />
           </button>
           <span className="min-w-24 text-center text-xs capitalize text-ink-2">
             {date === today ? "aujourd'hui" : fmtDate(parseISO(date), 'EEE d MMM', { locale: fr })}
           </span>
           <button onClick={() => decaler(1)} disabled={date >= today}
-            className="btn-ghost p-2 disabled:opacity-30" aria-label="Jour suivant" title="Jour suivant">
+            className="btn-ghost p-1.5 disabled:opacity-30" aria-label="Jour suivant" title="Jour suivant">
             <ChevronRight size={15} />
           </button>
         </div>

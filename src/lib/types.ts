@@ -345,6 +345,7 @@ export interface ShoppingList {
   user_id: UUID
   name: string
   recurrent: boolean   // liste récurrente à 3 rayons (alimentaire/bio/non-alimentaire)
+  sections?: string[] | null  // sous-listes (rayons) dans l'ordre ; null = rayons par défaut (récurrente) ou aucune
   sort_order: number
   created_at: string
 }
@@ -354,7 +355,7 @@ export interface ShoppingItem {
   user_id: UUID
   list_id: UUID
   label: string
-  section: ShoppingSection | null  // rayon (liste récurrente) ; null sinon
+  section: ShoppingSection | string | null  // rayon / sous-liste (clé d'un rayon connu ou nom libre) ; null sinon
   category: string | null          // sous-groupe (ex. « Viande », « Fruits ») ; null si autonome
   checked: boolean                 // acheté (coché, sans rayer)
   sort_order: number

@@ -15,6 +15,9 @@ export const PAGES_FINANCES = [
   { to: '/finances/reglages', label: 'Réglages', icon: Settings2, end: false },
 ]
 
+/** Pages qu'on parcourt en glissant le doigt (téléphone) : mois et titulaire sont alors dans la barre du haut. */
+export const PAGES_GLISSANTES = ['/finances', '/finances/budget', '/finances/bilan']
+
 /** Pages proposées : toutes, ou seulement celles ouvertes au partage (budget, bilan, patrimoine). */
 export const pagesFinancesVisibles = (vue: Partage | null) =>
   vue ? PAGES_FINANCES.filter((p) => FINANCES_PARTAGEES.includes(p.to)) : PAGES_FINANCES

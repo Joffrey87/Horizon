@@ -15,6 +15,8 @@ export interface FinContexte {
   setMois: (m: string) => void
   filtre: FiltreTitulaire
   setFiltre: (f: FiltreTitulaire) => void
+  /** Téléphone / tablette : mois et titulaire sont dans la barre du haut (Shell), les pages n'affichent plus leurs propres choix. */
+  barreHaute: boolean
 }
 export const useFin = () => useOutletContext<FinContexte>()
 

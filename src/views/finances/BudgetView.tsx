@@ -29,7 +29,7 @@ type Depli = { cle: string; vue: 'mois' | 'moy3' } | null
 /** Le tableau de bord du mois : atteinte du budget (réel / budget au survol), reste,
  *  M-1, moyenne des 3 mois précédents, prévisionnel M+1. */
 export function BudgetView() {
-  const { mois, setMois, filtre, setFiltre } = useFin()
+  const { mois, setMois, filtre, setFiltre, barreHaute } = useFin()
   const transactions = useTransactionsBudget()
   const lines = useHorizon((s) => s.finLines)
   const setFinBudget = useHorizon((s) => s.setFinBudget)
@@ -191,8 +191,8 @@ export function BudgetView() {
       {/* Recherche à gauche, mois au centre, titulaire à droite. */}
       <header className="relative flex items-center justify-between gap-1 sm:gap-3 md:grid md:grid-cols-[1fr_auto_1fr]">
         <div className="md:justify-self-start"><ChampRecherche valeur={recherche} onChange={setRecherche} /></div>
-        <NavMois mois={mois} onChange={(m) => { setMois(m); setRetour(null) }} />
-        <div className="md:justify-self-end"><FiltreSeg value={filtre} onChange={setFiltre} /></div>
+        {barreHaute ? <span /> : <NavMois mois={mois} onChange={(m) => { setMois(m); setRetour(null) }} />}
+        {!barreHaute && <div className="md:justify-self-end"><FiltreSeg value={filtre} onChange={setFiltre} /></div>}
       </header>
 
       {recherche.trim() ? <ResultatsRecherche requete={recherche} /> : (
