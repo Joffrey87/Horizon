@@ -3,7 +3,7 @@ import {
   eachDayOfInterval, endOfMonth, endOfWeek, format, isToday, startOfMonth, startOfWeek,
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Church } from 'lucide-react'
+import { Church, Circle, CheckCircle2 } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import {
   birthdaysForDay, compareTasksByTitleTime, feastOnDay, firstFridayOrSaturday, iso, sansHeure, spanPart, tasksForDay, todayIso,
@@ -20,7 +20,7 @@ import { EVENT_DEFAULT_COLOR, remplaProposeOn, stepsForDay } from './partage'
 const LIGNE = 14 // hauteur d'une ligne d'évènement (px)
 const ENTETE = 17 // numéro du jour
 
-type Ligne = { cle: string; texte: string; couleur: string; bande?: boolean; fait?: boolean; icone?: 'messe' | 'fete' }
+type Ligne = { cle: string; texte: string; couleur: string; bande?: boolean; fine?: boolean; fait?: boolean; tache?: Task; icone?: 'messe' | 'fete' }
 
 export function MoisTelephone({ anchor, fenetre, onShift, onOpenDay }: {
   anchor: Date; fenetre?: Date | null; onShift: (dir: 1 | -1) => void; onOpenDay: (d: Date) => void
@@ -65,7 +65,8 @@ export function MoisTelephone({ anchor, fenetre, onShift, onOpenDay }: {
       const part = spanPart(t, d)
       // Le titre s'écrit au début de la bande, et à chaque lundi pour rester lisible.
       const titre = part === 'start' || jour.getDay() === 1
-      out.push({ cle: t.id, texte: titre ? sansHeure(t.title) : '', couleur: couleurDe(t), bande: true })
+      // Sans lieu : bande deux fois plus fine, sauf là où s'écrit l'intitulé.
+      out.push({ cle: t.id, texte: titre ? sansHeure(t.title) : '', couleur: couleurDe(t), bande: true, fine: !titre && !t.location?.trim() })
     }
     const fete = s.settings?.catholic_feasts !== false ? feastOnDay(jour) : null
     if (fete) out.push({ cle: 'fete', texte: fete, couleur: '#f59e0b', icone: 'fete' })
@@ -78,7 +79,7 @@ export function MoisTelephone({ anchor, fenetre, onShift, onOpenDay }: {
       out.push({ cle: st.id, texte: st.title, couleur: '#a78bfa' })
     }
     for (const t of simples) {
-      out.push({ cle: t.id, texte: sansHeure(t.title), couleur: couleurDe(t), fait: !t.is_recurring && t.status === 'fait' })
+      out.push({ cle: t.id, texte: sansHeure(t.title), couleur: couleurDe(t), fait: !t.is_recurring && t.status === 'fait', tache: t.is_task === false ? undefined : t })
     }
     return out
   }
@@ -116,10 +117,17 @@ export function MoisTelephone({ anchor, fenetre, onShift, onOpenDay }: {
                     {format(jour, 'd')}
                                       </span>
                   {montrees.map((l) => (
-                    <span key={l.cle} style={{ background: `${l.couleur}${l.bande ? 'cc' : '55'}`, height: LIGNE }}
+                    <span key={l.cle} style={{ background: `${l.couleur}${l.bande ? 'cc' : '55'}`, height: l.fine ? LIGNE / 2 : LIGNE,
+                      ...(l.tache ? { outline: `1px dashed ${l.couleur}`, outlineOffset: -1 } : {}) }}
                       className={`flex shrink-0 items-center gap-0.5 overflow-hidden whitespace-nowrap px-0.5 text-[8px] leading-[14px] text-white ${
                         l.bande ? '' : 'mt-px rounded-[2px]'} ${l.fait ? 'line-through opacity-60' : ''}`}>
                       {l.icone === 'messe' && <Church size={9} className="shrink-0" />}
+                      {l.tache && !l.tache.is_recurring && (
+                        <span role="button" aria-label={l.fait ? 'Marquer à faire' : 'Marquer fait'} className="shrink-0"
+                          onClick={(e) => { e.stopPropagation(); void s.update('tasks', l.tache!.id, l.fait ? { status: 'a_faire', done_at: null } : { status: 'fait', done_at: new Date().toISOString() }) }}>
+                          {l.fait ? <CheckCircle2 size={9} className="text-[#4cc79a]" /> : <Circle size={9} />}
+                        </span>
+                      )}
                       <span className="overflow-hidden text-clip">{l.texte}</span>
                     </span>
                   ))}

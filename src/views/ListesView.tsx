@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, Check, Trash2, RotateCcw, Repeat, ListPlus } from 'lucide-react'
+import { Plus, Check, Trash2, RotateCcw, Repeat, ListPlus, GripVertical } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import type { ShoppingItem, ShoppingList, ShoppingSection } from '../lib/types'
 import { Card, Modal, EmptyState } from '../components/ui'
@@ -72,7 +72,7 @@ export function ListesView() {
       ) : (
         <div className="flex flex-col gap-2 lg:flex-row lg:gap-4">
           {/* Sélecteur de listes : une seule ligne défilante, « + » pour en créer une */}
-          <div className="flex flex-row items-center gap-1.5 overflow-x-auto lg:w-52 lg:flex-col lg:items-stretch lg:overflow-visible">
+          <div className="flex flex-row items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:w-52 lg:flex-col lg:items-stretch lg:overflow-visible">
             {lists.map((l) => (
               <button key={l.id} onClick={() => setSelectedId(l.id)}
                 className={`flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-left text-sm transition-colors ${
@@ -110,6 +110,52 @@ function ListPanel({ list, items, tab, onTab }: {
   const shown = avecSous ? items.filter((it) => (it.section ?? '') === courant) : items
   const bought = shown.filter((it) => it.checked).length
   const volet = useRef<HTMLDivElement>(null)
+  // Glisser-déposer (doigt ou souris) par la poignée : avant/après un article (même liste, même sous-liste ou une autre),
+  // ou sur l'onglet d'une sous-liste pour y déposer l'article en dernier.
+  const [drag, setDrag] = useState<{ id: string; sur: { id: string; apres: boolean } | null; onglet: string | null } | null>(null)
+  const debutDrag = (e: React.PointerEvent, it: ShoppingItem) => {
+    e.preventDefault()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    setDrag({ id: it.id, sur: null, onglet: null })
+  }
+  const bougeDrag = (e: React.PointerEvent) => {
+    if (!drag) return
+    const el = document.elementFromPoint(e.clientX, e.clientY)
+    const ligne = el?.closest<HTMLElement>('[data-item-id]')
+    const onglet = el?.closest<HTMLElement>('[data-onglet]')
+    if (ligne && ligne.dataset.itemId !== drag.id) {
+      const r = ligne.getBoundingClientRect()
+      setDrag({ ...drag, sur: { id: ligne.dataset.itemId!, apres: e.clientY > r.top + r.height / 2 }, onglet: null })
+    } else setDrag({ ...drag, sur: null, onglet: onglet ? onglet.dataset.onglet ?? null : null })
+  }
+  const finDrag = () => {
+    const d = drag
+    setDrag(null)
+    const mobile = d && items.find((x) => x.id === d.id)
+    if (!d || !mobile) return
+    const reste = items.filter((x) => x.id !== d.id)
+    let section = mobile.section ?? null
+    let category = mobile.category
+    let idx: number
+    if (d.sur) {
+      const cible = reste.find((x) => x.id === d.sur!.id)
+      if (!cible) return
+      idx = reste.indexOf(cible) + (d.sur.apres ? 1 : 0)
+      section = cible.section ?? null
+      category = cible.category
+    } else if (d.onglet !== null) {
+      section = d.onglet === '' ? null : d.onglet
+      category = null
+      idx = reste.length
+    } else return
+    const ordre = [...reste.slice(0, idx), { ...mobile, section, category }, ...reste.slice(idx)]
+    ordre.forEach((x, i) => {
+      const avant = items.find((y) => y.id === x.id)
+      if (avant && (avant.sort_order !== i || (avant.section ?? null) !== (x.section ?? null) || avant.category !== x.category)) {
+        void s.update('shopping_items', x.id, { sort_order: i, section: x.section ?? null, category: x.category })
+      }
+    })
+  }
   const index = Math.max(0, sections.indexOf(courant))
 
   // Liste récurrente : un volet par rayon, on passe de l'un à l'autre en glissant le doigt (les onglets suivent, et inversement).
@@ -118,6 +164,19 @@ function ListPanel({ list, items, tab, onTab }: {
     if (el && Math.round(el.scrollLeft / Math.max(1, el.clientWidth)) !== i) el.scrollTo({ left: i * el.clientWidth, behavior: doux ? 'smooth' : 'auto' })
   }
   useEffect(() => { if (avecSous) aller(index, false) }, [list.id, avecSous]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Molette sur la rangée des sous-listes : une cran = sous-liste suivante / précédente.
+  const derniereMolette = useRef(0)
+  const surMolette = (e: React.WheelEvent) => {
+    if (sections.length < 2 || Date.now() - derniereMolette.current < 200) return
+    const sens = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX
+    if (!sens) return
+    const i = Math.min(sections.length - 1, Math.max(0, index + (sens > 0 ? 1 : -1)))
+    const cible = sections[i]
+    if (i === index || cible === undefined) return
+    derniereMolette.current = Date.now()
+    onTab(cible)
+    aller(i)
+  }
   const surDefilement = () => {
     const el = volet.current
     if (!el) return
@@ -144,7 +203,12 @@ function ListPanel({ list, items, tab, onTab }: {
           {g.category && <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">{g.category}</p>}
           <ul className="space-y-0.5">
             {g.items.map((it) => (
-              <li key={it.id} className="group flex items-center gap-2">
+              <li key={it.id} data-item-id={it.id}
+                className={`group flex items-center gap-1 ${drag?.id === it.id ? 'opacity-40' : ''} ${
+                  drag?.sur?.id === it.id ? (drag.sur.apres ? 'border-b-2 border-sun' : 'border-t-2 border-sun') : ''}`}>
+                <button type="button" aria-label="Déplacer" title="Glisser pour déplacer"
+                  onPointerDown={(e) => debutDrag(e, it)} onPointerMove={bougeDrag} onPointerUp={finDrag} onPointerCancel={() => setDrag(null)}
+                  className="shrink-0 cursor-grab touch-none p-1 text-ink-3 active:cursor-grabbing"><GripVertical size={14} /></button>
                 <button onClick={() => void s.update('shopping_items', it.id, { checked: !it.checked })}
                   className="flex flex-1 items-center gap-2.5 py-1 text-left">
                   <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
@@ -194,12 +258,12 @@ function ListPanel({ list, items, tab, onTab }: {
 
       {avecSous ? (
         <>
-          <div className="mb-2 flex gap-1 overflow-x-auto">
+          <div className="mb-2 flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" onWheel={surMolette}>
             {sections.map((sec, i) => (
-              <button key={sec || '__'} onClick={() => { onTab(sec); aller(i) }}
+              <button key={sec || '__'} data-onglet={sec} onClick={() => { onTab(sec); aller(i) }}
                 className={`shrink-0 rounded-lg px-2.5 py-1 text-sm transition-colors ${
                   courant === sec ? 'bg-sun/15 text-sun-soft' : 'text-ink-2 hover:bg-panel-2 hover:text-ink'
-                }`}>
+                } ${drag?.onglet === sec ? 'ring-2 ring-sun' : ''}`}>
                 {libelleSection(sec)}
               </button>
             ))}

@@ -1,7 +1,7 @@
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { addMonths, eachDayOfInterval, endOfWeek, format, isToday, parseISO, startOfWeek } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Church, AlertTriangle, Layers } from 'lucide-react'
+import { Church, AlertTriangle, Layers, Circle, CheckCircle2 } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import { useMediaQuery } from '../../lib/useMediaQuery'
 import {
@@ -319,13 +319,20 @@ function Brique({ t, jour, mode, niveau, onEdit }: { t: Task; jour: string; mode
       style={{
         ...(tel ? { minHeight: hauteur } : { height: hauteur }),
         background: `linear-gradient(160deg, color-mix(in srgb, ${c} 38%, ${FOND}), color-mix(in srgb, ${c} 14%, ${FOND}))`,
-        border: checkMass ? `1.5px dashed ${VIOLET}` : `1px solid color-mix(in srgb, ${c} 55%, transparent)`,
+        border: checkMass ? `1.5px dashed ${VIOLET}` : t.is_task === false ? `1px solid color-mix(in srgb, ${c} 55%, transparent)` : `1.5px dashed color-mix(in srgb, ${c} 80%, transparent)`,
       }}>
       {!compact && <span className={`block shrink-0 font-bold text-ink opacity-90 ${tel ? 'text-[8.5px]' : 'text-[11px]'}`}>{tel && part === 'single' && aHeure ? <PlageTel t={t} /> : entete}</span>}
       <span className={`${compact ? '' : 'mt-0.5'} block shrink-0 font-bold text-ink ${uneLigne ? 'overflow-hidden whitespace-nowrap text-clip' : 'break-words'} ${tel ? 'text-[11px] leading-[1.2]' : 'line-clamp-2 text-[13px] leading-[1.15]'} ${fait ? 'line-through' : ''}`}>
         {compact && <span className="mr-1 text-[8.5px] font-bold opacity-80">{part === 'single' && aHeure ? <PlageTel t={{ title: t.title, duration_min: null }} /> : (debut ?? entete)}</span>}
         {projet && <IconeProjet project={projet} size={tel ? 10 : 12} className="mr-1 align-[-1px]" />}
         {checkMass && <Church size={tel ? 9 : 11} className="mr-0.5 inline" style={{ color: VIOLET }} />}
+        {/* Tâche : pastille pour la cocher (comme fait) ; un évènement n'en a pas. */}
+        {t.is_task !== false && !t.is_recurring && (
+          <span role="button" tabIndex={0} aria-label={fait ? 'Marquer à faire' : 'Marquer fait'} className="mr-1 inline-block cursor-pointer align-[-2px]"
+            onClick={(e) => { e.stopPropagation(); void s.update('tasks', t.id, fait ? { status: 'a_faire', done_at: null } : { status: 'fait', done_at: new Date().toISOString() }) }}>
+            {fait ? <CheckCircle2 size={tel ? 11 : 13} className="text-[#4cc79a]" /> : <Circle size={tel ? 11 : 13} className="text-ink-2" />}
+          </span>
+        )}
         {sansHeure(t.title)}
       </span>
       {note && <span className="mt-0.5 line-clamp-2 block text-[10.5px] leading-tight text-[#d9d0c0] opacity-80">{note}</span>}

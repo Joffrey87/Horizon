@@ -1,6 +1,6 @@
 import { useContext, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { addDays, addMonths, format, getISODay, isToday } from 'date-fns'
+import { addDays, addMonths, format, getISODay, isToday, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Plus, CheckCircle2, Circle, RotateCw, Layers, Star, Church, AlertTriangle, Check, X } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
@@ -190,9 +190,16 @@ export function DayCell({ day, sansHoraire, onOpenDay, tint, ruban, rubanCouleur
               const finTitre = t.end_date ?? dayIso
               let n = 1
               for (let k = getISODay(day) + 1; k <= 7; k++) { if (iso(addDays(day, k - getISODay(day))) <= finTitre) n++; else break }
+              // Évènement long sans lieu : barre deux fois plus fine, sauf là où s'écrit l'intitulé (≈ 20 caractères par jour).
+              const lundiDuJour = addDays(day, 1 - getISODay(day))
+              const debutBande = parseISO(t.scheduled_date ?? dayIso)
+              const debutTitre = debutBande > lundiDuJour ? debutBande : lundiDuJour
+              const joursDepuisTitre = Math.round((day.getTime() - debutTitre.getTime()) / 864e5)
+              const joursTitre = Math.max(1, Math.ceil(sansHeure(t.title).length / 20))
+              const fine = !t.location?.trim() && !(joursDepuisTitre >= 0 && joursDepuisTitre < joursTitre)
               return (
                 <div key={t.id} className="relative h-5">
-                  <button {...drag} onClick={edit} title={t.title} className="absolute inset-y-0 block"
+                  <button {...drag} onClick={edit} title={t.title} className={`absolute block ${fine ? 'inset-y-[5px]' : 'inset-y-0'}`}
                     style={{ left: 0, right: openRight ? -9 : 0, background: `${fill}c2`, ...rad }} />
                   {debutLigne && (
                     <span className={`pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center overflow-hidden whitespace-nowrap px-1.5 text-[9px] font-medium leading-none text-ink ${vacation ? 'line-through' : ''}`}
@@ -270,7 +277,8 @@ export function DayCell({ day, sansHoraire, onOpenDay, tint, ruban, rubanCouleur
               style={{
                 background: checkMass ? 'rgba(167,139,250,0.14)' : c ? `${c}2b` : 'var(--color-panel-3)',
                 // Liseret = projet seulement ; une tâche de domaine n'en a pas.
-                border: !checkMass && project && c ? `1.5px solid ${c}` : undefined,
+                // Tâche (≠ évènement) : entourée en pointillés.
+                border: !checkMass && !isEvent ? `1.5px dashed ${c ?? 'rgba(255,255,255,.4)'}` : !checkMass && project && c ? `1.5px solid ${c}` : undefined,
                 outline: checkMass ? '1.5px dashed #a78bfa' : undefined,
                 outlineOffset: checkMass ? '-1px' : undefined,
               }}

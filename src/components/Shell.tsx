@@ -3,7 +3,7 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   Home, FolderKanban, ListTodo, Compass, CalendarDays, CalendarRange,
   Repeat, ClipboardCheck, Network, Settings, Plus, LogOut, Menu, ArrowLeft, ShieldCheck, Timer, Newspaper,
-  AlertTriangle, X, RotateCw, ArrowLeftRight, Wallet, Eye, Hourglass, ShoppingCart, Euro, Target, createLucideIcon,
+  AlertTriangle, X, RotateCw, Ellipsis, ChevronDown, ChevronRight, ArrowLeftRight, Wallet, Eye, Hourglass, ShoppingCart, Euro, Target, createLucideIcon,
 } from 'lucide-react'
 import { useHorizon, vueCourante } from '../lib/store'
 import { ONGLETS_PARTAGE, pageAccueil, routeAutorisee } from '../lib/partage'
@@ -34,6 +34,9 @@ const NAV = [
   { to: '/remplas', label: 'Remplas', icon: ArrowLeftRight },
   { to: '/espace', label: 'Espace visuel', icon: Network },
 ]
+
+/** Pages rangées sous l'onglet « Autres » de la barre latérale. */
+const ROUTES_AUTRES = ['/projets', '/domaines', '/planification', '/habitudes', '/revues', '/heures-controle', '/remplas', '/espace']
 
 /** Date du jour, remise à jour à minuit et au retour sur l'onglet : sans ça, un
  *  onglet laissé ouvert la nuit continue d'afficher la veille (les vues lisent
@@ -74,6 +77,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const dayKey = useDayKey()
   const [capture, setCapture] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [autresOuvert, setAutresOuvert] = useState(false)
   const signOut = useHorizon((s) => s.signOut)
   const error = useHorizon((s) => s.error)
   const clearError = useHorizon((s) => s.clearError)
@@ -88,6 +92,10 @@ export function Shell({ children }: { children: ReactNode }) {
   const setApercu = useHorizon((s) => s.setApercu)
   const accueil = vue ? pageAccueil(vue) ?? '/' : ROUTE_ACCUEIL
   const nav = vue ? NAV.filter((n) => ONGLETS_PARTAGE.some((o) => vue.onglets.includes(o.cle) && o.route === n.to)) : NAV
+  const navPrincipal = nav.filter((n) => !ROUTES_AUTRES.includes(n.to))
+  const navAutres = nav.filter((n) => ROUTES_AUTRES.includes(n.to))
+  const surAutres = navAutres.some((n) => pathname === n.to || pathname.startsWith(`${n.to}/`))
+  const autresVisible = autresOuvert || surAutres
   useEffect(() => {
     // L'aperçu montre ce qu'elle verra une fois l'accès validé.
     const v = vue && apercu ? { ...vue, actif: true } : vue
@@ -154,7 +162,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3">
-          {nav.map(({ to, label, icon: Icon }) => (
+          {navPrincipal.map(({ to, label, icon: Icon }) => (
             <Fragment key={to}>
               <NavLink to={to} end={to === ROUTE_ACCUEIL} onClick={() => setMenuOpen(false)}
                 className={({ isActive }) =>
@@ -181,6 +189,32 @@ export function Shell({ children }: { children: ReactNode }) {
               )}
             </Fragment>
           ))}
+          {/* Autres : les pages moins courantes, repliées sous un seul onglet (dépliées quand on est dans l'une d'elles). */}
+          {navAutres.length > 0 && (
+            <div>
+              <button type="button" onClick={() => setAutresOuvert((o) => !o)} aria-expanded={autresVisible} data-testid="onglet-autres"
+                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors ${
+                  surAutres ? 'text-sun-soft' : 'text-ink-2 hover:bg-panel-2 hover:text-ink'}`}>
+                <Ellipsis size={16} strokeWidth={1.8} />
+                <span className="flex-1 text-left">Autres</span>
+                {autresVisible ? <ChevronDown size={14} className="text-ink-3" /> : <ChevronRight size={14} className="text-ink-3" />}
+              </button>
+              {autresVisible && (
+                <div className="mb-1 ml-5 space-y-0.5 border-l border-line pl-2">
+                  {navAutres.map(({ to, label, icon: Icon }) => (
+                    <NavLink key={to} to={to} onClick={() => setMenuOpen(false)}
+                      className={({ isActive }) =>
+                        `flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] transition-colors ${
+                          isActive ? 'bg-panel-2 text-sun-soft' : 'text-ink-3 hover:bg-panel-2 hover:text-ink'
+                        }`}>
+                      <Icon size={14} strokeWidth={1.8} />
+                      {label}
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </nav>
 
         <div className="space-y-0.5 border-t border-line px-3 py-3">
