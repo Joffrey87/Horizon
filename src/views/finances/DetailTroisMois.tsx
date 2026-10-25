@@ -7,11 +7,11 @@ import { useHorizon } from '../../lib/store'
 import { decaleMois, detailPeriode, euros, libelleMois, normaliserLibelle, type GroupePeriode } from '../../lib/finances'
 import { Modal } from '../../components/ui'
 import { LigneOperation } from './partage'
-import { useFin, useIndex, useReconnaissance, useVue } from './contexte'
+import { useFin, useIndex, useReconnaissance, useVue, useTransactionsBudget } from './contexte'
 
 export function DetailTroisMois({ cle }: { cle: string }) {
   const { mois, filtre } = useFin()
-  const transactions = useHorizon((s) => s.finTransactions)
+  const transactions = useTransactionsBudget()
   const regles = useHorizon((s) => s.finGroups)
   const idx = useIndex()
   const reco = useReconnaissance()

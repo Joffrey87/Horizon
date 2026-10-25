@@ -5,7 +5,7 @@ import { useOutletContext } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { useHorizon, vueCourante } from '../../lib/store'
-import { creerReconnaissance, indexer, type FiltreTitulaire, type IndexFinances } from '../../lib/finances'
+import { appliquerRemboursements, creerReconnaissance, indexer, type FiltreTitulaire, type IndexFinances } from '../../lib/finances'
 import type { FinCategory } from '../../lib/types'
 import { todayIso } from '../../lib/logic'
 import { moisBudget } from '../../lib/moisPaie'
@@ -29,6 +29,12 @@ export function useIndex(): IndexFinances {
   const categories = useHorizon((s) => s.finCategories)
   const lines = useHorizon((s) => s.finLines)
   return useMemo(() => indexer(accounts, categories, lines), [accounts, categories, lines])
+}
+
+/** Opérations pour les calculs de budget : un remboursement rattaché compte dans le mois et la catégorie de sa dépense. */
+export function useTransactionsBudget() {
+  const transactions = useHorizon((s) => s.finTransactions)
+  return useMemo(() => appliquerRemboursements(transactions), [transactions])
 }
 
 /** Reconnaissance des intitulés locaux, recalculée quand les règles changent. */

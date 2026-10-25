@@ -562,6 +562,8 @@ export interface FinTransaction {
   note: string | null
   /** Autorisation carte pas encore comptabilisée par la banque (déjà dans le solde temps réel). */
   pending?: boolean
+  /** Dépense que cette opération rembourse : elle compte dans le mois et la catégorie de cette dépense. */
+  rembourse_de?: UUID | null
   source: string
   external_id: string | null
   created_at: string
@@ -658,6 +660,8 @@ export interface FinLoan {
   /** Motif (regex, insensible à la casse) des libellés des prélèvements réels. */
   debit_match: string | null
   debit_account_ids: UUID[]
+  /** Prélèvement sur un compte hors budget (ex. Lille / Airbnb) : le capital compte en épargne même si ces opérations ne sont pas visibles. */
+  debit_hors_budget?: boolean
   notes: string | null
   origins: Record<string, OriginePret>
   created_at: string

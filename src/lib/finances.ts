@@ -197,6 +197,43 @@ export function agreger(transactions: FinTransaction[], idx: IndexFinances, filt
   return agg
 }
 
+/**
+ * Remboursements rattachés : une opération qui rembourse une dépense (`rembourse_de`) compte à la date, dans la
+ * catégorie et chez le titulaire de cette dépense, pour que son mois et sa catégorie baissent d'autant. La liste
+ * d'origine (Opérations, recherche) n'est pas touchée : seuls les calculs de budget passent par ici.
+ */
+export function appliquerRemboursements(transactions: FinTransaction[]): FinTransaction[] {
+  if (!transactions.some((t) => t.rembourse_de)) return transactions
+  const parId = new Map(transactions.map((t) => [t.id, t]))
+  return transactions.map((t) => {
+    const origine = t.rembourse_de ? parId.get(t.rembourse_de) : undefined
+    return origine ? { ...t, date: origine.date, category_id: origine.category_id, owner: origine.owner } : t
+  })
+}
+
+/**
+ * Remboursements REÇUS dans le mois (date bancaire, mois de paie) : opérations rattachées à une dépense, rangées
+ * dans « Remboursements », ou en entrée sur une ligne de dépense (mutuelle sur Santé…). Information seule :
+ * l'effet est déjà dans chaque catégorie, rien n'est compté deux fois.
+ */
+export function remboursementsRecus(opts: {
+  mois: string; transactions: FinTransaction[]; idx: IndexFinances; filtre: FiltreTitulaire
+}): { total: number; operations: FinTransaction[] } {
+  const { mois, transactions, idx, filtre } = opts
+  const effectives = new Map(appliquerRemboursements(transactions).map((t) => [t.id, t]))
+  const operations = transactions.filter((t) => {
+    if (Number(t.amount) <= 0 || moisBudget(t.date) !== mois) return false
+    if (!correspond(filtre, titulaireDe(t, idx))) return false
+    const vue = effectives.get(t.id) ?? t
+    if (classer(vue, idx).type === 'ignoree') return false
+    if (t.rembourse_de) return true
+    const nom = categorieEffective(t.category_id, idx)?.name ?? ''
+    if (normaliserLibelle(nom).startsWith('remboursement')) return true
+    return classer(t, idx).type === 'ligne'
+  }).sort((a, b) => (a.date < b.date ? 1 : -1))
+  return { total: operations.reduce((s, t) => s + Number(t.amount), 0), operations }
+}
+
 const reelDe = (agg: Agregat, mois: string, cle: string) => agg.get(mois)?.lignes.get(cle) ?? 0
 
 // ---------- Budgets ----------
@@ -469,7 +506,7 @@ export function capitalDuMois(opts: OptionsCapital & { mois: string }): CapitalM
     } else if ((budgetVu || surCompteBudget) && mois >= opts.moisCourant) {
       res.prets.push({ ...base, prevu: capital, ligneId: ligneVue, etat: 'prevu' })
       res.prevu += capital
-    } else if (horsBudgetVu && !budgetVu) {
+    } else if ((horsBudgetVu || pret.debit_hors_budget) && !budgetVu) {
       const dateEcheance = echeances.map((e) => e.date).sort()[0]!.slice(0, 10)
       const aujourdhui = opts.aujourdhui ?? todayIso()
       if (debiteHors > 0.005 || dateEcheance <= aujourdhui) {
@@ -519,9 +556,15 @@ export function epargnesPrevues(opts: {
 }): { total: number; details: EpargnePrevue[] } {
   if (opts.mois < opts.moisCourant) return { total: 0, details: [] }
   const details: EpargnePrevue[] = []
+  // Le capital remboursé ou encore à débiter (prêts payés depuis le budget) fait partie de l'épargne habituelle : il consomme le budget d'épargne
+  // avant qu'on prévoie le reste (300 de PER + ~1 000 de capital = 1 300 : plus rien de prévu ; le capital à venir reste listé à part, sans doublon). Un prêt hors budget (Lille) n'y compte pas.
+  let capitalFait = Math.max(0, (opts.capital?.fait ?? 0) + (opts.capital?.prevu ?? 0) - (opts.capital?.horsBudget ?? 0))
   for (const l of opts.lignes) {
     if (!estEpargneComptee(l.ligne) || l.budget === null) continue
-    const reste = l.budget - l.reel
+    let reste = l.budget - l.reel
+    const pris = Math.min(capitalFait, Math.max(0, reste))
+    reste -= pris
+    capitalFait -= pris
     if (reste > 0.5) details.push({ nom: l.ligne.name, montant: reste, type: 'ligne' })
   }
   for (const p of opts.capital?.prets ?? []) {

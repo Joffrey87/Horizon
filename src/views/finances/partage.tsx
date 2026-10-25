@@ -182,7 +182,7 @@ export function LigneOperation({ tx, idx, montrerDate = true }: { tx: FinTransac
 /** Intitulé affiché d'une opération : il ne change QUE celle-ci. S'il existe des
  *  opérations au même intitulé bancaire (carte ignorée), une fenêtre les propose,
  *  toutes cochées ; on décoche celles à laisser telles quelles. */
-function EditeurLibelle({ tx, onClose }: { tx: FinTransaction; onClose: () => void }) {
+export function EditeurLibelle({ tx, onClose }: { tx: FinTransaction; onClose: () => void }) {
   const regles = useHorizon((s) => s.finLabels)
   const transactions = useHorizon((s) => s.finTransactions)
   const { insert, update, remove, updateMany } = useHorizon.getState()

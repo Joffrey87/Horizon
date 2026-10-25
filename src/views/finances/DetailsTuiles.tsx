@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { Info } from 'lucide-react'
 import { euros, type LigneBudget, type listeEpargnes } from '../../lib/finances'
 import type { epargneUtilisee } from '../../lib/epargneUtilisee'
 
@@ -46,29 +47,47 @@ const dateJour = (iso: string) => `${Number(iso.slice(8, 10))} ${MOIS_COURTS[Num
 
 /** Épargnes du mois, une ligne chacune : faite, prévue (ou prêt payé hors budget, pour information). */
 export function DetailEpargne({ liste, utilisee }: { liste: ReturnType<typeof listeEpargnes>; utilisee?: ReturnType<typeof epargneUtilisee> }) {
+  // Détail d'une ligne (prêt de Reims : opérations, intérêts, assurance) : replié tant qu'on ne clique pas dessus.
+  const [ouverts, setOuverts] = useState<Set<string>>(new Set())
+  const basculer = (cle: string) => setOuverts((o) => { const n = new Set(o); if (n.has(cle)) n.delete(cle); else n.add(cle); return n })
   const badge = (etat: 'fait' | 'prevu') => etat === 'fait'
     ? <span className="whitespace-nowrap rounded-full border border-[#4cc79a]/50 px-1.5 text-[10px] uppercase tracking-wider text-[#4cc79a]">fait</span>
     : <span className="whitespace-nowrap rounded-full border border-[#eda145]/50 px-1.5 text-[10px] uppercase tracking-wider text-[#eda145]">prévu</span>
   return (
     <div data-testid="detail-epargne" className="card mx-auto w-full max-w-md space-y-1 px-4 py-3 text-sm">
       {liste.lignes.length === 0 && <p className="text-ink-3">Aucune épargne ce mois-ci.</p>}
-      {liste.lignes.map((l) => (
-        <div key={`${l.nom}-${l.etat}`}>
-          <div className="flex items-center justify-between gap-3">
-            <span className="flex min-w-0 items-center gap-2"><span className="truncate">{l.nom}</span>{badge(l.etat)}</span>
+      {liste.lignes.map((l) => {
+        const cle = `${l.nom}-${l.etat}`
+        const detaille = !!l.pastilles?.length
+        const ouvert = ouverts.has(cle)
+        const entete = (
+          <>
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate">{l.nom}</span>
+              {detaille && <Info size={13} aria-hidden className={`shrink-0 ${ouvert ? 'text-[#d8c7a3]' : 'text-ink-3'}`} />}
+              {badge(l.etat)}
+            </span>
             <span className="shrink-0 tabular-nums">{euros(l.montant)}</span>
+          </>
+        )
+        return (
+          <div key={cle}>
+            {detaille
+              ? <button type="button" data-testid="epargne-ligne-detail" aria-expanded={ouvert} onClick={() => basculer(cle)} title="Voir le détail"
+                  className="flex w-full items-center justify-between gap-3 text-left">{entete}</button>
+              : <div className="flex items-center justify-between gap-3">{entete}</div>}
+            {detaille && ouvert && (
+              <div data-testid="pastilles-epargne" className="flex flex-wrap gap-1 pl-3">
+                {l.pastilles!.map((p, i) => (
+                  <span key={i} className="whitespace-nowrap rounded-full bg-[#c9b48a]/15 px-2 text-[10.5px] leading-4 tabular-nums text-[#d8c7a3]">
+                    {p.type === 'operation' ? `${dateJour(p.date!)} · ${euros(p.montant, true)}` : `− ${euros(p.montant, true)} ${p.texte}`}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
-          {l.pastilles && l.pastilles.length > 0 && (
-            <div data-testid="pastilles-epargne" className="flex flex-wrap gap-1 pl-3">
-              {l.pastilles.map((p, i) => (
-                <span key={i} className="whitespace-nowrap rounded-full bg-[#c9b48a]/15 px-2 text-[10.5px] leading-4 tabular-nums text-[#d8c7a3]">
-                  {p.type === 'operation' ? `${dateJour(p.date!)} · ${euros(p.montant, true)}` : `− ${euros(p.montant, true)} ${p.texte}`}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
+        )
+      })}
       <LigneDetail fin nom="Total fait" montant={liste.fait} />
       {liste.prevu > 0.5 && <LigneDetail nom="Encore prévu" montant={liste.prevu} />}
       {utilisee && utilisee.total > 0.5 && (

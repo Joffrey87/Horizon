@@ -6,7 +6,7 @@ import type { FinAccount, FinBudget, FinEcheance, FinLoan, FinCategory, FinHoldi
 import {
   estEnAttente, NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, capitalRembourse, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, operationsRecentes, segmentsSurlignes, categoriesParLigne, ligneDeCategorie, budgetDe, budgetAjuste, ecrituresBudgetMois, estEpargneComptee, fondLigne, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
   libelleMois, moisEcoules, patrimoine, previsionDe, provision, syntheseMois,
-  agregerHorsCapital, hierarchieDetail, nomPropres, detailHorsCapital, NOM_PRET_REIMS, capitalDuMois, epargnesPrevues, listeEpargnes,
+  agregerHorsCapital, appliquerRemboursements, remboursementsRecus, hierarchieDetail, nomPropres, detailHorsCapital, NOM_PRET_REIMS, capitalDuMois, epargnesPrevues, listeEpargnes,
 } from './finances'
 
 let seq = 0
@@ -547,6 +547,19 @@ describe('capital de prêt extrait de la ligne emprunt', () => {
     const partiel = capitalDuMois({ ...base, transactions: [debit('2026-10-01', 400, 'ECH PRET 111A DU 01/10/26')], mois: '2026-10' })
     expect(partiel.fait).toBe(400)
   })
+  it('un prêt déclaré hors budget compte même quand ses opérations ne sont pas visibles (vue partagée)', () => {
+    const sansHorsBudget = tx.filter((t) => t.account_id !== airbnb.id)
+    const declare = prets.map((p) => (p.debit_match === 'ECH PRET 222B' ? { ...p, debit_hors_budget: true } : p))
+    // Sans la déclaration, le prélèvement invisible laisse le prêt hors du calcul.
+    expect(capitalDuMois({ ...base, transactions: sansHorsBudget, mois: '2026-10' }).prets.some((p) => p.nom.includes('222B'))).toBe(false)
+    // Déclaré : échéance passée = fait, échéance à venir = prévu ; aucune ligne n'est touchée.
+    const fait = capitalDuMois({ ...base, prets: declare, transactions: sansHorsBudget, mois: '2026-10' })
+    const p = fait.prets.find((x) => x.nom.includes('222B'))!
+    expect([p.etat, p.horsBudget, p.extrait]).toEqual(['fait', true, 500])
+    expect(fait.horsBudget).toBe(500)
+    const avant = capitalDuMois({ ...base, prets: declare, transactions: sansHorsBudget, mois: '2026-10', aujourdhui: '2026-09-25' })
+    expect(avant.prets.find((x) => x.nom.includes('222B'))?.etat).toBe('prevu')
+  })
   it('un prêt payé depuis un compte hors budget compte en épargne sans toucher à aucune ligne', () => {
     // Prélèvement vu ce mois-ci sur le compte hors budget : fait.
     const c = capitalDuMois({ ...base, aujourdhui: '2026-10-20', mois: '2026-10' })
@@ -813,5 +826,29 @@ describe('choix de catégorie par ligne', () => {
       expect(g.ligne ? l : null).toBe(g.ligne ? g.ligne.id : null)
     }
     expect(new Set(ids).size).toBe(ids.length)
+  })
+})
+
+describe('remboursements rattachés', () => {
+  const remb = categorie('Remboursements', { role: 'revenu' })
+  const idxR = indexer([joint, perso, pea], [...categories, remb], lines)
+  const achat = op(joint.id, '2026-09-10', -100, { category_id: alim.id })
+  const retour = op(joint.id, '2026-10-22', 40, { category_id: remb.id, rembourse_de: achat.id })
+
+  it('compte le remboursement dans le mois et la catégorie de la dépense, pas dans les entrées', () => {
+    const agg = agreger(appliquerRemboursements([achat, retour]), idxR, 'foyer')
+    expect(agg.get('2026-09')?.lignes.get(courses.id)).toBe(60)
+    expect(agg.get('2026-10')?.entrees ?? 0).toBe(0)
+  })
+  it('laisse tel quel un remboursement sans lien (ou dont la dépense est introuvable)', () => {
+    const seul = op(joint.id, '2026-10-22', 40, { category_id: remb.id, rembourse_de: 'absent' })
+    expect(appliquerRemboursements([seul])).toEqual([seul])
+  })
+  it("liste ce qui est REÇU dans le mois de la date bancaire, sans y mettre les dépenses", () => {
+    const mutuelle = op(joint.id, '2026-10-05', 9, { category_id: alim.id })
+    const r = remboursementsRecus({ mois: '2026-10', transactions: [achat, retour, mutuelle], idx: idxR, filtre: 'foyer' })
+    expect(r.total).toBe(49)
+    expect(r.operations.map((t) => t.id).sort()).toEqual([retour.id, mutuelle.id].sort())
+    expect(remboursementsRecus({ mois: '2026-09', transactions: [achat, retour], idx: idxR, filtre: 'foyer' }).total).toBe(0)
   })
 })

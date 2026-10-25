@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useMemo, useState, type ReactNode } from 'react'
 import { Heart, PiggyBank, Receipt, Search, Plane, ShoppingCart, Sofa, Wallet, Zap, type LucideIcon } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import { entreesPrevues, euros } from '../../lib/finances'
@@ -6,17 +6,17 @@ import { COULEURS_ANNEAU, eclaircie, rgba, tuilesBudgets, type TuileBudget } fro
 import { EmptyState } from '../../components/ui'
 import { FiltreSeg, NavMois } from './partage'
 import { DetailAuDela, DetailEpargne, DetailEpargneUtilisee, lignesAuDela } from './DetailsTuiles'
-import { epargneUtilisee } from '../../lib/epargneUtilisee'
-import { epargneDepenses, epargneVacances } from '../../lib/regroupement'
+import { epargneUtilisee, ORIGINE_EPARGNE_DEPENSES } from '../../lib/epargneUtilisee'
+import { epargneDepenses, epargneVacances, estCompteEpargneDepenses } from '../../lib/regroupement'
 import { decaleMois } from '../../lib/finances'
 import { soldesComptes } from '../../lib/soldes'
 import { PanneauSoldes } from './SoldesComptes'
 import { IconeDeCompte } from './IconeCompte'
 import { useTuilesMois } from './tuilesMois'
-import { useFin, useIndex } from './contexte'
+import { useFin, useIndex, useTransactionsBudget } from './contexte'
 import { estMoisSansObjectif, LIGNE_AVEC_ANNEAU } from '../../lib/moisSansObjectif'
 import { MontantBudget, useBudgetMois } from './budgetMois'
-import { DetailLigneLecture } from './DetailLigne'
+import { DetailLigneLecture, type ApportLigne } from './DetailLigne'
 import { DernieresOperations } from './DernieresOperations'
 import { useMediaQuery } from '../../lib/useMediaQuery'
 
@@ -56,11 +56,10 @@ function Anneau({ ratio, couleur, taille, trait = 4, halo = false, sansTrace = f
  * « dépensé / budget » (le budget est cliquable : il change celui de ce mois) ; à droite, alignés à droite, « Reste » en petit
  * libellé et le montant restant, gros et gras (rouge-orangé au-delà du budget, anneau plein). Sans budget : « fixer un budget ».
  */
-/** Ambre : montants des dépenses de vie (courantes, exceptionnelles, aménagement) et Reste négatif. */
+/** Ambre : seulement le second Reste, quand il est négatif. */
 const AMBRE = '#eda145'
-const CLES_AMBRE = new Set(['courantes', 'exceptionnelles', 'amenagement'])
 
-function CorpsTuile({ t, edition, bureau }: { t: TuileBudget; edition: ReturnType<typeof useBudgetMois>; bureau: boolean }) {
+function CorpsTuile({ t, edition, bureau, apport }: { t: TuileBudget; edition: ReturnType<typeof useBudgetMois>; bureau: boolean; apport?: ApportLigne }) {
   const Icone = ICONES[t.cle] ?? Wallet
   const depasse = t.ton === 'depasse'
   const clair = eclaircie(t.rvb, 0.24)
@@ -73,11 +72,11 @@ function CorpsTuile({ t, edition, bureau }: { t: TuileBudget; edition: ReturnTyp
   const negatif = !sansObjectif && t.restant !== null && t.restant < 0
   return (
     <>
-      <Anneau sansTrace={sansAnneau} ratio={sansAnneau ? null : cible ? Math.max(0, t.depense) / cible : t.ratio} couleur={depasse && !cible ? COULEURS_ANNEAU.depasse : clair} taille={bureau ? 36 : 38} trait={bureau ? 2 : 3} halo={bureau}>
-        <Icone size={bureau ? 15 : 16} color={clair} strokeWidth={1.8} />
+      <Anneau sansTrace={sansAnneau} ratio={sansAnneau ? null : cible ? Math.max(0, t.depense) / cible : t.ratio} couleur={depasse && !cible ? COULEURS_ANNEAU.depasse : clair} taille={bureau ? 28 : 38} trait={bureau ? 2 : 3} halo={bureau}>
+        <Icone size={bureau ? 12 : 16} color={clair} strokeWidth={1.8} />
       </Anneau>
       <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-        <p className={`truncate font-semibold text-ink-2 ${bureau ? 'text-[15px]' : 'text-[13px]'}`}>{t.titre}</p>
+        <p className={`truncate font-semibold text-ink-2 ${bureau ? 'text-[14px]' : 'text-[13px]'}`}>{t.titre}</p>
         {!sansObjectif && <p className={`whitespace-nowrap font-medium tabular-nums text-ink-3 ${bureau ? 'text-[12px]' : 'text-[11.5px]'}`}>
           {t.budget !== null ? (
             <>{euros(t.depense)} / <MontantBudget montant={t.budget} ajustement={edition.ajustement(t.ligneId)} onOuvrir={ouvrir} discret pointille /></>
@@ -86,13 +85,28 @@ function CorpsTuile({ t, edition, bureau }: { t: TuileBudget; edition: ReturnTyp
           ) : null}
         </p>}
       </div>
-      <div className="shrink-0 text-right">
+      {t.cle === 'exceptionnelles' && apport ? (
+        // Mêmes colonnes que Vacances : + l'épargne utilisée (prise sur Épargne Dépenses), − les dépenses exceptionnelles.
+        <div data-testid="colonnes-exceptionnelles" className="relative flex shrink-0 gap-4 text-center">
+          <div className={bureau ? 'w-24' : 'w-20'}>
+            <p className="mb-1 whitespace-nowrap text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">Épargne utilisée</p>
+            <b data-testid="col-epargne-dep" className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[19px]' : 'text-[16px]'}`} style={{ color: AMBRE }}>{euros(apport.lignes.reduce((n, l) => n + l.montant, 0))}</b>
+          </div>
+          <span aria-hidden className={`absolute bottom-0 -translate-x-1/2 font-bold leading-none text-ink-3 ${bureau ? 'left-[6.5rem] text-[19px]' : 'left-[5.5rem] text-[16px]'}`}>−</span>
+          <div className={bureau ? 'w-24' : 'w-20'}>
+            <p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">Dépensé</p>
+            <b className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[19px]' : 'text-[16px]'}`}>{euros(t.depense)}</b>
+          </div>
+        </div>
+      ) : (
+      <div className={`shrink-0 text-center ${bureau ? 'w-24' : 'w-20'}`}>
         <p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">{sansObjectif || t.restant === null ? 'Dépensé' : 'Reste'}</p>
-        <b className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[22px]' : 'text-[20px]'}`}
-          style={{ color: negatif ? COULEURS_ANNEAU.depasse : CLES_AMBRE.has(t.cle) ? AMBRE : 'var(--color-ink)' }}>
+        <b className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[18px]' : 'text-[20px]'}`}
+          style={{ color: negatif ? COULEURS_ANNEAU.depasse : 'var(--color-ink)' }}>
           {euros(sansObjectif ? t.depense : t.restant ?? t.depense)}
         </b>
       </div>
+      )}
     </>
   )
 }
@@ -109,8 +123,8 @@ function enTete(depliable: boolean, ouvert: boolean, onBasculer: () => void) {
 }
 
 /** Téléphone : tuile teintée de la couleur du budget ; toucher la déplie (détail par catégorie, comme dans le Budget). */
-function TuileBudgetAnneau({ t, edition, ouvert, onBasculer, exclureFF }: {
-  exclureFF?: Set<string>; t: TuileBudget; edition: ReturnType<typeof useBudgetMois>; ouvert: boolean; onBasculer: () => void
+function TuileBudgetAnneau({ t, edition, ouvert, onBasculer, exclureFF, apport }: {
+  exclureFF?: Set<string>; apport?: ApportLigne; t: TuileBudget; edition: ReturnType<typeof useBudgetMois>; ouvert: boolean; onBasculer: () => void
 }) {
   const clair = eclaircie(t.rvb, 0.24)
   const alpha = t.separe ? [0.1, 0.03] : [0.24, 0.06]
@@ -120,11 +134,11 @@ function TuileBudgetAnneau({ t, edition, ouvert, onBasculer, exclureFF }: {
       <div {...enTete(depliable, ouvert, onBasculer)}
         className={`flex min-h-[46px] items-center gap-3 border px-3 py-1 ${depliable ? 'cursor-pointer' : ''} ${ouvert ? 'rounded-t-[14px] border-b-transparent' : 'rounded-[14px]'}`}
         style={{ background: `linear-gradient(100deg, ${rgba(t.rvb, alpha[0]!)}, ${rgba(t.rvb, alpha[1]!)} 80%), #15110e`, borderColor: rgba(t.rvb, 0.28) }}>
-        <CorpsTuile t={t} edition={edition} bureau={false} />
+        <CorpsTuile t={t} edition={edition} bureau={false} apport={apport} />
       </div>
       {ouvert && t.ligneId && (
-        <div className={`${t.cle === 'fraisfixe' || t.cle === 'courses' ? '' : 'max-h-[45dvh] overflow-y-auto'} rounded-b-[14px] border border-t-0 px-3 py-0.5`} style={{ borderColor: rgba(t.rvb, 0.28), background: 'rgba(33,28,22,.55)' }}>
-          <DetailLigneLecture cle={t.ligneId} couleur={clair} deplie={t.cle === 'courses'} aplat={t.cle === 'fraisfixe'} exclure={t.cle === 'fraisfixe' ? exclureFF : undefined} />
+        <div className={`${t.cle === 'fraisfixe' || t.cle === 'courses' || t.cle === 'amenagement' || t.cle === 'exceptionnelles' ? '' : 'max-h-[45dvh] overflow-y-auto'} rounded-b-[14px] border border-t-0 px-3 py-0.5`} style={{ borderColor: rgba(t.rvb, 0.28), background: 'rgba(33,28,22,.55)' }}>
+          <DetailLigneLecture cle={t.ligneId} couleur={clair} deplie={t.cle === 'courses' || t.cle === 'amenagement' || t.cle === 'exceptionnelles'} aplat={t.cle === 'fraisfixe'} exclure={t.cle === 'fraisfixe' ? exclureFF : undefined} apport={apport} />
         </div>
       )}
     </div>
@@ -135,18 +149,18 @@ function TuileBudgetAnneau({ t, edition, ouvert, onBasculer, exclureFF }: {
  * Bureau : ligne posée dans un panneau de verre, presque transparente, séparée de la précédente par un filet.
  * Le clic la déplie (détail par catégorie).
  */
-function LigneVerre({ t, edition, ouvert, onBasculer, exclureFF }: {
-  exclureFF?: Set<string>; t: TuileBudget; edition: ReturnType<typeof useBudgetMois>; ouvert: boolean; onBasculer: () => void
+function LigneVerre({ t, edition, ouvert, onBasculer, exclureFF, apport }: {
+  exclureFF?: Set<string>; apport?: ApportLigne; t: TuileBudget; edition: ReturnType<typeof useBudgetMois>; ouvert: boolean; onBasculer: () => void
 }) {
   const clair = eclaircie(t.rvb, 0.24)
   const depliable = t.ligneId !== null
   return (
     <div data-testid={`tuile-${t.cle}`} data-ton={t.ton} data-ouvert={ouvert || undefined} className="border-t border-white/[.09] first:border-t-0">
-      <div {...enTete(depliable, ouvert, onBasculer)} className={`flex h-[50px] items-center gap-4 [@media(min-height:840px)]:h-[54px] ${depliable ? 'cursor-pointer' : ''}`}>
-        <CorpsTuile t={t} edition={edition} bureau />
+      <div {...enTete(depliable, ouvert, onBasculer)} className={`flex h-[38px] items-center gap-3 ${depliable ? 'cursor-pointer' : ''}`}>
+        <CorpsTuile t={t} edition={edition} bureau apport={apport} />
       </div>
       {ouvert && t.ligneId && (
-        <div className={`${t.cle === 'fraisfixe' || t.cle === 'courses' ? '' : 'max-h-[45dvh] overflow-y-auto'} pb-2`}><DetailLigneLecture cle={t.ligneId} couleur={clair} deplie={t.cle === 'courses'} aplat={t.cle === 'fraisfixe'} exclure={t.cle === 'fraisfixe' ? exclureFF : undefined} /></div>
+        <div className={`${t.cle === 'fraisfixe' || t.cle === 'courses' || t.cle === 'amenagement' || t.cle === 'exceptionnelles' ? '' : 'max-h-[45dvh] overflow-y-auto'} pb-2`}><DetailLigneLecture cle={t.ligneId} couleur={clair} deplie={t.cle === 'courses' || t.cle === 'amenagement' || t.cle === 'exceptionnelles'} aplat={t.cle === 'fraisfixe'} exclure={t.cle === 'fraisfixe' ? exclureFF : undefined} apport={apport} /></div>
       )}
     </div>
   )
@@ -160,22 +174,26 @@ function LigneVerre({ t, edition, ouvert, onBasculer, exclureFF }: {
 /** Démo : ?variante=A|B|C force une variante du détail « Au-delà du budget ». */
 const varianteDemo = () => { const v = new URLSearchParams(location.search).get('variante'); return v === 'A' || v === 'B' || v === 'C' ? v : undefined }
 
-const COULEUR_UTILISEE = '#eda145'
 export function ResumeView() {
   const { mois, setMois, filtre, setFiltre } = useFin()
   const lines = useHorizon((s) => s.finLines)
   const foyer = filtre === 'foyer'
   const [recents, setRecents] = useState(false)
-  const [detail, setDetail] = useState<'reste' | 'epargne' | 'utilisee' | 'soldes' | 'epdep' | 'epvac' | null>(null)
+  const [detail, setDetail] = useState<'reste' | 'epargne' | 'utilisee' | 'soldes' | 'epvac' | null>(null)
   // Tuiles de budget dépliées (détail par catégorie).
   const [ouvertes, setOuvertes] = useState<Set<string>>(new Set())
+  const [totalOuvert, setTotalOuvert] = useState(false)
   const basculerTuile = (cle: string) => setOuvertes((o) => { const n = new Set(o); if (n.has(cle)) n.delete(cle); else n.add(cle); return n })
 
   // Mêmes chiffres que le Budget : un seul calcul (tuilesMois.ts), capital de prêt compté en épargne et non en dépense.
-  const { s, depenses, aVenir, epPrevues, listeEp, resteTuile, epargne } = useTuilesMois()
+  const { s, depenses, aVenir, epPrevues, listeEp, resteTuile, epargne, budgetDepenses, epargnes, capitalMois } = useTuilesMois()
+  // Budget de la tuile du haut : budgets des dépenses + budgets d'épargne comptés (Épargne avenir…, pas Épargne vacances).
+  // Épargne exceptionnelle du mois (Matelas sécurité) : affichée à part, « 800 + le reste habituel » (PER, capital des prêts…).
+  const exceptionnelle = epargnes.filter((l) => /matelas/i.test(l.ligne?.name ?? '')).reduce((n, l) => n + l.reel, 0)
+  const budgetTuile = budgetDepenses + epargnes.reduce((n, l) => n + (l.budget ?? 0), 0)
   const resteValable = resteTuile !== null
   const edition = useBudgetMois()
-  const transactions = useHorizon((st) => st.finTransactions)
+  const transactions = useTransactionsBudget()
   const comptes = useHorizon((st) => st.finAccounts)
   const soldes = useMemo(() => soldesComptes(comptes, filtre), [comptes, filtre])
   const utilisee = useMemo(() => epargneUtilisee({ transactions, comptes, mois }), [transactions, comptes, mois])
@@ -196,15 +214,26 @@ export function ResumeView() {
   const bureau = useMediaQuery('(min-width: 768px)')
   const tuiles = useMemo(() => tuilesBudgets(s.lignes).filter((t) => !t.absente), [s.lignes])
 
+  // Sous-catégorie « Épargne Dépenses » de Dépenses exceptionnelles : ce qui est venu de ce compte (téléphone, achat vêtements…),
+  // montré seulement (le total de la ligne ne change pas) ; au survol, ce qu'il reste sur le compte.
+  const apportEp = useMemo(() => {
+    const compteEp = comptes.find(estCompteEpargneDepenses)
+    const lignes = utilisee.virements.filter((v) => v.origine === ORIGINE_EPARGNE_DEPENSES || v.origine === compteEp?.name)
+    return lignes.length ? {
+      titre: 'Épargne Dépenses',
+      infobulle: epDep.solde === null ? 'Virements reçus depuis le compte Épargne Dépenses' : `Reste sur le compte Épargne Dépenses : ${euros(epDep.solde)}`,
+      lignes,
+    } : undefined
+  }, [utilisee, comptes, epDep.solde])
   if (!lines.length) {
     return <EmptyState hint="Crée tes lignes (Frais fixe, Courses…) dans Réglages.">Aucune ligne de budget pour l’instant.</EmptyState>
   }
 
-  const tailleMontant = bureau ? 'text-[20px] leading-tight' : 'text-[15px] leading-tight'
+  const tailleMontant = bureau ? 'text-[17px] leading-tight' : 'text-[15px] leading-tight'
   const resteBtn = (
     <button type="button" data-testid="tuile-reste" aria-expanded={detail === 'reste'} disabled={!resteValable}
       onClick={() => setDetail(detail === 'reste' ? null : 'reste')} title="Voir le détail du calcul"
-      className={`${bureau ? 'verre verre-tuile !py-2' : 'card px-2 py-2'} min-w-0 text-left disabled:cursor-default`}
+      className={`${bureau ? 'verre verre-tuile !py-1' : 'card px-2 py-2'} min-w-0 text-left disabled:cursor-default`}
       style={bureau ? undefined : { borderColor: 'rgba(245,158,11,.4)', background: 'linear-gradient(135deg, rgba(245,158,11,.14), rgba(25,21,18,.9) 70%)' }}>
       <p className="block-title overflow-hidden text-ellipsis whitespace-nowrap max-md:!tracking-[.04em]" data-testid="titre-reste">{resteTuile !== null && resteTuile < 0 ? 'Au-delà du budget' : 'Reste'}</p>
       <p className={`whitespace-nowrap font-bold tabular-nums ${tailleMontant}`}
@@ -222,16 +251,27 @@ export function ResumeView() {
   const corpsEpargne = (
     <>
       <span data-testid="anneau-epargne" data-ratio={Math.round(ratioEp * 100)} className="inline-flex">
-        <Anneau ratio={ratioEp} couleur={COULEURS_ANNEAU.ok} taille={bureau ? 36 : 38} trait={bureau ? 2 : 3} halo={bureau}>
-          <PiggyBank size={bureau ? 15 : 16} style={{ color: COULEURS_ANNEAU.ok }} strokeWidth={1.8} aria-hidden />
+        <Anneau ratio={ratioEp} couleur={COULEURS_ANNEAU.ok} taille={bureau ? 28 : 38} trait={bureau ? 2 : 3} halo={bureau}>
+          <PiggyBank size={bureau ? 12 : 16} style={{ color: COULEURS_ANNEAU.ok }} strokeWidth={1.8} aria-hidden />
         </Anneau>
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-        <p className={`truncate font-semibold text-ink-2 ${bureau ? 'text-[15px]' : 'text-[13px]'}`}>Épargne Avenir</p>
+        <p className={`truncate font-semibold text-ink-2 ${bureau ? 'text-[14px]' : 'text-[13px]'}`}>Épargne Avenir</p>
       </div>
-      <div className="shrink-0 text-right">
-        <p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">Épargné</p>
-        <b className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[22px]' : 'text-[20px]'}`} style={{ color: COULEURS_ANNEAU.ok }}>{euros(epargne)}</b>
+      {/* Bonus salaire (épargne exceptionnelle, ex. Matelas sécurité) puis l'épargne habituelle (PER, capital des prêts).
+          Mêmes colonnes (largeur, centrage) que « Épargne / Dépenses » de la ligne Vacances : les montants sont alignés. */}
+      <div className="relative flex shrink-0 gap-4 text-center">
+        {exceptionnelle > 0.5 && (
+          <div className={bureau ? 'w-24' : 'w-20'}>
+            <p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">Bonus salaire</p>
+            <b data-testid="bonus-salaire" className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[19px]' : 'text-[16px]'}`} style={{ color: COULEURS_ANNEAU.ok }}>{euros(exceptionnelle)}</b>
+          </div>
+        )}
+        {exceptionnelle > 0.5 && <span aria-hidden className={`absolute bottom-0 -translate-x-1/2 font-bold leading-none ${bureau ? 'left-[6.5rem] text-[19px]' : 'left-[5.5rem] text-[16px]'}`} style={{ color: COULEURS_ANNEAU.ok }}>+</span>}
+        <div className={bureau ? 'w-24' : 'w-20'}>
+          <p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">Épargné</p>
+          <b className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[19px]' : 'text-[16px]'}`} style={{ color: COULEURS_ANNEAU.ok }}>{euros(epargne - exceptionnelle)}</b>
+        </div>
       </div>
     </>
   )
@@ -239,7 +279,7 @@ export function ResumeView() {
   const ouvertEp = detail === 'epargne' || detail === 'utilisee'
   const ligneEpargne = bureau ? (
     <div key="epargne" data-testid="tuile-epargne" data-ouvert={ouvertEp || undefined} className="border-t border-white/[.09] first:border-t-0">
-      <div {...enTete(true, detail === 'epargne', basculerEpargne)} title="Voir les épargnes du mois" className="flex h-[50px] cursor-pointer items-center gap-4 [@media(min-height:840px)]:h-[54px]">{corpsEpargne}</div>
+      <div {...enTete(true, detail === 'epargne', basculerEpargne)} title="Voir les épargnes du mois" className="flex h-[38px] cursor-pointer items-center gap-3">{corpsEpargne}</div>
       {detailEpargne && <div className="flex justify-center pb-2">{detailEpargne}</div>}
     </div>
   ) : (
@@ -255,7 +295,7 @@ export function ResumeView() {
   // Ligne Épargne Dépenses : virements vers le compte Epargne Dépenses ; le clic montre ce qui reste sur ce compte.
   const ligneMaison = (cle: string, rvb: [number, number, number], corps: ReactNode, ouvert: boolean, onBasculer: () => void, detailNode: ReactNode, sous?: ReactNode) => bureau ? (
     <div key={cle} data-testid={`tuile-${cle}`} data-ouvert={ouvert || undefined} className="border-t border-white/[.09] first:border-t-0">
-      <div {...enTete(true, ouvert, onBasculer)} className="flex h-[50px] cursor-pointer items-center gap-4 [@media(min-height:840px)]:h-[54px]">{corps}</div>
+      <div {...enTete(true, ouvert, onBasculer)} className="flex h-[38px] cursor-pointer items-center gap-3">{corps}</div>
       {sous && <div className="-mt-1.5 pb-1.5">{sous}</div>}
       {ouvert && detailNode && <div className="flex justify-center pb-2">{detailNode}</div>}
     </div>
@@ -269,37 +309,20 @@ export function ResumeView() {
       {ouvert && detailNode && <div className="flex justify-center rounded-b-[14px] border border-t-0 px-1 py-1" style={{ borderColor: rgba(rvb, 0.28), background: 'rgba(33,28,22,.55)' }}>{detailNode}</div>}
     </div>
   )
-  const corpsMaison = (Icone: LucideIcon, couleur: string, titre: string, montant: number, droite?: ReactNode, ratio: number | null = null) => (
+  const corpsMaison = (Icone: LucideIcon, couleur: string, titre: string, montant: number, droite?: ReactNode, ratio: number | null = null, couleurMontant?: string, etiquette = 'Épargné') => (
     <>
-      <Anneau sansTrace={ratio === null} ratio={ratio} couleur={couleur} taille={bureau ? 36 : 38} trait={bureau ? 2 : 3} halo={bureau}>
-        <Icone size={bureau ? 15 : 16} style={{ color: couleur }} strokeWidth={1.8} aria-hidden />
+      <Anneau sansTrace={ratio === null} ratio={ratio} couleur={couleur} taille={bureau ? 28 : 38} trait={bureau ? 2 : 3} halo={bureau}>
+        <Icone size={bureau ? 12 : 16} style={{ color: couleur }} strokeWidth={1.8} aria-hidden />
       </Anneau>
-      <p className={`min-w-0 flex-1 truncate font-semibold text-ink-2 ${bureau ? 'text-[15px]' : 'text-[13px]'}`}>{titre}</p>
+      <p className={`min-w-0 flex-1 truncate font-semibold text-ink-2 ${bureau ? 'text-[14px]' : 'text-[13px]'}`}>{titre}</p>
       {droite ?? (
-        <div className="shrink-0 text-right">
-          <p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">Épargné</p>
-          <b className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[22px]' : 'text-[20px]'}`} style={{ color: couleur }}>{euros(montant)}</b>
+        <div className={`shrink-0 text-center ${bureau ? 'w-24' : 'w-20'}`}>
+          <p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">{etiquette}</p>
+          <b className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[18px]' : 'text-[20px]'}`} style={{ color: couleurMontant ?? couleur }}>{euros(montant)}</b>
         </div>
       )}
     </>
   )
-  const detailEpDep = (
-    <div data-testid="detail-epargne-depenses" className="card mx-auto w-full max-w-md space-y-1 px-4 py-3 text-sm">
-      {epDep.virements.length === 0 && <p className="text-ink-3">Aucun virement ce mois-ci.</p>}
-      {epDep.virements.map((v) => (
-        <div key={v.id} className="flex items-center justify-between gap-3">
-          <span className="min-w-0 truncate text-ink-2">{v.date.slice(8, 10)}/{v.date.slice(5, 7)} · {v.libelle}</span>
-          <span className="shrink-0 tabular-nums">{euros(v.montant)}</span>
-        </div>
-      ))}
-      <div className="mt-1 flex items-center justify-between gap-3 border-t border-line/40 pt-1.5">
-        <span className="text-ink-3">Reste sur le compte {epDep.compte ? 'Epargne Dépenses' : ''}</span>
-        <b data-testid="solde-epargne-depenses" className="tabular-nums">{epDep.solde === null ? '—' : euros(epDep.solde)}</b>
-      </div>
-    </div>
-  )
-  const ligneEpDep = ligneMaison('epargne-depenses', [237, 161, 69], corpsMaison(PiggyBank, COULEUR_UTILISEE, 'Épargne Dépenses', epDep.total),
-    detail === 'epdep', () => setDetail(detail === 'epdep' ? null : 'epdep'), detailEpDep)
   const loupeBtn = (
     <button type="button" data-testid="tuile-loupe" aria-label="Dernières opérations" onClick={() => setRecents(true)}
       className={`${bureau ? 'verre verre-tuile !px-0' : 'card'} flex items-center justify-center text-ink-2 hover:text-ink`}>
@@ -309,9 +332,10 @@ export function ResumeView() {
   const colonnes = 'grid-cols-4'
   const salaireTuile = salaireOuverture ?? (prevues ? Math.round(prevues.montant / 100) * 100 : null)
   const salaireBtn = (
-    <div data-testid="tuile-salaire" className={`${bureau ? 'verre verre-tuile !py-2' : 'card px-2 py-2'} min-w-0 text-left`}>
-      <p className="block-title overflow-hidden text-ellipsis whitespace-nowrap max-md:!tracking-[.04em]">Salaire</p>
-      <p data-testid="montant-salaire" className={`truncate font-bold tabular-nums ${bureau ? 'text-[20px] leading-tight' : 'text-[15px] leading-tight'}`} style={{ color: COULEURS_ANNEAU.ok }}>{salaireTuile === null ? '—' : euros(salaireTuile)}</p>
+    <div data-testid="tuile-salaire" className={`${bureau ? 'verre verre-tuile !py-1' : 'card px-2 py-2'} min-w-0 text-left`}>
+      <p className="block-title overflow-hidden text-ellipsis whitespace-nowrap max-md:!tracking-[.04em]">Budget</p>
+      <p data-testid="montant-budget" className={`truncate font-bold tabular-nums ${bureau ? 'text-[17px] leading-tight' : 'text-[15px] leading-tight'}`} style={{ color: foyer && budgetTuile > 0 ? COULEURS_ANNEAU.ok : '#857c6d' }}>{foyer && budgetTuile > 0 ? euros(budgetTuile) : '—'}</p>
+      <p data-testid="montant-salaire" className="truncate text-[10.5px] leading-snug text-ink-3">{salaireTuile === null ? ' ' : `Salaire ${euros(salaireTuile)}`}</p>
     </div>
   )
   const hautDeVue = (
@@ -320,11 +344,11 @@ export function ResumeView() {
       {loupeBtn}
       <button type="button" data-testid="soldes-comptes" aria-expanded={detail === 'soldes'} onClick={() => setDetail(detail === 'soldes' ? null : 'soldes')}
         title="Voir le solde de chaque compte"
-        className={`${bureau ? 'verre verre-tuile !py-2' : 'card px-2 py-2'} min-w-0 text-left`}>
+        className={`${bureau ? 'verre verre-tuile !py-1' : 'card px-2 py-2'} min-w-0 text-left`}>
         <p className="block-title flex items-center gap-1.5 overflow-hidden whitespace-nowrap max-md:!tracking-[.04em]">Comptes
           <span className="flex -space-x-1 max-md:hidden">{soldes.comptes.map((a) => <IconeDeCompte key={a.id} compte={a} taille={12} />)}</span>
         </p>
-        <p className={`truncate font-bold tabular-nums ${bureau ? 'text-[20px] leading-tight' : 'text-[15px] leading-tight'}`} style={soldes.total < 0 ? { color: COULEURS_ANNEAU.depasse } : undefined}>{euros(soldes.total)}</p>
+        <p className={`truncate font-bold tabular-nums ${bureau ? 'text-[17px] leading-tight' : 'text-[15px] leading-tight'}`} style={soldes.total < 0 ? { color: COULEURS_ANNEAU.depasse } : undefined}>{euros(soldes.total)}</p>
       </button>
       {salaireBtn}
       {detail === 'soldes' && <div className="col-span-full flex justify-center"><PanneauSoldes soldes={soldes} /></div>}
@@ -345,49 +369,91 @@ export function ResumeView() {
     </header>
   )
   // Ordre : Salaire, écart, Frais fixe + Épargné, écart, les autres budgets (Dons encore à part). Écarts = celui avant Dons.
-  const groupes = (rendu: (t: TuileBudget) => ReactNode): ReactNode[][] => {
+  const groupes = (rendu: (t: TuileBudget) => ReactNode): { noeuds: ReactNode[]; apres?: ReactNode }[] => {
     const par = (cle: string) => tuiles.find((t) => t.cle === cle)
     const ff = par('fraisfixe'), courses = par('courses'), vac = par('vacances')
-    // Frais fixe compte aussi Courses et Vacances (total et anneau).
-    const ffTot = ff && (() => {
-      const lst = [ff, courses, vac].filter(Boolean) as TuileBudget[]
-      const depense = lst.reduce((n, t) => n + t.depense, 0) - epDep.totalDebits
-      const budget = lst.some((t) => t.budget !== null) ? lst.reduce((n, t) => n + (t.budget ?? 0), 0) : null
-      const ratio = budget ? Math.max(0, depense) / budget : null
-      return { ...ff, depense, budget, restant: budget !== null ? budget - depense : null, ratio, ton: ratio === null ? ff.ton : ratio > 1 ? 'depasse' : ratio >= 0.75 ? 'attention' : 'ok' } as TuileBudget
-    })()
+    // Frais fixe seul : il compte aussi le versé sur l'épargne « dépenses annuelles » (200 €…). Courses et Vacances ont leur ligne.
+    const ffTot = ff
     const vert = COULEURS_ANNEAU.ok
     const vacRvb = vac?.rvb ?? [139, 92, 246]
     const deuxCol = vac && (
-      <div className="flex shrink-0 gap-4 text-right">
-        <div><p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">Épargne</p>
-          <b data-testid="col-epargne-vacances" className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[19px]' : 'text-[16px]'}`} style={{ color: vert }}>{euros(epVac.total)}</b></div>
-        <div><p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">Dépenses</p>
+      <div className="relative flex shrink-0 gap-4 text-center">
+        <div className={bureau ? 'w-24' : 'w-20'}><p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">Épargne</p>
+          <b data-testid="col-epargne-vacances" className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[19px]' : 'text-[16px]'}`} style={{ color: epVac.total >= 100 ? vert : 'var(--color-ink)' }}>{euros(epVac.total)}</b></div>
+        <span aria-hidden className={`absolute bottom-0 -translate-x-1/2 font-bold leading-none text-ink-3 ${bureau ? 'left-[6.5rem] text-[19px]' : 'left-[5.5rem] text-[16px]'}`}>+</span>
+        <div className={bureau ? 'w-24' : 'w-20'}><p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">Dépensé</p>
           <b className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[19px]' : 'text-[16px]'}`}>{euros(vac.depense)}</b></div>
       </div>
     )
     const ligneVac = vac && ligneMaison('vacances', vacRvb, corpsMaison(Plane, eclaircie(vacRvb, 0.24), 'Vacances', 0, deuxCol, Math.max(0, vac.depense) / CIBLE_VACANCES), ouvertes.has('vacances'), () => basculerTuile('vacances'),
       vac.ligneId ? <div className="w-full px-2"><DetailLigneLecture cle={vac.ligneId} couleur={eclaircie(vacRvb, 0.24)} /></div> : null)
-    const bloc1: ReactNode[] = [ffTot && rendu(ffTot), ligneEpargne, ligneEpDep, ligneVac, courses && rendu(courses)]
+    const bloc1: ReactNode[] = [ffTot && rendu(ffTot), ligneEpargne, ligneVac, courses && rendu(courses)]
     const ordre2 = ['courantes', 'exceptionnelles', 'amenagement'].map(par).filter(Boolean) as TuileBudget[]
     const apart = tuiles.filter((t) => t.separe)
-    // Ligne « Reste » en tête du bloc des dépenses de vie : même valeur que la tuile Reste, verte si positive, ambre sinon.
-    const ligneReste = ordre2.length > 0 && resteTuile !== null && ligneMaison('reste', [76, 199, 154],
-      corpsMaison(Wallet, COULEURS_ANNEAU.ok, 'Reste', 0,
-        <div className="shrink-0 text-right"><p className="mb-1 text-[10px] font-semibold leading-none tracking-[.06em] text-ink-3">Reste</p>
-          <b data-testid="montant-ligne-reste" className={`block font-bold leading-none tabular-nums ${bureau ? 'text-[22px]' : 'text-[20px]'}`} style={{ color: resteTuile < 0 ? AMBRE : COULEURS_ANNEAU.ok }}>{euros(resteTuile)}</b></div>),
-      detail === 'reste', () => setDetail(detail === 'reste' ? null : 'reste'), null)
-    return [bloc1.filter(Boolean), apart.map(rendu), [ligneReste, ...ordre2.map(rendu)].filter(Boolean)].filter((g) => g.length)
+    // Deux lignes « Reste » en texte simple : « Reste après frais fixes » part du budget et retire Frais fixe, l'Épargne Avenir
+    // habituelle (sans le bonus salaire, ni le capital Lille hors budget) tout Vacances (épargne + dépenses) et Courses ;
+    // puis sous Aménagement (ce premier reste − Dons, Dépenses courantes, exceptionnelles, Aménagement, + ce qui est venu d'Épargne Dépenses).
+    const montant = (t?: TuileBudget) => t?.depense ?? 0
+    const bloc3 = [...apart, ...ordre2]
+    const epargneHabituelle = epargne - exceptionnelle - capitalHorsBudget
+    const reste1 = !foyer || budgetTuile <= 0 ? null
+      : budgetTuile - (montant(ffTot) + epargneHabituelle + montant(vac) + epVac.total + montant(courses))
+    // Ce qui est venu d'Épargne Dépenses (colonne « Épargne dép » de Dépenses exceptionnelles) est déduit des dépenses retranchées :
+    // une dépense payée par cette épargne ne pèse pas sur le Reste du salaire.
+    const apportTotal = apportEp ? apportEp.lignes.reduce((n, l) => n + l.montant, 0) : 0
+    const reste2 = reste1 === null ? null : reste1 - bloc3.reduce((n, t) => n + t.depense, 0) + apportTotal
+    const texteReste = (id: string, v: number | null, ambreSiNegatif = false, titre = 'Reste') => v !== null && (
+      <div data-testid={id} className={`flex items-center justify-between ${bureau ? 'px-0 pt-1' : 'px-3 pt-1.5'}`}>
+        <span className="text-[11px] font-semibold uppercase tracking-[.06em] text-ink-3">{titre}</span>
+        <b className="font-bold tabular-nums text-[15px]" style={{ color: v >= 0 ? COULEURS_ANNEAU.ok : ambreSiNegatif ? AMBRE : 'var(--color-ink)' }}>{euros(v)}</b>
+      </div>
+    )
+    return [
+      { noeuds: bloc1.filter(Boolean), apres: texteReste('reste-apres-vacances', reste1, false, 'Reste après frais fixes') },
+      { noeuds: bloc3.map(rendu), apres: texteReste('reste-apres-amenagement', reste2, true) },
+    ].filter((g) => g.noeuds.length)
   }
-  // Mois sans objectif : total du dépensé en bas des lignes (l'épargne n'est pas une dépense : exclue).
-  const totalDepense = tuiles.reduce((n, t) => n + t.depense, 0)
+  // Total dépensé (mois sans objectif) : les lignes dans l'ordre du Résumé, Épargne Avenir comprise ; l'épargne utilisée n'y est pas comptée.
+  // Le capital d'un prêt payé hors budget (Lille) compte dans l'Épargné affiché, mais pas dans ce total.
+  const capitalHorsBudget = (capitalMois?.prets ?? []).filter((p) => p.horsBudget && p.etat === 'fait').reduce((n, p) => n + p.extrait, 0)
+  const ORDRE_RESUME = ['fraisfixe', 'epargne', 'vacances', 'courses']
+  const ordreLigne = (cle: string, separe?: boolean) => {
+    const i = ORDRE_RESUME.indexOf(cle)
+    if (i >= 0) return i
+    if (separe) return 4
+    const j = ['courantes', 'exceptionnelles', 'amenagement'].indexOf(cle)
+    return j >= 0 ? 5 + j : 9
+  }
+  const lignesTotal = ([
+    ...tuiles.map((t) => ({ cle: t.cle, nom: t.titre, montant: t.depense, separe: t.separe })),
+    { cle: 'epargne', nom: 'Épargne Avenir', montant: epargne - capitalHorsBudget, separe: false },
+  ] as { cle: string; nom: string; montant: number; separe?: boolean }[]).filter((l) => Math.abs(l.montant) >= 0.005).sort((x, y) => ordreLigne(x.cle, x.separe) - ordreLigne(y.cle, y.separe))
+  const totalDepense = lignesTotal.reduce((n, l) => n + l.montant, 0)
+  const syntheseTotal: { nom: string; montant: number; fort?: boolean }[] = [
+    ...lignesTotal.map((l) => ({ nom: l.nom, montant: l.montant })),
+    { nom: 'Total dépensé', montant: totalDepense, fort: true },
+  ]
   const ligneTotal = estMoisSansObjectif(mois) && (
-    <div data-testid="total-depense" className={`flex items-center justify-between ${bureau ? 'px-0 pt-1' : 'px-3 pt-1.5'}`}>
-      <span className="text-[11px] font-semibold uppercase tracking-[.06em] text-ink-3">Total dépensé</span>
-      <b className={`font-bold tabular-nums ${bureau ? 'text-[22px]' : 'text-[20px]'}`}>{euros(totalDepense)}</b>
+    <div data-testid="total-depense" className={bureau ? 'px-0 pt-1' : 'px-3 pt-1.5'}>
+      <button type="button" onClick={() => setTotalOuvert(!totalOuvert)} aria-expanded={totalOuvert}
+        title={syntheseTotal.map((l) => `${l.nom} : ${euros(l.montant)}`).join('\n')}
+        className="flex w-full items-center justify-between text-left">
+        <span className="text-[11px] font-semibold uppercase tracking-[.06em] text-ink-3">Total dépensé</span>
+        <b className={`font-bold tabular-nums ${bureau ? 'text-[18px]' : 'text-[20px]'}`}>{euros(totalDepense)}</b>
+      </button>
+      {totalOuvert && (
+        <div data-testid="synthese-total" className="card mx-auto mt-1.5 w-full max-w-sm space-y-1 px-4 py-2.5 text-[13px]">
+          {syntheseTotal.map((l) => (
+            <div key={l.nom} className={`flex items-center justify-between gap-3 ${l.fort ? 'border-t border-line/60 pt-1 font-semibold' : 'text-ink-2'}`}>
+              <span className="min-w-0 truncate">{l.nom}</span>
+              <span className="shrink-0 tabular-nums">{euros(l.montant)}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
-  const basculer = (t: TuileBudget) => ({ t, edition, ouvert: ouvertes.has(t.cle), onBasculer: () => basculerTuile(t.cle), exclureFF: epDep.idsDebits })
+  const basculer = (t: TuileBudget) => ({ t, edition, ouvert: ouvertes.has(t.cle), onBasculer: () => basculerTuile(t.cle), apport: t.cle === 'exceptionnelles' ? apportEp : undefined })
 
   if (bureau) {
     return (
@@ -395,13 +461,16 @@ export function ResumeView() {
         {edition.dialogue}
         {recents && <DernieresOperations bureau onClose={() => setRecents(false)} />}
         {entete}
-        <div className="mx-auto w-full max-w-[660px] space-y-2.5">
+        <div className="mx-auto w-full max-w-[660px] space-y-2">
           {hautDeVue}
           {noteFiltre}
           {tuiles.length ? (
             <>
               {groupes((t) => <LigneVerre key={t.cle} {...basculer(t)} />).map((g, i) => (
-                <div key={i} data-testid={`bloc-${i + 1}`} className={`verre verre-panneau !py-0.5 ${i ? '!mt-3 [@media(min-height:840px)]:!mt-5' : ''}`}>{g}</div>
+                <Fragment key={i}>
+                  <div data-testid={`bloc-${i + 1}`} className={`verre verre-panneau !py-0.5 ${i ? '!mt-4' : ''}`}>{g.noeuds}</div>
+                  {g.apres}
+                </Fragment>
               ))}
               {ligneTotal}
             </>
@@ -421,7 +490,10 @@ export function ResumeView() {
       {tuiles.length ? (
         <div className="space-y-3">
           {groupes((t) => <TuileBudgetAnneau key={t.cle} {...basculer(t)} />).map((g, i) => (
-            <div key={i} data-testid={`bloc-${i + 1}`} className="bloc-lignes divide-y divide-white/[.07] overflow-hidden rounded-[14px] border border-white/[.09] bg-[#15110e]">{g}</div>
+            <Fragment key={i}>
+              <div data-testid={`bloc-${i + 1}`} className="bloc-lignes divide-y divide-white/[.07] overflow-hidden rounded-[14px] border border-white/[.09] bg-[#15110e]">{g.noeuds}</div>
+              {g.apres}
+            </Fragment>
           ))}
           {ligneTotal}
         </div>

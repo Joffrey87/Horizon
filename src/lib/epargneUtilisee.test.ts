@@ -24,10 +24,10 @@ describe('epargneUtilisee', () => {
   it('octobre : 3 virements, 1 000 €', () => {
     expect(r.total).toBe(1000)
     expect(r.virements.map((v) => [v.date, v.origine, v.montant])).toEqual([
-      ['2026-10-21', 'Epargne', 300], ['2026-10-19', 'Livret (Compte S)', 300], ['2026-10-12', 'Épargne urgence', 400]])
+      ['2026-10-21', 'Epargne', 300], ['2026-10-19', 'Livret (Compte S)', 300], ['2026-10-12', 'Épargne Dépenses', 400]])
   })
   it('groupé par origine', () => {
-    expect(r.parOrigine[0]).toMatchObject({ origine: 'Épargne urgence', total: 400 })
+    expect(r.parOrigine[0]).toMatchObject({ origine: 'Épargne Dépenses', total: 400 })
   })
   it('règle par id', () => {
     const r2 = epargneUtilisee({ transactions: tx, comptes, mois: '2026-10', regles: [{ id: tx[1]!.id, origine: 'PEL' }] })

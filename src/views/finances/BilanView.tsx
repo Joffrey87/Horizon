@@ -5,7 +5,7 @@ import { useHorizon } from '../../lib/store'
 import { agregerHorsCapital, bilan, estEpargneComptee, euros, fondLigne, libelleMois, moisEcoules } from '../../lib/finances'
 import { Card, EmptyState } from '../../components/ui'
 import { FiltreSeg, NavMois, Tuile } from './partage'
-import { moisCourant, useFin, useIndex } from './contexte'
+import { moisCourant, useFin, useIndex, useTransactionsBudget } from './contexte'
 import { BarresMois } from './graphiques'
 
 const CLE_TOTAL = 'horizon.finances.bilanTotal'
@@ -13,7 +13,7 @@ const CLE_TOTAL = 'horizon.finances.bilanTotal'
 /** Bilan des 6 mois qui précèdent le mois choisi : mois par mois, puis global. */
 export function BilanView() {
   const { mois, setMois, filtre, setFiltre } = useFin()
-  const transactions = useHorizon((s) => s.finTransactions)
+  const transactions = useTransactionsBudget()
   const lines = useHorizon((s) => s.finLines)
   const budgets = useHorizon((s) => s.finBudgets)
   const echeances = useHorizon((s) => s.finEcheances)

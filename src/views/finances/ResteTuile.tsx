@@ -6,7 +6,7 @@ import { euros } from '../../lib/finances'
 import { calculerReste, type Recurrente } from '../../lib/reste'
 import { todayIso } from '../../lib/logic'
 import { MontantEditable, Tuile } from './partage'
-import { useIndex, useVue } from './contexte'
+import { useIndex, useVue, useTransactionsBudget } from './contexte'
 
 const jourMois = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 const libelleFin = (iso: string) => `${Number(iso.slice(8, 10))}/${iso.slice(5, 7)}`
@@ -19,7 +19,7 @@ const libelleFin = (iso: string) => `${Number(iso.slice(8, 10))}/${iso.slice(5, 
 export function ResteTuile() {
   const vue = useVue()
   const accounts = useHorizon((s) => s.finAccounts)
-  const transactions = useHorizon((s) => s.finTransactions)
+  const transactions = useTransactionsBudget()
   const planned = useHorizon((s) => s.finPlanned)
   const ajustements = useHorizon((s) => s.finResteAjustements)
   const idx = useIndex()

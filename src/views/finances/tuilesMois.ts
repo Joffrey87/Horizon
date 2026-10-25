@@ -4,7 +4,7 @@ import { useHorizon } from '../../lib/store'
 import {
   agregerHorsCapital, depensesAVenir, epargnesPrevues, estEpargneComptee, listeEpargnes, syntheseMois, type LigneBudget,
 } from '../../lib/finances'
-import { moisCourant, useFin, useIndex } from './contexte'
+import { moisCourant, useFin, useIndex, useTransactionsBudget } from './contexte'
 
 export const somme = (ls: LigneBudget[], f: (l: LigneBudget) => number | null) => ls.reduce((t, l) => t + (f(l) ?? 0), 0)
 
@@ -17,7 +17,7 @@ export const somme = (ls: LigneBudget[], f: (l: LigneBudget) => number | null) =
  */
 export function useTuilesMois() {
   const { mois, filtre } = useFin()
-  const transactions = useHorizon((s) => s.finTransactions)
+  const transactions = useTransactionsBudget()
   const lines = useHorizon((s) => s.finLines)
   const budgets = useHorizon((s) => s.finBudgets)
   const echeances = useHorizon((s) => s.finEcheances)

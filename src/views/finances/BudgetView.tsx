@@ -12,7 +12,7 @@ import { DetailEpargne, DetailReste } from './DetailsTuiles'
 import { somme, useTuilesMois } from './tuilesMois'
 import { DetailTroisMois } from './DetailTroisMois'
 import { ChampRecherche, ResultatsRecherche } from './RechercheOperations'
-import { useFin, useIndex, useVue } from './contexte'
+import { useFin, useIndex, useVue, useTransactionsBudget } from './contexte'
 import { MontantBudget, useBudgetMois } from './budgetMois'
 import { estFraisFixe, estMoisSansObjectif } from '../../lib/moisSansObjectif'
 import { BoutonDetails, DetailLigne, type Niveau } from './DetailLigne'
@@ -30,7 +30,7 @@ type Depli = { cle: string; vue: 'mois' | 'moy3' } | null
  *  M-1, moyenne des 3 mois précédents, prévisionnel M+1. */
 export function BudgetView() {
   const { mois, setMois, filtre, setFiltre } = useFin()
-  const transactions = useHorizon((s) => s.finTransactions)
+  const transactions = useTransactionsBudget()
   const lines = useHorizon((s) => s.finLines)
   const setFinBudget = useHorizon((s) => s.setFinBudget)
   const idx = useIndex()

@@ -17,9 +17,13 @@ export interface RegleEpargne {
   origine: string
 }
 
+/** Nom d'origine des virements venus du compte Épargne Dépenses (affiché tel quel, et reconnu par le Résumé). */
+export const ORIGINE_EPARGNE_DEPENSES = 'Épargne Dépenses'
+
 /** Règles faciles à compléter : la première qui correspond l'emporte. */
 export const REGLES_EPARGNE: RegleEpargne[] = [
-  { libelle: /virement interne telephone/i, origine: 'Épargne urgence' },
+  { libelle: /virement interne telephone/i, origine: ORIGINE_EPARGNE_DEPENSES },
+  { libelle: /achats? v[eê]tements?/i, origine: ORIGINE_EPARGNE_DEPENSES },
   { libelle: /depuis compte s\b/i, origine: 'Livret (Compte S)' },
 ]
 

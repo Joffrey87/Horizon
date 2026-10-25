@@ -7,11 +7,12 @@ import { categoriesParLigne, categorieEffective, aplatirGroupes, detailHorsCapit
 import type { FinTransaction } from '../../lib/types'
 import { cleCommercant, clesDuGroupe, planAlias, planRegrouper, planSeparer, type Ecriture } from '../../lib/editionGroupes'
 import { ProgressBar } from '../../components/ui'
-import { LigneOperation } from './partage'
+import { EditeurLibelle, LigneOperation } from './partage'
+import { LierRemboursement } from './LierRemboursement'
 import { IconeCompte } from './IconeCompte'
 import { FenetreConso, varianteEnergie } from './ConsoEnergie'
 import { siteEnergie } from '../../lib/energie'
-import { dateCourte, useFin, useIndex, useReconnaissance } from './contexte'
+import { dateCourte, useFin, useIndex, useReconnaissance, useTransactionsBudget } from './contexte'
 import { useTuilesMois } from './tuilesMois'
 
 /** Niveau de détail d'une catégorie : fermée, ses groupes d'intitulés, ou toutes ses opérations. */
@@ -36,7 +37,7 @@ export function BoutonDetails({ niveau, onChange }: { niveau: Niveau; onChange: 
  *  toutes les catégories d'un coup ; chacune reste ensuite réglable seule. */
 export function DetailLigne({ cle, niveauTous = 0 }: { cle: string; niveauTous?: Niveau }) {
   const { mois, filtre } = useFin()
-  const transactions = useHorizon((s) => s.finTransactions)
+  const transactions = useTransactionsBudget()
   const idx = useIndex()
   const [niveaux, setNiveaux] = useState<Map<string, Niveau>>(new Map())
   const [defaut, setDefaut] = useState<Niveau>(niveauTous)
@@ -142,6 +143,7 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
   const [envoi, setEnvoi] = useState(false)
   const [choixCat, setChoixCat] = useState(false)
   const [conso, setConso] = useState(false)
+  const [lien, setLien] = useState(false)
   const idx = useIndex()
   const site = sel.type === 'op' ? siteEnergie(nomAffiche, sel.tx.label_local, sel.tx.label) : null
   const lancer = async (f: () => Promise<void>) => { setEnvoi(true); await f(); setEnvoi(false); onClose() }
@@ -224,11 +226,13 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
       <div className="mt-2 flex flex-wrap gap-1.5">
         <button disabled={envoi} onClick={() => void renommer()} className={BTN_OK}>Renommer</button>
         {sel.type === 'op' && <button onClick={() => setChoixCat(true)} className={BTN_NEUTRE}>Catégorie</button>}
+        {sel.type === 'op' && Number(sel.tx.amount) > 0 && <button data-testid="btn-rembourse" onClick={() => setLien(true)} className={BTN_NEUTRE}>{sel.tx.rembourse_de ? 'Dépense liée…' : 'Rembourse…'}</button>}
         {site && <button onClick={() => setConso(!conso)} aria-pressed={conso} className={BTN_NEUTRE}>Consommation</button>}
         {autres.length > 0 && <button onClick={() => { const c = autres.find((g) => g.cle === cible) ?? autres[0]; if (c) { setCible(c.cle); setNom(c.nom) } setFusion(true) }} className={BTN_NEUTRE}>Regrouper avec…</button>}
         {sel.type === 'groupe' && groupe.manuel && (
           <button disabled={envoi} onClick={() => void separer()} className={`${BTN} border-[#eda145]/70 text-[#eda145]`}>Séparer</button>)}
       </div>
+      {lien && sel.type === 'op' && <LierRemboursement tx={sel.tx} onClose={() => { setLien(false); onClose() }} />}
       {site && conso && <FenetreConso site={site} variante={varianteEnergie()} onClose={() => setConso(false)} />}
     </div>
   )
@@ -318,9 +322,40 @@ function MarchandsLecture({ operations, nomCategorie }: { operations: FinTransac
  * Toucher une sous-catégorie (ou une catégorie sans sous-catégorie) montre ses opérations, regroupées par marchand.
  * Catégories et montants en lecture seule, sans barre ; intitulés et regroupements modifiables.
  */
-export function DetailLigneLecture({ cle, couleur, barres = false, aplat = false, deplie = false, exclure }: { cle: string; couleur: string; barres?: boolean; aplat?: boolean; deplie?: boolean; exclure?: Set<string> }) {
+/** Sous-catégorie ajoutée à titre d'information (hors total) : ce qui est venu d'un compte d'épargne dans le mois. */
+export interface ApportLigne { titre: string; infobulle: string; lignes: { id: string; date: string; libelle: string; montant: number }[] }
+
+function LigneApport({ apport }: { apport: ApportLigne }) {
+  const [ouvert, setOuvert] = useState(false)
+  const toutes = useHorizon((st) => st.finTransactions)
+  const [edition, setEdition] = useState<FinTransaction | null>(null)
+  const total = apport.lignes.reduce((n, l) => n + l.montant, 0)
+  return (
+    <li data-testid="apport-epargne" title={apport.infobulle}>
+      <button type="button" onClick={() => setOuvert(!ouvert)} aria-expanded={ouvert} className="flex w-full items-center gap-3 py-1.5 text-left text-sm">
+        <span className="min-w-0 flex-1 truncate">{ouvert ? <ChevronDown size={12} className="mr-1 inline text-ink-3" /> : <ChevronRight size={12} className="mr-1 inline text-ink-3" />}{apport.titre}</span>
+        <span className="w-16 text-right font-medium tabular-nums text-[#eda145]">+ {euros(total)}</span>
+      </button>
+      {ouvert && (
+        <div className="mb-1.5 ml-2 space-y-0.5 rounded-lg bg-[#c9b48a]/[0.07] px-2 py-1 text-xs text-ink-2">
+          {apport.lignes.map((l) => (
+            <button key={l.id} type="button" data-testid="apport-op" title="Modifier l'intitulé"
+              onClick={() => { const t = toutes.find((x) => x.id === l.id); if (t) setEdition(t) }}
+              className="flex w-full items-center justify-between gap-3 text-left hover:text-ink">
+              <span className="min-w-0 truncate">{l.date.slice(8, 10)}/{l.date.slice(5, 7)} · {l.libelle}</span>
+              <span className="shrink-0 tabular-nums">+ {euros(l.montant)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {edition && <EditeurLibelle tx={edition} onClose={() => setEdition(null)} />}
+    </li>
+  )
+}
+
+export function DetailLigneLecture({ cle, couleur, barres = false, aplat = false, deplie = false, exclure, apport }: { cle: string; couleur: string; barres?: boolean; aplat?: boolean; deplie?: boolean; exclure?: Set<string>; apport?: ApportLigne }) {
   const { mois, filtre } = useFin()
-  const toutes = useHorizon((s) => s.finTransactions)
+  const toutes = useTransactionsBudget()
   const transactions = useMemo(() => exclure?.size ? toutes.filter((t) => !exclure.has(t.id)) : toutes, [toutes, exclure])
   const idx = useIndex()
   // Même chiffre que la tuile : le capital des prêts est retiré (il est compté dans l'Épargné).
@@ -344,11 +379,13 @@ export function DetailLigneLecture({ cle, couleur, barres = false, aplat = false
   const [ouvert, setOuvert] = useState<string | null>(null)
   // Déplié (Courses) : tout est ouvert d'emblée ; toucher une ligne la replie (ou la rouvre).
   const [replies, setReplies] = useState<Set<string>>(() => new Set())
-  if (!noeuds.length) return <p className="py-2 text-xs text-ink-3">Aucune dépense ce mois-ci</p>
+  if (!noeuds.length) return apport
+    ? <ul data-testid="detail-lecture" className="divide-y divide-line/40"><LigneApport apport={apport} /></ul>
+    : <p className="py-2 text-xs text-ink-3">Aucune dépense ce mois-ci</p>
   // Une seule catégorie (Vacances…) : pas d'étage inutile, les opérations directement ;
   // si elle a plusieurs sous-catégories, ce sont elles qui deviennent le premier niveau.
   if (noeuds.length === 1 && noeuds[0]!.enfants.length <= 1) {
-    return <div data-testid="detail-lecture"><MarchandsLecture operations={opsNoeud(groupes, noeuds[0]!.nom)} nomCategorie={noeuds[0]!.nom} /></div>
+    return <div data-testid="detail-lecture"><MarchandsLecture operations={opsNoeud(groupes, noeuds[0]!.nom)} nomCategorie={noeuds[0]!.nom} />{apport && <ul><LigneApport apport={apport} /></ul>}</div>
   }
   const total = noeuds.reduce((s, n) => s + n.total, 0)
   const part = (v: number, base: number) => barres && base > 0 && v > 0 ? (
@@ -411,6 +448,7 @@ export function DetailLigneLecture({ cle, couleur, barres = false, aplat = false
           ))}
         </li>
       ))}
+      {apport && <LigneApport apport={apport} />}
     </ul>
   )
 }
@@ -475,7 +513,7 @@ function OperationsGroupees({ operations, nomCategorie, toutDeplie }: {
 /** Panneau d'édition d'une opération seule (Dernières opérations du Résumé) : le même que dans le
  *  détail, avec ses voisins de catégorie du mois pour « Regrouper avec… ». */
 export function EditionOperation({ tx, onClose }: { tx: FinTransaction; onClose: () => void }) {
-  const transactions = useHorizon((s) => s.finTransactions)
+  const transactions = useTransactionsBudget()
   const regles = useHorizon((s) => s.finGroups)
   const reco = useReconnaissance()
   const groupes = useMemo(() => {
