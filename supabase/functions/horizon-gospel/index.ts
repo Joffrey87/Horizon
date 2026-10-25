@@ -4,7 +4,7 @@
 //  - 'jour'     : 5 questions (3 sur le SENS + 2 textes à trous), profondeur
 //                 croissante selon `level`, sans répéter les questions déjà posées ;
 //  - 'revision' : 4 questions (2 sens + 2 trous) à profondeur STABLE et profonde,
-//                 pour revoir en fin de semaine un évangile déjà travaillé.
+//                 pour revoir en fin de semaine un évangile déjà travaillé (profondeur du niveau 3).
 // Le passage vient de getbible.net côté app (gratuit) — voir src/lib/bible.ts.
 // Chaque appel au modèle est consigné dans `ai_usage` (suivi de la consommation).
 // Secrets requis : ANTHROPIC_API_KEY (SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY : fournis par Supabase)
@@ -73,15 +73,17 @@ const COMPOSITION_REVISION = `COMPOSITION — EXACTEMENT 4 questions, dans l'ord
 - q1, q2 : le SENS, en 'qcm'. C'est le cœur du quiz.
 - q3, q4 : la MÉMORISATION du verset clé, en TEXTE À TROUS (type 'texte').`
 
-const PROFONDEUR_JOUR = `PROFONDEUR SELON LE NIVEAU — c'est la compréhension qui se creuse, jamais la difficulté gratuite :
-* niveau 1 : le message central, la leçon évidente. Trous : un mot porteur à la fois.
-* niveau 2 : l'application concrète — à quoi cela engage, comment le vivre. Trous : un à deux mots.
-* niveau 3 : nuances et implications moins évidentes. Trous : de courtes expressions.
-* niveau 4 : portée spirituelle profonde, exigence d'application personnelle, sens second. Trous : jusqu'à 3 mots, expressions entières.`
+// La montée est rapide : le niveau 1 part déjà du message ET de son application ; le niveau 4 va au-delà du seul
+// passage, dans la lecture de l'Église.
+const PROFONDEUR_JOUR = `PROFONDEUR SELON LE NIVEAU — la compréhension se creuse vite, jamais la difficulté gratuite :
+* niveau 1 : le message central ET ce à quoi il engage concrètement — comment le vivre. Trous : un à deux mots porteurs.
+* niveau 2 : nuances, implications moins évidentes et sens second : ce que le passage révèle du Christ, de Dieu, de l'homme. Trous : de courtes expressions.
+* niveau 3 : portée spirituelle profonde — conversion du cœur, exigence personnelle, ce que le passage dénonce ou purifie en nous. Trous : jusqu'à 3 mots, expressions entières.
+* niveau 4 : le sommet — lecture de l'Église. Typologie et accomplissement (figures de l'Ancien Testament, prophéties), les quatre sens de l'Écriture (littéral, allégorique, moral, anagogique), enseignement des Pères et du Catéchisme, vérité théologique (Trinité, Incarnation, grâce, salut, sacrements), discernement des intentions et des mouvements intérieurs. Trous : expressions entières, jusqu'à 3 trous.`
 
-// Révision de fin de semaine : l'évangile a déjà été travaillé, on reste au
-// niveau le plus profond pour tous les jours révisés (pas de progression).
-const PROFONDEUR_REVISION = `PROFONDEUR — RÉVISION, niveau profond et STABLE (l'équivalent du niveau 4) :
+// Révision de fin de semaine : l'évangile a déjà été travaillé, on reste à la
+// profondeur du niveau 3 pour tous les jours révisés (pas de progression).
+const PROFONDEUR_REVISION = `PROFONDEUR — RÉVISION, niveau profond et STABLE (l'équivalent du niveau 3) :
 * Les questions de sens portent sur la portée spirituelle profonde et l'exigence d'application personnelle, pas sur la leçon de surface.
 * Les trous font jusqu'à 3 mots et peuvent porter sur des expressions entières.
 * Ce passage a déjà été étudié cette semaine : on vérifie ce qui en reste, sans le réexpliquer.`
@@ -96,6 +98,7 @@ LES QUESTIONS DE SENS :
 - Elles portent sur le message central, la leçon à en tirer, ce que le passage enseigne, sa portée spirituelle, son application concrète dans la vie.
 - N'interroge JAMAIS sur la syntaxe, la grammaire, l'ordre des versets ou des idées, ni sur du par-cœur mécanique : la mémorisation est le rôle des questions à trous.
 - Ce sont de vraies questions de compréhension, pas des devinettes ni des pièges : la bonne réponse est défendable à partir du passage, quelqu'un qui l'a lu et compris doit pouvoir la trouver.
+- Au niveau 4, tu peux t'appuyer sur la Tradition de l'Église catholique (Pères, Catéchisme, liens avec l'Ancien Testament) : la bonne réponse reste fidèle à la doctrine de l'Église, jamais une opinion d'auteur, et "hint" dit sur quoi elle s'appuie (ex. « cf. Is 53 », « saint Augustin », « CEC 1430 »). N'invente JAMAIS une citation ni une référence.
 - 4 propositions, "answer" = le texte exact de la bonne proposition.
 - Les propositions sont plausibles et du même registre, les mauvaises étant erronées au regard de CE passage — jamais d'absurdité ni de contre-sens grossier qui se repère à l'œil.
 - Longueurs et style comparables : aucune proposition ne doit se trahir par sa précision ou sa longueur. Fais VARIER la position de la bonne réponse.
@@ -110,7 +113,7 @@ LES 2 TEXTES À TROUS :
 ${profondeur}
 
 RÈGLES :
-- En français, uniquement à partir du passage fourni.
+- En français, à partir du passage fourni (et, au niveau 4 seulement, de la Tradition de l'Église).
 - Les questions doivent être NOUVELLES : ne reprends AUCUNE des questions déjà posées (liste fournie). Chaque niveau apporte d'autres questions.
 - Ce qui aide à répondre va DANS la question (contexte, début de la phrase, mots voisins), pas seulement dans "hint".
 - "hint" : indice court et optionnel.`

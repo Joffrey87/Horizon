@@ -22,9 +22,13 @@ const BACK_DAYS = 7        // on peut revenir sur les jours précédents (quiz c
 const WEEK_KEY = (forme: FormeMesse, sunday: string, i: number) =>
   `horizon.gospel.semaine.${forme === 'ordinaire' ? 'ordinaire.' : ''}${sunday}.${i}`
 
-/** Paragraphes d'un passage, chacun d'un seul tenant (les retours à la ligne deviennent des espaces). */
-const enParagraphes = (texte: string) =>
-  texte.split(/\n\s*\n/).map((p) => p.replace(/\s*\n\s*/g, ' ').replace(/\s{2,}/g, ' ').trim()).filter(Boolean)
+/** Le passage en un seul paragraphe (le lectionnaire coupe chaque membre de phrase) ; l'acclamation finale
+ *  (« – Parole du Seigneur », « – Acclamons la Parole de Dieu ») reste à part. */
+const enParagraphes = (texte: string) => {
+  const lignes = texte.split('\n').map((l) => l.trim()).filter(Boolean)
+  const fin = lignes.length > 1 && /^[–—-]/.test(lignes[lignes.length - 1]!) ? lignes.pop()! : null
+  return [lignes.join(' ').replace(/\s{2,}/g, ' '), ...(fin ? [fin] : [])].filter(Boolean)
+}
 
 export function EvangileView() {
   const today = todayIso()
@@ -380,7 +384,7 @@ function Quiz({ quiz, level, onReplay }: {
 // ---- Révision de la semaine ------------------------------------------------
 
 /** Les six évangiles du lundi au samedi qui précèdent le dernier dimanche.
- *  Un niveau par jour, 4 questions chacun, tous à la profondeur du niveau 4 :
+ *  Un niveau par jour, 4 questions chacun, tous à la profondeur du niveau 3 :
  *  il s'agit de revoir ce qui a été travaillé, pas de recommencer une montée.
  *  Numérotés 5 à 10 — ils prolongent les 4 niveaux de l'évangile du jour.
  *  Ouverte le dimanche, elle reste disponible jusqu'au samedi suivant. */
@@ -450,7 +454,7 @@ function SemaineQuizCard({ forme, onClose }: { forme: FormeMesse; onClose: () =>
           <p className="mt-0.5 text-xs text-ink-3">
             Les évangiles du lundi {fmtDate(parseISO(semaine.days[0] ?? semaine.sunday), 'd MMM', { locale: fr })} au
             samedi {fmtDate(parseISO(semaine.days[5] ?? semaine.sunday), 'd MMM', { locale: fr })} —
-            un niveau par jour, 4 questions, tous à la profondeur du niveau {MAX_LEVEL}.
+            un niveau par jour, 4 questions, tous à la profondeur du niveau {MAX_LEVEL - 1}.
           </p>
         </div>
         <button onClick={onClose} className="btn-ghost shrink-0 px-2 py-1 text-xs text-ink-3">Fermer</button>
