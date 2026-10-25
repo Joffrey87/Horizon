@@ -2,7 +2,9 @@ import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } fro
 import { addMonths, eachDayOfInterval, endOfWeek, format, isToday, parseISO, startOfWeek } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { APlanifier } from './APlanifier'
-import { Church, AlertTriangle, Layers, Circle, CheckCircle2 } from 'lucide-react'
+import { AlerteParking } from './AlerteParking'
+import { PX_DEMI_HEURE, PositionsCtx, briqueEnCours, cleBrique, usePositionsBriques } from './positionsBriques'
+import { Church, Layers, Circle, CheckCircle2 } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import { useMediaQuery } from '../../lib/useMediaQuery'
 import {
@@ -27,7 +29,7 @@ import { RemplaChip } from './DayCell'
 type Niveau = 0 | 1 | 2
 
 /** Bureau : une colonne « À planifier » à gauche, puis les 7 jours. */
-const COLONNES_BUREAU = 'grid-cols-[minmax(0,0.85fr)_repeat(7,minmax(0,1fr))]'
+const COLONNES_BUREAU = 'grid-cols-[minmax(0,1fr)_repeat(7,minmax(0,1.08fr))]'
 const FOND = '#1b1611'
 const VIOLET = '#a78bfa'
 
@@ -36,6 +38,7 @@ export function SemaineBriques({ anchor, onEdit, onCreate, onStep, onMove, onOpe
   onOpenDay: (d: Date) => void
 }) {
   const s = useHorizon()
+  const positionsBriques = usePositionsBriques()
   const telephone = useMediaQuery('(max-width: 767px)')
   const mode: ModeSemaine = telephone ? 'telephone' : 'bureau'
   const jours = useMemo(() => {
@@ -64,20 +67,24 @@ export function SemaineBriques({ anchor, onEdit, onCreate, onStep, onMove, onOpe
   }, [niveau, taille, anchor, s.tasks, s.steps, s.birthdays, telephone])
 
   return (
-    <Card className="flex min-h-0 min-w-0 flex-1 flex-col !border-line-2/60 !bg-transparent !p-2 max-md:!p-1">
-      <BandeauxSemaine jours={jours} tel={telephone} onEdit={onEdit} />
-      <div ref={defile} className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:none]">
-        <div className={`grid min-h-full ${telephone ? 'grid-cols-3 gap-1' : `${COLONNES_BUREAU} gap-2`}`}
-          style={telephone ? { gridTemplateRows: 'repeat(2, minmax(min-content, 1fr))' } : undefined}>
+    <PositionsCtx.Provider value={positionsBriques}>
+    <Card className="flex min-h-0 min-w-0 flex-1 flex-col !border-line-2/60 !bg-transparent !p-2 max-md:!p-1 md:-mx-3 lg:-mx-6">
+      {telephone && <BandeauxSemaine jours={jours} tel onEdit={onEdit} />}
+      <div ref={defile} className="min-h-0 flex-1 overflow-y-auto px-1 [scrollbar-width:none]">
+        <div className={`grid min-h-full ${telephone ? 'grid-cols-3 gap-1' : `${COLONNES_BUREAU} gap-x-2 gap-y-0`}`}
+          style={telephone ? { gridTemplateRows: 'repeat(2, minmax(min-content, 1fr))' } : { gridTemplateRows: 'auto auto 1fr' }}>
           {!telephone && <APlanifier semaine={iso(jours[0]!)} />}
-          {affiches.map((jour) => (
-            <ColonneJour key={jour.toISOString()} day={jour} mode={mode} niveau={niveau}
+          {/* Évènements sur plusieurs jours (ex. « Anglais EAO ») : sous les jours de travail, au-dessus des évènements de chaque jour. */}
+          {!telephone && <div className="pointer-events-none relative z-10" style={{ gridColumn: '2 / -1', gridRow: 2 }}><BandeauxSemaine jours={jours} tel={false} onEdit={onEdit} /></div>}
+          {affiches.map((jour, i) => (
+            <ColonneJour key={jour.toISOString()} day={jour} mode={mode} niveau={niveau} colonne={i + 2}
               onEdit={onEdit} onCreate={onCreate} onStep={onStep} onMove={onMove} onOpenDay={onOpenDay} />
           ))}
         </div>
       </div>
       {aDimanche && <LigneDimanche day={dimanche} onOpenDay={onOpenDay} />}
     </Card>
+    </PositionsCtx.Provider>
   )
 }
 
@@ -93,7 +100,7 @@ function BandeauxSemaine({ jours, tel, onEdit }: { jours: Date[]; tel: boolean; 
   if (multi.length === 0) return null
   const col = (d: string) => jours.findIndex((j) => iso(j) === d)
   return (
-    <div className={`mb-1 grid shrink-0 ${tel ? 'grid-cols-7 gap-x-0.5 gap-y-0.5' : `${COLONNES_BUREAU} gap-x-2 gap-y-1`}`} style={{ gridAutoFlow: 'row dense' }}>
+    <div className={`mb-1 grid shrink-0 grid-cols-7 ${tel ? 'gap-x-0.5 gap-y-0.5' : 'gap-x-2 gap-y-1'}`} style={{ gridAutoFlow: 'row dense' }}>
       {multi.map((t) => {
         const projet = t.project_id ? s.projects.find((p) => p.id === t.project_id) : undefined
         const domaine = s.domains.find((x) => x.id === (t.domain_id ?? projet?.domain_id))
@@ -103,12 +110,14 @@ function BandeauxSemaine({ jours, tel, onEdit }: { jours: Date[]; tel: boolean; 
         const r = tel ? 7 : 8
         const plage = `${format(parseISO(t.scheduled_date!), 'd MMM', { locale: fr })} → ${format(parseISO(t.end_date!), 'd MMM', { locale: fr })}`
         const fait = !t.is_recurring && t.status === 'fait'
+        // Sans lieu : barre deux fois moins épaisse (le titre reste lisible, en plus petit).
+        const fine = !t.location?.trim()
         return (
           <button key={t.id} draggable={!t.is_recurring} onDragStart={dragData('task', t.id)}
             onClick={(e) => { e.stopPropagation(); onEdit(t) }} title={`${t.title} · ${plage}`}
-            className={`flex min-w-0 items-center overflow-hidden whitespace-nowrap text-left font-semibold text-ink ${tel ? 'h-[20px] px-1.5 text-[10.5px]' : 'h-6 px-2 text-[12px]'} ${fait ? 'opacity-55 line-through' : ''}`}
+            className={`pointer-events-auto flex min-w-0 items-center overflow-hidden whitespace-nowrap text-left font-semibold text-ink ${fine ? (tel ? 'h-[10px] px-1.5 text-[8px] leading-none' : 'h-3 px-2 text-[9px] leading-none') : tel ? 'h-[20px] px-1.5 text-[10.5px]' : 'h-6 px-2 text-[12px]'} ${fait ? 'opacity-55 line-through' : ''}`}
             style={{
-              gridColumn: `${a + 1 + (tel ? 0 : 1)} / ${b + 2 + (tel ? 0 : 1)}`, background: `${c}c2`,
+              gridColumn: `${a + 1} / ${b + 2}`, background: `${c}c2`,
               borderTopLeftRadius: avant ? 0 : r, borderBottomLeftRadius: avant ? 0 : r,
               borderTopRightRadius: apres ? 0 : r, borderBottomRightRadius: apres ? 0 : r,
             }}>
@@ -123,18 +132,26 @@ function BandeauxSemaine({ jours, tel, onEdit }: { jours: Date[]; tel: boolean; 
   )
 }
 
-function ColonneJour({ day, mode, niveau, onEdit, onCreate, onStep, onMove, onOpenDay }: {
-  day: Date; mode: ModeSemaine; niveau: Niveau; onEdit: (t: Task) => void; onCreate: (d: string) => void; onStep: (st: Step) => void
+function ColonneJour({ day, mode, niveau, colonne, onEdit, onCreate, onStep, onMove, onOpenDay }: {
+  day: Date; mode: ModeSemaine; niveau: Niveau; colonne: number; onEdit: (t: Task) => void; onCreate: (d: string) => void; onStep: (st: Step) => void
   onMove: MoveFn; onOpenDay: (d: Date) => void
 }) {
   const s = useHorizon()
   const openMassPicker = useContext(MassPickCtx)
+  const { positions, placer } = useContext(PositionsCtx)
+  const briques = useRef<HTMLDivElement>(null)
   const [over, setOver] = useState(false)
   const tel = mode === 'telephone'
   const d = iso(day)
   const today = isToday(day)
   // Téléphone : la garde CAPS du jour devient une bande pleine (voir BandeService), pas une brique.
   const bande = bandeService(s.tasks, d)
+  const tacheBande = bande ? s.tasks.find((t) => t.id === bande.id) : undefined
+  const couleurBande = tacheBande
+    ? couleurProjet(tacheBande.project_id ? s.projects.find((p) => p.id === tacheBande.project_id) : undefined, s.domains)
+      ?? s.domains.find((x) => x.id === (tacheBande.domain_id ?? s.projects.find((p) => p.id === tacheBande.project_id)?.domain_id))?.color
+      ?? EVENT_DEFAULT_COLOR
+    : EVENT_DEFAULT_COLOR
   const taches = [...tasksForDay(s.tasks, day)]
     .filter((t) => t.id !== bande?.id && spanPart(t, d) === 'single')   // multi-jours : bandeau en haut de semaine
     .map((t) => ({ t, span: false }))
@@ -151,8 +168,29 @@ function ColonneJour({ day, mode, niveau, onEdit, onCreate, onStep, onMove, onOp
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault(); setOver(false)
-    const dr = readDrag(e); if (dr) onMove(dr.kind, dr.id, d, veutCopier(e))
+    const dr = readDrag(e)
+    if (!dr) return
+    // Une brique lâchée dans son propre jour (ordinateur) : on la repositionne, sans changer ni jour ni heure.
+    const b = briqueEnCours.courant
+    if (!tel && dr.kind === 'task' && b && b.id === dr.id && b.jour === d) {
+      const cle = cleBrique(dr.id, d)
+      // Lâchée sur d'autres briques : elle retrouve sa place normale (dans la pile).
+      const dessus = document.elementsFromPoint(e.clientX, e.clientY).some((el) => {
+        const autre = (el as HTMLElement).closest?.('[data-brique-id]')?.getAttribute('data-brique-id')
+        return !!autre && autre !== dr.id
+      })
+      const haut = briques.current?.getBoundingClientRect().top
+      if (dessus || haut === undefined) { placer(cle, null); return }
+      // Magnétisme : le bord haut se cale sur le cran de demi-heure le plus proche.
+      placer(cle, Math.max(0, Math.round((e.clientY - b.decalageY - haut) / PX_DEMI_HEURE)))
+      return
+    }
+    onMove(dr.kind, dr.id, d, veutCopier(e))
   }
+  // Briques déplacées à la main (ordinateur) : posées en absolu, la colonne garde assez de hauteur pour les contenir.
+  const placees = tel ? [] : taches.filter(({ t }) => positions[cleBrique(t.id, d)] !== undefined)
+  const hautPlacees = Math.max(0, ...placees.map(({ t }) => positions[cleBrique(t.id, d)]! * PX_DEMI_HEURE
+    + hauteurBrique(extractHourMinute(t.title) !== null ? t.duration_min : null, mode)))
   const pastille = today
     ? 'rounded-full bg-gradient-to-br from-[#f59e0b] to-[#ea580c] font-bold text-[#140e05]'
     : 'text-ink'
@@ -164,8 +202,12 @@ function ColonneJour({ day, mode, niveau, onEdit, onCreate, onStep, onMove, onOp
       onDragOver={(e) => { survol(e); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={onDrop}
       onClick={(e) => { if (e.target === e.currentTarget) onCreate(d) }}
       aria-label={format(day, 'EEEE d MMMM', { locale: fr })}
-      className={`flex min-w-0 cursor-pointer flex-col rounded-xl ${tel ? 'border border-line-2/55 p-1' : 'px-0.5 pb-2'} ${
+      // Ordinateur : la colonne couvre 3 lignes de la grille de la semaine (jour + service | évènements sur plusieurs jours | évènements du jour),
+      // pour que les barres « Anglais EAO » passent en dessous des jours de travail.
+      style={tel ? undefined : { gridColumn: colonne, gridRow: '1 / span 3', gridTemplateRows: 'subgrid' }}
+      className={`min-w-0 cursor-pointer rounded-xl ${tel ? 'flex flex-col border border-line-2/55 p-1' : 'grid grid-cols-[minmax(0,1fr)] px-0.5 pb-2'} ${
         over ? 'bg-sun/10' : today ? 'bg-sun/[0.06]' : ''}`}>
+      <div style={tel ? undefined : { gridRow: 1 }}>
       <div className="relative">
         <button onClick={() => onOpenDay(day)} title="Ouvrir la journée"
           className={`${tel ? 'mb-1 flex items-baseline gap-1 text-left' : 'mb-1.5 block w-full py-1 text-center'} ${
@@ -180,16 +222,18 @@ function ColonneJour({ day, mode, niveau, onEdit, onCreate, onStep, onMove, onOp
           title={fete ? `${fete} — trouver une messe${croixMesse ? ` : ${croixMesse}` : ''}` : `Trouver une messe${croixMesse ? ` : ${croixMesse}` : ''}`}
           aria-label="Trouver une messe"
           className={`absolute right-0 top-1/2 -translate-y-1/2 px-1 text-[12px] font-semibold leading-none transition-opacity hover:opacity-70 ${
-            croixMesse ? 'text-[#4cc79a]' : fete ? 'text-sun-soft' : 'text-ink-3/70'}`}>✝</button>
+            croixMesse ? 'rounded border border-sun/70 text-sun' : fete ? 'text-sun-soft' : 'text-ink-3/70'}`}>✝</button>
       </div>
 
       {/* Jour de travail : bande compacte (hauteur fixe, pas proportionnelle à la durée) ; sur ordinateur la place est réservée
           même les jours sans service, pour que les autres évènements restent alignés d'un jour à l'autre. */}
       {tel
-        ? bande && <BandeService b={bande} className="-mx-1 mb-1 h-6" />
-        : bande ? <BandeService b={bande} className="mb-1.5 h-[22px] rounded-lg" /> : <div aria-hidden className="mb-1.5 h-[22px]" />}
+        ? bande && <BandeService b={bande} onEdit={tacheBande ? () => onEdit(tacheBande) : undefined} className="-mx-1 mb-1 h-6" />
+        : bande ? <BandeService b={bande} couleur={couleurBande} onEdit={tacheBande ? () => onEdit(tacheBande) : undefined} className="mb-1.5 h-[22px] rounded-lg" /> : <div aria-hidden className="mb-1.5 h-[22px]" />}
+      </div>
 
-      <div className="flex flex-col gap-1" onClick={(e) => { if (e.target === e.currentTarget) onCreate(d) }}>
+      <div className="flex flex-col gap-1" style={tel ? undefined : { gridRow: 3 }}
+        onClick={(e) => { if (e.target === e.currentTarget) onCreate(d) }}>
         {rempla && <RemplaChip p={rempla} />}
         {fete && (
           <button onClick={(e) => { e.stopPropagation(); openMassPicker(d, fete) }}
@@ -205,12 +249,7 @@ function ColonneJour({ day, mode, niveau, onEdit, onCreate, onStep, onMove, onOp
             <Church size={10} className="shrink-0" /><span className={coupe}>{messeChoisie ?? `Messe · ${messe}`}</span>
           </button>
         )}
-        {marche && (
-          <div title="Dimanche travaillé (début ≤ 15h) — marché dominical & stationnement compliqués"
-            className="flex items-center justify-center gap-1 rounded-lg bg-[#ef4444]/20 px-1 py-1 text-[9px] font-bold uppercase tracking-wide text-[#ff6b6b] ring-1 ring-[#ef4444]/40">
-            <AlertTriangle size={10} /> Marché / Parking
-          </div>
-        )}
+        {marche && <AlerteParking jour={d} />}
         {anniv.map((b) => (
           <div key={b.id} className={`${marqueur} cursor-default border-[#ec7f97]/40 bg-[#ec7f97]/15 text-[#ec7f97]`}>
             <span className="shrink-0">🎂</span><span className={coupe}>{b.name}</span>
@@ -222,17 +261,23 @@ function ColonneJour({ day, mode, niveau, onEdit, onCreate, onStep, onMove, onOp
             <Layers size={10} className="shrink-0" /><span className={coupe}>{st.title}</span>
           </button>
         ))}
-        {taches.map(({ t }) => <Brique key={t.id} t={t} jour={d} mode={mode} niveau={niveau} onEdit={onEdit} />)}
+        {/* Les briques ont leur propre zone sous les pastilles (fêtes, messes, anniversaires…) : une brique déplacée ne peut jamais les recouvrir. */}
+        <div ref={briques} className="relative flex flex-col gap-1" style={!tel && placees.length ? { minHeight: hautPlacees } : undefined}>
+        {taches.map(({ t }) => <Brique key={t.id} t={t} jour={d} mode={mode} niveau={niveau} onEdit={onEdit} pos={tel ? undefined : positions[cleBrique(t.id, d)]} />)}
+        </div>
       </div>
     </section>
   )
 }
 
 /** Bande de service : « J 10h30–18h30 », texte gras sur une ligne, couleur du code. */
-function BandeService({ b, className = '' }: { b: NonNullable<ReturnType<typeof bandeService>>; className?: string }) {
+function BandeService({ b, className = '', couleur, onEdit }: { b: NonNullable<ReturnType<typeof bandeService>>; className?: string; couleur?: string; onEdit?: () => void }) {
   return (
-    <div title={b.libelle} className={`flex shrink-0 items-center justify-center whitespace-nowrap text-[10px] font-extrabold ${className}`}
-      style={{ background: b.fond, color: b.texte }}>
+    <div title={onEdit ? `${b.libelle} — cliquer pour modifier` : b.libelle} role={onEdit ? 'button' : undefined}
+      onClick={onEdit ? (e) => { e.stopPropagation(); onEdit() } : undefined}
+      className={`flex shrink-0 items-center justify-center whitespace-nowrap text-[10px] font-extrabold ${onEdit ? 'cursor-pointer hover:brightness-110' : ''} ${className}`}
+      // Ordinateur : une seule couleur pour tous les services (celle de la brique d'avant) ; téléphone : couleur du service.
+      style={couleur ? { background: `color-mix(in srgb, ${couleur} 55%, ${FOND})`, color: 'var(--color-ink)' } : { background: b.fond, color: b.texte }}>
       {b.libelle}
     </div>
   )
@@ -301,7 +346,7 @@ function PlageTel({ t }: { t: Pick<Task, 'title' | 'duration_min'> }) {
   return <><HeureTel min={d} />{t.duration_min ? <> – <HeureTel min={d + t.duration_min} /></> : null}</>
 }
 
-function Brique({ t, jour, mode, niveau, onEdit }: { t: Task; jour: string; mode: ModeSemaine; niveau: Niveau; onEdit: (t: Task) => void }) {
+function Brique({ t, jour, mode, niveau, onEdit, pos }: { t: Task; jour: string; mode: ModeSemaine; niveau: Niveau; onEdit: (t: Task) => void; pos?: number }) {
   const s = useHorizon()
   const tel = mode === 'telephone'
   const projet = t.project_id ? s.projects.find((p) => p.id === t.project_id) : undefined
@@ -316,12 +361,14 @@ function Brique({ t, jour, mode, niveau, onEdit }: { t: Task; jour: string; mode
     : libelleHeures(t) ?? 'Journée'
   const duree = part === 'single' && aHeure ? libelleDuree(t.duration_min) : ''
   const hauteurNormale = hauteurBrique(part === 'single' && aHeure ? t.duration_min : null, mode)
-  const hauteur = niveau === 2 ? 22 : niveau === 1 ? Math.max(26, Math.round(hauteurNormale * 0.6)) : hauteurNormale
-  const note = tel ? null : notePropre(t.notes)
+  // Ordinateur : un évènement sans heure (« Journée », ex. Congés M2) s'affiche compact, sur une ligne, comme les bandes de service.
+  const journee = !tel && part === 'single' && !aHeure
+  const hauteur = journee ? 24 : niveau === 2 ? 22 : niveau === 1 ? Math.max(26, Math.round(hauteurNormale * 0.6)) : hauteurNormale
+  const note = tel || journee ? null : notePropre(t.notes)
   // Téléphone, brique courte : heure de début et titre sur la même ligne (la plage reste dans l'infobulle) ;
   // brique longue (≥ 4 h) : plage et durée en plus, la hauteur disant déjà la durée.
-  const compact = tel && (niveau > 0 || hauteur < 56)
-  const uneLigne = tel && niveau === 2
+  const compact = journee || (tel && (niveau > 0 || hauteur < 56))
+  const uneLigne = journee || (tel && niveau === 2)
   const debut = compact
     ? (part === 'single' ? (aHeure ? libelleHeures({ title: t.title, duration_min: null }) : null) : part === 'end' ? 'fin' : `→ ${fin}`)
     : null
@@ -329,18 +376,25 @@ function Brique({ t, jour, mode, niveau, onEdit }: { t: Task; jour: string; mode
   const fait = !t.is_recurring && t.status === 'fait'
 
   return (
-    <button draggable={!t.is_recurring} onDragStart={dragData('task', t.id)}
+    <button draggable={!t.is_recurring} data-brique-id={t.id}
+      onDragStart={(e) => {
+        dragData('task', t.id)(e)
+        briqueEnCours.courant = { id: t.id, jour, decalageY: e.clientY - e.currentTarget.getBoundingClientRect().top }
+      }}
+      onDragEnd={() => { briqueEnCours.courant = null }}
       onClick={(e) => { e.stopPropagation(); onEdit(t) }} title={`${t.title}${libelleHeures(t) ? ` · ${libelleHeures(t)}` : ''}${duree ? ` (${duree})` : ''}`}
-      className={`flex w-full flex-col items-stretch justify-start overflow-hidden text-left ${tel ? `rounded-[10px] px-1.5 ${uneLigne ? 'py-px' : compact ? 'py-[3px]' : 'py-[5px]'}` : 'rounded-xl px-2 py-1.5'} ${fait ? 'opacity-55' : ''}`}
+      className={`flex w-full flex-col items-stretch justify-start overflow-hidden text-left ${tel ? `rounded-[10px] px-1.5 ${uneLigne ? 'py-px' : compact ? 'py-[3px]' : 'py-[5px]'}` : 'rounded-lg px-1.5 py-1'} ${fait ? 'opacity-55' : ''}`}
       // Bureau : hauteur fixe selon la durée. Téléphone : hauteur minimale, pour ne jamais couper un titre.
       style={{
-        ...(tel ? { minHeight: hauteur } : { height: hauteur }),
+        // La hauteur de la durée est un minimum : la brique s'agrandit pour que le titre et la note se lisent en entier.
+        minHeight: hauteur,
+        ...(pos !== undefined ? { position: 'absolute' as const, left: 0, right: 0, top: pos * PX_DEMI_HEURE, zIndex: 1 } : {}),
         background: `linear-gradient(160deg, color-mix(in srgb, ${c} 38%, ${FOND}), color-mix(in srgb, ${c} 14%, ${FOND}))`,
         border: checkMass ? `1.5px dashed ${VIOLET}` : t.is_task === false ? `1px solid color-mix(in srgb, ${c} 55%, transparent)` : `1.5px dashed color-mix(in srgb, ${c} 80%, transparent)`,
       }}>
-      {!compact && <span className={`block shrink-0 font-bold text-ink opacity-90 ${tel ? 'text-[8.5px]' : 'text-[11px]'}`}>{tel && part === 'single' && aHeure ? <PlageTel t={t} /> : entete}</span>}
-      <span className={`${compact ? '' : 'mt-0.5'} block shrink-0 font-bold text-ink ${uneLigne ? 'overflow-hidden whitespace-nowrap text-clip' : 'break-words'} ${tel ? 'text-[11px] leading-[1.2]' : 'line-clamp-2 text-[13px] leading-[1.15]'} ${fait ? 'line-through' : ''}`}>
-        {compact && <span className="mr-1 text-[8.5px] font-bold opacity-80">{part === 'single' && aHeure ? <PlageTel t={{ title: t.title, duration_min: null }} /> : (debut ?? entete)}</span>}
+      {!compact && <span className={`block shrink-0 font-bold text-ink opacity-90 ${tel ? 'text-[8.5px]' : 'text-[10px] leading-tight'}`}>{tel && part === 'single' && aHeure ? <PlageTel t={t} /> : entete}</span>}
+      <span className={`${compact ? '' : 'mt-0.5'} block shrink-0 font-bold text-ink ${uneLigne ? 'overflow-hidden whitespace-nowrap text-clip' : 'break-words'} ${tel ? 'text-[11px] leading-[1.2]' : 'text-[12px] leading-[1.15]'} ${fait ? 'line-through' : ''}`}>
+        {compact && !journee && <span className="mr-1 text-[8.5px] font-bold opacity-80">{part === 'single' && aHeure ? <PlageTel t={{ title: t.title, duration_min: null }} /> : (debut ?? entete)}</span>}
         {projet && <IconeProjet project={projet} size={tel ? 10 : 12} className="mr-1 align-[-1px]" />}
         {checkMass && <Church size={tel ? 9 : 11} className="mr-0.5 inline" style={{ color: VIOLET }} />}
         {/* Tâche : pastille pour la cocher (comme fait) ; un évènement n'en a pas. */}
@@ -352,7 +406,7 @@ function Brique({ t, jour, mode, niveau, onEdit }: { t: Task; jour: string; mode
         )}
         {sansHeure(t.title)}
       </span>
-      {note && <span className="mt-0.5 line-clamp-2 block text-[10.5px] leading-tight text-[#d9d0c0] opacity-80">{note}</span>}
+      {note && <span className="mt-0.5 block text-[10.5px] leading-tight text-[#d9d0c0] opacity-80">{note}</span>}
       {tel && !compact && duree && <span className="mt-auto pt-0.5 text-[8.5px] text-ink-2 opacity-70">{duree}</span>}
     </button>
   )

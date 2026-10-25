@@ -1,10 +1,10 @@
 import { useMemo, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
-import { addMonths, addWeeks, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameMonth, parseISO, startOfMonth, startOfWeek } from 'date-fns'
+import { addDays, addMonths, addWeeks, differenceInCalendarDays, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameMonth, parseISO, startOfMonth, startOfWeek } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { CheckCircle2, Circle } from 'lucide-react'
 import { useHorizon, vueCourante } from '../lib/store'
-import { copieDeTache, timeQuoteOfDay } from '../lib/logic'
+import { copieDeTache, estGardeTravail, iso, notesGarde, timeQuoteOfDay } from '../lib/logic'
 import { EmptyState, Modal, Seg } from '../components/ui'
 import { TaskForm } from '../components/TaskForm'
 import { AgendaPropositions } from '../components/AgendaPropositions'
@@ -98,7 +98,23 @@ export function TimeView() {
     if (kind === 'task') {
       const t = s.tasks.find((x) => x.id === id)
       // Ctrl + glisser : copie indépendante (rien ne bouge, pas de contrôle d'échéance).
-      if (copier && t) { void s.insert('tasks', copieDeTache(t, dayIso)); return }
+      // Une garde de travail (M1, M2, J, S1, S2, Nuit) posée dans une case jour devient la journée de travail de ce jour.
+      const garde = !!t && estGardeTravail(t.title)
+      if (copier && t) {
+        const copie = copieDeTache(t, dayIso)
+        void s.insert('tasks', garde ? { ...copie, notes: notesGarde(copie.notes) } : copie)
+        return
+      }
+      if (t && garde && !/source:caps/.test(t.notes ?? '')) {
+        void s.update('tasks', id, { scheduled_date: dayIso, notes: notesGarde(t.notes) })
+        return
+      }
+      // Évènement sur plusieurs jours : toute la plage se décale (sinon il se réduisait à un jour, voire disparaissait).
+      if (t?.scheduled_date && t.end_date) {
+        const decalage = differenceInCalendarDays(parseISO(dayIso), parseISO(t.scheduled_date))
+        void s.update('tasks', id, { scheduled_date: dayIso, end_date: iso(addDays(parseISO(t.end_date), decalage)) })
+        return
+      }
       void s.update('tasks', id, { scheduled_date: dayIso })
     } else if (kind === 'step') {
       const st = s.steps.find((x) => x.id === id)

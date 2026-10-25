@@ -132,7 +132,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </div>
 
       {/* ---- Barre latérale (style options 1/3) ---- */}
-      <aside className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-line bg-panel
+      <aside className={`fixed inset-y-0 left-0 z-40 flex w-52 flex-col border-r border-line bg-panel
         transition-transform lg:sticky lg:top-0 lg:h-dvh pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] lg:shrink-0 lg:self-start lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center gap-1 px-5 py-5">
           <Link to={accueil} onClick={() => setMenuOpen(false)}
@@ -146,19 +146,6 @@ export function Shell({ children }: { children: ReactNode }) {
               <p className="text-sm font-bold tracking-[0.22em]">HORIZON</p>
             </div>
           </Link>
-          {/* Agenda : raccourci vers la liste de courses, à côté du logo. */}
-          {caddie && (
-            <div className="ml-auto flex items-center gap-1">
-              <Link to={ROUTE_COURSES} onClick={() => setMenuOpen(false)} className="btn-ghost p-2"
-                aria-label="Liste de courses" title="Liste de courses">
-                <ShoppingCart size={18} strokeWidth={1.9} />
-              </Link>
-              <Link to="/finances" onClick={() => setMenuOpen(false)} className="btn-ghost p-2"
-                aria-label="Résumé des finances" title="Résumé des finances">
-                <Euro size={18} strokeWidth={1.9} />
-              </Link>
-            </div>
-          )}
         </div>
 
         <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3">
@@ -218,6 +205,19 @@ export function Shell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="space-y-0.5 border-t border-line px-3 py-3">
+          {/* Agenda : raccourcis courses et finances, en bas du menu. */}
+          {caddie && (
+            <div className="mb-1 flex items-center gap-1">
+              <Link to={ROUTE_COURSES} onClick={() => setMenuOpen(false)} className="btn-ghost p-2"
+                aria-label="Liste de courses" title="Liste de courses">
+                <ShoppingCart size={18} strokeWidth={1.9} />
+              </Link>
+              <Link to="/finances" onClick={() => setMenuOpen(false)} className="btn-ghost p-2"
+                aria-label="Résumé des finances" title="Résumé des finances">
+                <Euro size={18} strokeWidth={1.9} />
+              </Link>
+            </div>
+          )}
           {/* Assistant mis de côté (masqué) — voir AssistantPanel.tsx, réactivable plus tard. */}
           {!vue && (
             <NavLink to="/parametres" onClick={() => setMenuOpen(false)}

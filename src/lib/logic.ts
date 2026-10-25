@@ -478,6 +478,15 @@ export function parseShift(title: string): { start: number; end: number } | null
   return { start, end }
 }
 
+/** Le titre est-il celui d'une garde de travail (horaires + code M1, M2, J, S1, S2, N ou Nuit) ? Posée dans une case jour,
+ *  une telle garde devient la journée de travail de ce jour (marquée `source:caps`, comme les gardes du planning). */
+export function estGardeTravail(title: string): boolean {
+  return parseShift(title) !== null && /(^|[\s(])(M1|M2|J|S1|S2|N|Nuit)(?=$|[\s),-])/i.test(title)
+}
+
+/** Ajoute `source:caps` aux notes d'une tâche (sans doublon). */
+export const notesGarde = (notes: string | null): string => /source:caps/.test(notes ?? '') ? (notes ?? '') : `${notes ? `${notes} ` : ''}source:caps`
+
 /** La garde travaillée (CAPS, hors congé V/Vf) d'un jour donné, si elle existe.
  *  `code` = le code de journée CAPS (M1, J, S1, N…) extrait du titre. */
 export function workShiftOn(tasks: Task[], dayIso: string): { start: number; end: number; code: string } | null {

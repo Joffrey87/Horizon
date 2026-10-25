@@ -1,8 +1,10 @@
+import { AlerteParking } from './AlerteParking'
+import { HeureExposant } from './HeureExposant'
 import { useContext, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { addDays, addMonths, format, getISODay, isToday, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Plus, CheckCircle2, Circle, RotateCw, Layers, Star, Church, AlertTriangle, Check, X } from 'lucide-react'
+import { Plus, CheckCircle2, Circle, RotateCw, Layers, Star, Church, Check, X } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import { compareTasksByTitleTime, iso, tasksForDay, recurrenceLabel, spanPart, birthdaysForDay, isMarketParkingDay, feastOnDay, extractEmojis, firstFridayOrSaturday, chosenMassForDay, todayIso, sansHeure } from '../../lib/logic'
 import { couleurProjet } from '../../lib/projectIcons'
@@ -125,7 +127,7 @@ export function DayCell({ day, sansHoraire, onOpenDay, tint, ruban, rubanCouleur
                 ? `${feast} — trouver une messe${crossMass ? ` : ${crossMass}` : ''}`
                 : `Trouver une messe${crossMass ? ` : ${crossMass}` : ''}`}
               className={`text-xs font-semibold leading-none transition-opacity hover:opacity-70 ${
-                crossMass ? 'text-[#4cc79a]' : feast ? 'text-sun-soft' : emphasize ? 'text-white/60' : 'text-ink-3/70'
+                crossMass ? 'rounded border border-sun/70 px-0.5 text-sun' : feast ? 'text-sun-soft' : emphasize ? 'text-white/60' : 'text-ink-3/70'
               }`}>✝</button>
           )}
           {massLabel && (
@@ -246,13 +248,7 @@ export function DayCell({ day, sansHoraire, onOpenDay, tint, ruban, rubanCouleur
         </div>
       )}
       {rempla && <RemplaChip p={rempla} />}
-      {isMarketParkingDay(s.tasks, day) && (
-        <div onClick={(e) => e.stopPropagation()}
-          title="Dimanche travaillé (début < 15h) — marché dominical & stationnement compliqués"
-          className="mb-1 flex items-center justify-center gap-1 rounded bg-[#ef4444]/20 px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#ff6b6b] ring-1 ring-[#ef4444]/40">
-          <AlertTriangle size={10} /> Marché / Parking
-        </div>
-      )}
+      {isMarketParkingDay(s.tasks, day) && <div className="mb-1" onClick={(e) => e.stopPropagation()}><AlerteParking jour={dayIso} /></div>}
       <div className={`min-h-0 flex-1 ${remplir ? 'space-y-0.5' : 'space-y-1'}`} onClick={handleVoid}>
         {steps.map((st) => (
           <button key={st.id} draggable onDragStart={dragData('step', st.id)}
@@ -300,7 +296,7 @@ export function DayCell({ day, sansHoraire, onOpenDay, tint, ruban, rubanCouleur
                 <span className={`${sansHoraire ? 'text-[9px]' : 'text-[11px]'} ${remplir ? 'leading-[15px]' : 'leading-tight'} ${fit ? 'whitespace-nowrap' : sansHoraire ? 'block overflow-hidden whitespace-nowrap text-clip' : 'block truncate'} ${struck ? 'text-ink-3 line-through' : 'text-ink'}`}>
                   {checkMass && <Church size={9} className="mr-0.5 inline text-[#a78bfa]" />}
                   {project && <IconeProjet project={project} size={11} className="mr-1 align-[-1px]" />}
-                  {t.notable && <Star size={9} className="mr-0.5 inline text-sun" />}{sansHoraire ? sansHeure(t.title) : t.title}
+                  {t.notable && <Star size={9} className="mr-0.5 inline text-sun" />}{sansHoraire && <HeureExposant titre={t.title} />}{sansHoraire ? sansHeure(t.title) : t.title}
                 </span>
               </button>
             </div>

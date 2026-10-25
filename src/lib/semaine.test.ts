@@ -5,12 +5,12 @@ import type { Task } from './types'
 const t = (title: string, extra: Partial<Task> = {}) => ({ id: title, title, duration_min: null, scheduled_date: null, ...extra }) as Task
 
 describe('hauteurBrique', () => {
-  it('bureau (inchangé) : 18 px/h + 40, entre 58 et 150', () => {
-    expect(hauteurBrique(45, 'bureau')).toBe(58)
-    expect(hauteurBrique(60, 'bureau')).toBe(58)
-    expect(hauteurBrique(150, 'bureau')).toBe(85)
-    expect(hauteurBrique(480, 'bureau')).toBe(150)
-    expect(hauteurBrique(1440, 'bureau')).toBe(150)
+  it('bureau (compact) : 10 px/h + 28, entre 40 et 100', () => {
+    expect(hauteurBrique(45, 'bureau')).toBe(40)
+    expect(hauteurBrique(60, 'bureau')).toBe(40)
+    expect(hauteurBrique(150, 'bureau')).toBe(53)
+    expect(hauteurBrique(480, 'bureau')).toBe(100)
+    expect(hauteurBrique(1440, 'bureau')).toBe(100)
   })
   it('téléphone : de 36 (≤ 1 h) à 88 (8 h) px, plafonné à 88', () => {
     expect(hauteurBrique(45, 'telephone')).toBe(36)
@@ -32,7 +32,7 @@ describe('hauteurBrique', () => {
     }
   })
   it('sans durée : la hauteur minimale', () => {
-    expect(hauteurBrique(null, 'bureau')).toBe(58)
+    expect(hauteurBrique(null, 'bureau')).toBe(40)
     expect(hauteurBrique(0, 'telephone')).toBe(36)
   })
 })

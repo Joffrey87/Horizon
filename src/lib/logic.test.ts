@@ -8,7 +8,7 @@ import {
   buildControlHoursLines, catholicFeasts, checkStatus, chosenMassForDay, citySlug,
   controlHoursWorkDays, copieDeTache, extractEmojis, extractHourMinute, feastOnDay, firstFridayOrSaturday,
   fmtMinutes, hasMaintainedMasses, isLineValid, isMarketParkingDay, isObligationDay, iso,
-  lastControlHoursPeriodEnd, lineTotal, massFitsShift, massesInfoUrl, parseShift,
+  lastControlHoursPeriodEnd, lineTotal, massFitsShift, massesInfoUrl, parseShift, estGardeTravail, notesGarde,
   misselDayName, proposeControlHours, revisionWeek, quadrant, recurrenceDueOn, recurrenceLabel, spanPart, tasksForDay,
   tripLocationOn, workShiftOn, worksOn,
 } from './logic'
@@ -441,5 +441,20 @@ describe('copieDeTache', () => {
     expect(c).not.toHaveProperty('id')
     expect(c).not.toHaveProperty('user_id')
     expect(c).not.toHaveProperty('created_at')
+  })
+})
+
+describe('estGardeTravail', () => {
+  it('reconnaît horaires + code de journée, rien d autre', () => {
+    expect(estGardeTravail('6h-14h M1')).toBe(true)
+    expect(estGardeTravail('10h30-18h30 J')).toBe(true)
+    expect(estGardeTravail('19h45-6h Nuit')).toBe(true)
+    expect(estGardeTravail('Dîner à 20h J')).toBe(false)
+    expect(estGardeTravail('Réunion 9h-10h')).toBe(false)
+  })
+  it('notesGarde ajoute source:caps une seule fois', () => {
+    expect(notesGarde(null)).toBe('source:caps')
+    expect(notesGarde('x')).toBe('x source:caps')
+    expect(notesGarde('x source:caps')).toBe('x source:caps')
   })
 })

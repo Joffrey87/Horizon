@@ -4,6 +4,7 @@ import {
 } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Church, Circle, CheckCircle2 } from 'lucide-react'
+import { HeureExposant, heureDebut } from './HeureExposant'
 import { useHorizon } from '../../lib/store'
 import {
   birthdaysForDay, compareTasksByTitleTime, feastOnDay, firstFridayOrSaturday, iso, sansHeure, spanPart, tasksForDay, todayIso,
@@ -20,7 +21,7 @@ import { EVENT_DEFAULT_COLOR, remplaProposeOn, stepsForDay } from './partage'
 const LIGNE = 14 // hauteur d'une ligne d'évènement (px)
 const ENTETE = 17 // numéro du jour
 
-type Ligne = { cle: string; texte: string; couleur: string; bande?: boolean; fine?: boolean; fait?: boolean; tache?: Task; icone?: 'messe' | 'fete' }
+type Ligne = { cle: string; texte: string; couleur: string; bande?: boolean; fine?: boolean; heure?: string; fait?: boolean; tache?: Task; icone?: 'messe' | 'fete' }
 
 export function MoisTelephone({ anchor, fenetre, onShift, onOpenDay }: {
   anchor: Date; fenetre?: Date | null; onShift: (dir: 1 | -1) => void; onOpenDay: (d: Date) => void
@@ -79,7 +80,7 @@ export function MoisTelephone({ anchor, fenetre, onShift, onOpenDay }: {
       out.push({ cle: st.id, texte: st.title, couleur: '#a78bfa' })
     }
     for (const t of simples) {
-      out.push({ cle: t.id, texte: sansHeure(t.title), couleur: couleurDe(t), fait: !t.is_recurring && t.status === 'fait', tache: t.is_task === false ? undefined : t })
+      out.push({ cle: t.id, texte: sansHeure(t.title), heure: heureDebut(t.title) ? t.title : undefined, couleur: couleurDe(t), fait: !t.is_recurring && t.status === 'fait', tache: t.is_task === false ? undefined : t })
     }
     return out
   }
@@ -128,6 +129,7 @@ export function MoisTelephone({ anchor, fenetre, onShift, onOpenDay }: {
                           {l.fait ? <CheckCircle2 size={9} className="text-[#4cc79a]" /> : <Circle size={9} />}
                         </span>
                       )}
+                      {l.heure && <HeureExposant titre={l.heure} />}
                       <span className="overflow-hidden text-clip">{l.texte}</span>
                     </span>
                   ))}

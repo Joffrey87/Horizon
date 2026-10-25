@@ -301,7 +301,7 @@ function AddItem({ list, section, count }: { list: ShoppingList; section: string
   // Barre d'ajout flottante : champ et bouton de validation toujours visibles en bas (au-dessus de la barre de raccourcis du téléphone).
   return (
     <form onSubmit={add}
-      className="fixed inset-x-3 bottom-6 z-30 flex gap-2 rounded-2xl border border-line-2 bg-panel/95 p-2 shadow-lg shadow-black/40 backdrop-blur max-md:bottom-[calc(76px+env(safe-area-inset-bottom))] lg:left-64 lg:right-24">
+      className="fixed inset-x-3 bottom-6 z-30 flex gap-2 rounded-2xl border border-line-2 bg-panel/95 p-2 shadow-lg shadow-black/40 backdrop-blur max-md:bottom-[calc(76px+env(safe-area-inset-bottom))] lg:left-56 lg:right-24">
       <input value={label} onChange={(e) => setLabel(e.target.value)}
         placeholder={section ? `Ajouter dans « ${libelleSection(section)} »…` : 'Ajouter un article…'}
         className="field flex-1" />

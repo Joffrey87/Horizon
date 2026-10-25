@@ -10,11 +10,11 @@ export type ModeSemaine = 'bureau' | 'telephone'
 export const ECHELLE_TELEPHONE = { min: 36, max: 88 } as const   // ≈ 7,4 px/h entre 1 h et 8 h
 
 /** Hauteur d'une brique (px), proportionnelle à la durée. Sans durée connue : la hauteur minimale.
- *  Bureau : 18 px/h + 40, bornée de 58 à 150 (inchangé). Téléphone : voir ECHELLE_TELEPHONE. */
+ *  Bureau (compact) : 10 px/h + 28, bornée de 40 à 100. Téléphone : voir ECHELLE_TELEPHONE. */
 export function hauteurBrique(dureeMin: number | null | undefined, mode: ModeSemaine): number {
   if (mode === 'bureau') {
-    if (!dureeMin || dureeMin <= 0) return 58
-    return Math.round(Math.max(58, Math.min(150, (dureeMin / 60) * 18 + 40)))
+    if (!dureeMin || dureeMin <= 0) return 40
+    return Math.round(Math.max(40, Math.min(100, (dureeMin / 60) * 10 + 28)))
   }
   const { min, max } = ECHELLE_TELEPHONE
   if (!dureeMin || dureeMin <= 0) return min
