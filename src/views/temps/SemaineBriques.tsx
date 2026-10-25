@@ -1,6 +1,7 @@
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { addMonths, eachDayOfInterval, endOfWeek, format, isToday, parseISO, startOfWeek } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import { APlanifier } from './APlanifier'
 import { Church, AlertTriangle, Layers, Circle, CheckCircle2 } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import { useMediaQuery } from '../../lib/useMediaQuery'
@@ -25,6 +26,8 @@ import { RemplaChip } from './DayCell'
 
 type Niveau = 0 | 1 | 2
 
+/** Bureau : une colonne « À planifier » à gauche, puis les 7 jours. */
+const COLONNES_BUREAU = 'grid-cols-[minmax(0,0.85fr)_repeat(7,minmax(0,1fr))]'
 const FOND = '#1b1611'
 const VIOLET = '#a78bfa'
 
@@ -64,8 +67,9 @@ export function SemaineBriques({ anchor, onEdit, onCreate, onStep, onMove, onOpe
     <Card className="flex min-h-0 min-w-0 flex-1 flex-col !border-line-2/60 !bg-transparent !p-2 max-md:!p-1">
       <BandeauxSemaine jours={jours} tel={telephone} onEdit={onEdit} />
       <div ref={defile} className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:none]">
-        <div className={`grid min-h-full ${telephone ? 'grid-cols-3 gap-1' : 'grid-cols-7 gap-2'}`}
+        <div className={`grid min-h-full ${telephone ? 'grid-cols-3 gap-1' : `${COLONNES_BUREAU} gap-2`}`}
           style={telephone ? { gridTemplateRows: 'repeat(2, minmax(min-content, 1fr))' } : undefined}>
+          {!telephone && <APlanifier semaine={iso(jours[0]!)} />}
           {affiches.map((jour) => (
             <ColonneJour key={jour.toISOString()} day={jour} mode={mode} niveau={niveau}
               onEdit={onEdit} onCreate={onCreate} onStep={onStep} onMove={onMove} onOpenDay={onOpenDay} />
@@ -89,7 +93,7 @@ function BandeauxSemaine({ jours, tel, onEdit }: { jours: Date[]; tel: boolean; 
   if (multi.length === 0) return null
   const col = (d: string) => jours.findIndex((j) => iso(j) === d)
   return (
-    <div className={`mb-1 grid shrink-0 grid-cols-7 ${tel ? 'gap-x-0.5 gap-y-0.5' : 'gap-x-2 gap-y-1'}`} style={{ gridAutoFlow: 'row dense' }}>
+    <div className={`mb-1 grid shrink-0 ${tel ? 'grid-cols-7 gap-x-0.5 gap-y-0.5' : `${COLONNES_BUREAU} gap-x-2 gap-y-1`}`} style={{ gridAutoFlow: 'row dense' }}>
       {multi.map((t) => {
         const projet = t.project_id ? s.projects.find((p) => p.id === t.project_id) : undefined
         const domaine = s.domains.find((x) => x.id === (t.domain_id ?? projet?.domain_id))
@@ -104,7 +108,7 @@ function BandeauxSemaine({ jours, tel, onEdit }: { jours: Date[]; tel: boolean; 
             onClick={(e) => { e.stopPropagation(); onEdit(t) }} title={`${t.title} · ${plage}`}
             className={`flex min-w-0 items-center overflow-hidden whitespace-nowrap text-left font-semibold text-ink ${tel ? 'h-[20px] px-1.5 text-[10.5px]' : 'h-6 px-2 text-[12px]'} ${fait ? 'opacity-55 line-through' : ''}`}
             style={{
-              gridColumn: `${a + 1} / ${b + 2}`, background: `${c}c2`,
+              gridColumn: `${a + 1 + (tel ? 0 : 1)} / ${b + 2 + (tel ? 0 : 1)}`, background: `${c}c2`,
               borderTopLeftRadius: avant ? 0 : r, borderBottomLeftRadius: avant ? 0 : r,
               borderTopRightRadius: apres ? 0 : r, borderBottomRightRadius: apres ? 0 : r,
             }}>
@@ -130,7 +134,7 @@ function ColonneJour({ day, mode, niveau, onEdit, onCreate, onStep, onMove, onOp
   const d = iso(day)
   const today = isToday(day)
   // Téléphone : la garde CAPS du jour devient une bande pleine (voir BandeService), pas une brique.
-  const bande = tel ? bandeService(s.tasks, d) : null
+  const bande = bandeService(s.tasks, d)
   const taches = [...tasksForDay(s.tasks, day)]
     .filter((t) => t.id !== bande?.id && spanPart(t, d) === 'single')   // multi-jours : bandeau en haut de semaine
     .map((t) => ({ t, span: false }))
@@ -141,6 +145,7 @@ function ColonneJour({ day, mode, niveau, onEdit, onCreate, onStep, onMove, onOp
   const rawMass = firstFridayOrSaturday(day)
   const messe = rawMass && d >= todayIso() && day <= addMonths(new Date(), 6) ? rawMass : null
   const messeChoisie = messe || fete ? chosenMassForDay(s.checks, d) : null
+  const croixMesse = chosenMassForDay(s.checks, d)
   const rempla = remplaProposeOn(s.celesteProposals, d)
   const marche = isMarketParkingDay(s.tasks, day)
 
@@ -161,16 +166,28 @@ function ColonneJour({ day, mode, niveau, onEdit, onCreate, onStep, onMove, onOp
       aria-label={format(day, 'EEEE d MMMM', { locale: fr })}
       className={`flex min-w-0 cursor-pointer flex-col rounded-xl ${tel ? 'border border-line-2/55 p-1' : 'px-0.5 pb-2'} ${
         over ? 'bg-sun/10' : today ? 'bg-sun/[0.06]' : ''}`}>
-      <button onClick={() => onOpenDay(day)} title="Ouvrir la journée"
-        className={`${tel ? 'mb-1 flex items-baseline gap-1 text-left' : 'mb-1.5 block w-full py-1 text-center'} ${
-          rempla ? 'rounded border border-dashed border-[#ef4444]/80' : ''}`}>
-        <small className={`block text-[10px] uppercase tracking-[0.08em] ${tel ? 'inline text-[8.5px]' : ''} ${today ? 'text-sun-soft' : 'text-ink-3'}`}>
-          {format(day, 'EEE', { locale: fr }).replace('.', '')}
-        </small>
-        <span className={`inline-block px-1.5 py-px text-[13px] font-semibold ${pastille}`}>{format(day, 'd')}</span>
-      </button>
+      <div className="relative">
+        <button onClick={() => onOpenDay(day)} title="Ouvrir la journée"
+          className={`${tel ? 'mb-1 flex items-baseline gap-1 text-left' : 'mb-1.5 block w-full py-1 text-center'} ${
+            rempla ? 'rounded border border-dashed border-[#ef4444]/80' : ''}`}>
+          <small className={`block text-[10px] uppercase tracking-[0.08em] ${tel ? 'inline text-[8.5px]' : ''} ${today ? 'text-sun-soft' : 'text-ink-3'}`}>
+            {format(day, 'EEE', { locale: fr }).replace('.', '')}
+          </small>
+          <span className={`inline-block px-1.5 py-px text-[13px] font-semibold ${pastille}`}>{format(day, 'd')}</span>
+        </button>
+        {/* Croix : trouver / planifier une messe ce jour-là (comme dans la vue Mois). */}
+        <button type="button" onClick={(e) => { e.stopPropagation(); openMassPicker(d, fete ?? '') }}
+          title={fete ? `${fete} — trouver une messe${croixMesse ? ` : ${croixMesse}` : ''}` : `Trouver une messe${croixMesse ? ` : ${croixMesse}` : ''}`}
+          aria-label="Trouver une messe"
+          className={`absolute right-0 top-1/2 -translate-y-1/2 px-1 text-[12px] font-semibold leading-none transition-opacity hover:opacity-70 ${
+            croixMesse ? 'text-[#4cc79a]' : fete ? 'text-sun-soft' : 'text-ink-3/70'}`}>✝</button>
+      </div>
 
-      {bande && <BandeService b={bande} className="-mx-1 mb-1 h-6" />}
+      {/* Jour de travail : bande compacte (hauteur fixe, pas proportionnelle à la durée) ; sur ordinateur la place est réservée
+          même les jours sans service, pour que les autres évènements restent alignés d'un jour à l'autre. */}
+      {tel
+        ? bande && <BandeService b={bande} className="-mx-1 mb-1 h-6" />
+        : bande ? <BandeService b={bande} className="mb-1.5 h-[22px] rounded-lg" /> : <div aria-hidden className="mb-1.5 h-[22px]" />}
 
       <div className="flex flex-col gap-1" onClick={(e) => { if (e.target === e.currentTarget) onCreate(d) }}>
         {rempla && <RemplaChip p={rempla} />}
