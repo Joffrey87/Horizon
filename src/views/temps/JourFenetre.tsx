@@ -19,6 +19,19 @@ const hhmm = (min: number) => {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}h${String(m % 60).padStart(2, '0')}`
 }
 
+/** Barre de couleur à gauche d'une tâche : en pointillé (pleine une fois faite) ; un appui la coche / décoche. */
+function BarreTache({ couleur, fait, actif, onBascule }: { couleur: string; fait: boolean; actif: boolean; onBascule: () => void }) {
+  const barre = (
+    <span className="block h-full w-[5px] rounded-full"
+      style={{ background: fait ? couleur : `repeating-linear-gradient(to bottom, ${couleur} 0 6px, transparent 6px 10px)` }} />
+  )
+  const classe = '-my-2 -ml-2.5 w-4 shrink-0 self-stretch pl-1'
+  return actif
+    ? <button type="button" onClick={(e) => { e.stopPropagation(); onBascule() }} className={`${classe} cursor-pointer`}
+        aria-label={fait ? 'Marquer à faire' : 'Marquer fait'} title={fait ? 'Marquer à faire' : 'Marquer fait'}>{barre}</button>
+    : <span className={classe} aria-hidden>{barre}</span>
+}
+
 /** Fenêtre « journée en grand » : bandeau « Toute la journée », puis les
  *  évènements à heure en briques de même hauteur, sans les trous de l'horaire.
  *  Plein écran sur téléphone, grande fenêtre centrée sur ordinateur.
@@ -132,6 +145,13 @@ export function JourFenetre({ day, onDay, onClose, onEdit, onCreate, onStep, lec
   }
   const glisseHandlers = { onPointerMove: bougeDrag, onPointerUp: finDrag, onPointerCancel: () => setDrag(null) }
 
+  // Tâche (pas un évènement, pas une récurrence) : sa barre de couleur la coche / décoche.
+  const cochable = (t: Task) => t.is_task !== false && !t.is_recurring
+  const basculer = (t: Task) => {
+    if (lecture) return
+    void s.update('tasks', t.id, t.status === 'fait' ? { status: 'a_faire', done_at: null } : { status: 'fait', done_at: new Date().toISOString() })
+  }
+
   const fleche = 'grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/[0.07] text-sun transition-colors hover:bg-white/[0.13]'
   const lab = 'mb-1 ml-1 text-[10px] uppercase tracking-[0.1em] text-ink-3'
 
@@ -166,11 +186,29 @@ export function JourFenetre({ day, onDay, onClose, onEdit, onCreate, onStep, lec
               ))}
               {journee.map((t) => {
                 const c = domaineDe(t)?.color ?? EVENT_DEFAULT_COLOR
+                const tache = cochable(t)
+                const fait = t.status === 'fait' && t.is_task !== false
+                const ouvert = deplie === t.id
+                const notes = notesVisibles(t.notes)
                 return (
-                  <button key={t.id} onClick={() => { if (!aGlisse.current && !lecture) onEdit(t) }} title={notesVisibles(t.notes) || undefined}
-                    onPointerDown={(e) => debutDrag(e, t, 0, false, true)} {...glisseHandlers}
-                    className={`min-w-[8rem] flex-1 touch-none rounded-lg px-2.5 py-1.5 text-left text-[13px] font-semibold ${drag?.id === t.id ? 'relative z-20 opacity-80 shadow-lg shadow-black/50' : ''}`}
-                    style={{ background: `${c}40`, borderLeft: `4px solid ${c}`, transform: drag?.id === t.id ? `translate(${drag.dx}px, ${drag.dy}px)` : undefined }}>{sansHeure(t.title)}</button>
+                  <div key={t.id}
+                    className={`flex min-w-[8rem] flex-1 items-stretch gap-2 rounded-lg px-2.5 py-1.5 ${drag?.id === t.id ? 'relative z-20 opacity-80 shadow-lg shadow-black/50' : ''}`}
+                    style={{ background: `${c}40`, ...(tache ? {} : { borderLeft: `4px solid ${c}` }), transform: drag?.id === t.id ? `translate(${drag.dx}px, ${drag.dy}px)` : undefined }}>
+                    {tache && <BarreTache couleur={c} fait={fait} actif={!lecture} onBascule={() => basculer(t)} />}
+                    <button onClick={() => { if (!aGlisse.current) setDeplie(ouvert ? null : t.id) }}
+                      onPointerDown={(e) => debutDrag(e, t, 0, false, true)} {...glisseHandlers}
+                      className="min-w-0 flex-1 touch-none text-left text-[13px] font-semibold">
+                      <span className={`block ${ouvert ? '' : 'truncate'} ${fait ? 'text-ink-3 line-through' : ''}`}>{sansHeure(t.title)}</span>
+                      {ouvert && (t.location || notes) && (
+                        <span className="mt-0.5 block whitespace-pre-wrap text-[11.5px] font-normal leading-tight text-ink-2">
+                          {t.location && <><MapPin size={11} className="inline align-[-1px]" /> {t.location}{notes ? ' · ' : ''}</>}{notes}
+                        </span>
+                      )}
+                    </button>
+                    {!lecture && (
+                      <button onClick={() => onEdit(t)} className="shrink-0 self-start p-0.5 text-ink-3 hover:text-sun" aria-label="Modifier"><Pencil size={13} /></button>
+                    )}
+                  </div>
                 )
               })}
             </div>
@@ -185,11 +223,14 @@ export function JourFenetre({ day, onDay, onClose, onEdit, onCreate, onStep, lec
               const dom = domaineDe(t)
               const c = dom?.color ?? EVENT_DEFAULT_COLOR
               const ouvert = deplie === t.id
+              const tache = cochable(t)
+              const fait = t.status === 'fait' && t.is_task !== false
               return (
                 <div key={t.id} data-debut={debut}
-                  onClick={() => { if (aGlisse.current) return; if (notesVisibles(t.notes) && !lecture) setDeplie(ouvert ? null : t.id); else if (!lecture) onEdit(t) }}
+                  onClick={() => { if (!aGlisse.current) setDeplie(ouvert ? null : t.id) }}
                   className={`flex cursor-pointer gap-2.5 overflow-hidden rounded-xl border bg-[rgba(33,28,22,0.78)] px-2.5 py-2 transition-colors hover:bg-[rgba(42,35,28,0.9)] ${heure ? 'border-white/[0.08]' : 'border-dashed border-white/20'} ${ouvert ? 'min-h-[68px]' : 'h-[68px]'} ${glisse ? 'relative z-20 shadow-lg shadow-black/50' : ''}`}
-                  style={{ borderLeft: `5px solid ${c}`, transform: glisse ? `translateY(${glisse.dy}px)` : undefined }}>
+                  style={{ ...(tache ? {} : { borderLeft: `5px solid ${c}` }), transform: glisse ? `translateY(${glisse.dy}px)` : undefined }}>
+                  {tache && <BarreTache couleur={c} fait={fait} actif={!lecture} onBascule={() => basculer(t)} />}
                   {/* Colonne de l'heure = poignée : glisser vers le haut ou le bas. */}
                   <div onPointerDown={(e) => debutDrag(e, t, debut, heure, false)} {...glisseHandlers}
                     title={lecture || t.is_recurring ? undefined : heure ? "Glisser pour changer l'heure" : 'Glisser pour déplacer (reste sans heure)'}
@@ -201,7 +242,7 @@ export function JourFenetre({ day, onDay, onClose, onEdit, onCreate, onStep, lec
                   </div>
                   <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5">
                     <div className="flex items-center gap-2">
-                      <p className={`min-w-0 flex-1 truncate text-[15px] font-bold leading-tight ${t.status === 'fait' && t.is_task ? 'text-ink-3 line-through' : ''}`}>{sansHeure(t.title)}</p>
+                      <p className={`min-w-0 flex-1 ${ouvert ? '' : 'truncate'} text-[15px] font-bold leading-tight ${fait ? 'text-ink-3 line-through' : ''}`}>{sansHeure(t.title)}</p>
                       {!lecture && (
                         <button onClick={(e) => { e.stopPropagation(); onEdit(t) }} className="shrink-0 p-0.5 text-ink-3 hover:text-sun" aria-label="Modifier"><Pencil size={13} /></button>
                       )}

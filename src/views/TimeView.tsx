@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { addDays, addMonths, addWeeks, differenceInCalendarDays, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameMonth, parseISO, startOfMonth, startOfWeek } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { CheckCircle2, Circle } from 'lucide-react'
@@ -57,7 +57,16 @@ export function TimeView() {
   const [editing, setEditing] = useState<Task | null>(null)
   const [createDate, setCreateDate] = useState<string | null>(null)
   const [openStep, setOpenStep] = useState<Step | null>(null)
-  const [jourOuvert, setJourOuvert] = useState<Date | null>(null)
+  // Journée ouverte : portée par l'historique (location.state), pour que « retour » (geste ou bouton
+  // du téléphone) ferme la journée et ramène sur la vue calendrier d'où l'on vient.
+  const location = useLocation()
+  const navigate = useNavigate()
+  const jourIso = (location.state as { jour?: string } | null)?.jour
+  const jourOuvert = useMemo(() => (jourIso && /^\d{4}-\d{2}-\d{2}$/.test(jourIso) ? parseISO(jourIso) : null), [jourIso])
+  const setJourOuvert = (d: Date | null) => {
+    if (!d) { if (jourIso) navigate(-1); return }
+    navigate(`${location.pathname}${location.search}`, { state: { jour: iso(d) }, replace: !!jourIso })
+  }
   const [massPick, setMassPick] = useState<{ date: string; label: string } | null>(null)
   // Téléphone : le mois entier tient sur l'écran (vue agenda de poche).
   const telephone = useMediaQuery('(max-width: 767px)')
@@ -90,7 +99,7 @@ export function TimeView() {
     else setAnchor(addMonths(anchor, dir * 12))
   }
   const calRef = useRef<HTMLDivElement>(null)
-  useMolette(calRef, pas, agendaRelie)
+  useMolette(calRef, pas, agendaRelie && !moisTel)
 
   // Déplacer un item : on ne change que la date (l'échéance n'est plus éditée
   // dans le formulaire : plus de contrôle ni de formulaire forcé au dépôt).
@@ -176,7 +185,7 @@ export function TimeView() {
       <MassPickCtx.Provider value={lecture ? () => {} : (date, label) => setMassPick({ date, label })}>
           {/* Chaque vue remplit la hauteur de l'écran ; elle ne défile qu'en dernier
               recours (trop d'évènements pour tenir), jamais pour cacher quelque chose. */}
-          <div ref={calRef} className={`min-h-0 flex-1 ${view === '4sem' ? '-mx-4 lg:-mx-8' : ''} ${view === 'semaine' || moisTel ? 'overflow-hidden max-md:overflow-y-auto' : 'overflow-y-auto'}`}>
+          <div ref={calRef} className={`min-h-0 flex-1 ${view === '4sem' ? '-mx-4 lg:-mx-8' : ''} ${moisTel ? 'overflow-hidden' : view === 'semaine' ? 'overflow-hidden max-md:overflow-y-auto' : 'overflow-y-auto'}`}>
             {!agendaRelie && (
               <EmptyState hint="Pour l’instant, c’est l’agenda de Joffrey qui est partagé.">
                 L’agenda d’Honorine n’est pas encore relié.
@@ -184,7 +193,8 @@ export function TimeView() {
             )}
             {agendaRelie && <>
             {view === '4sem' && !moisTel && <FourWeeks anchor={anchor} focus={focus} fenetre={fenetre} onOpenDay={setJourOuvert} {...common} />}
-            {moisTel && <MoisTelephone anchor={anchor} fenetre={fenetre} onShift={pas} onOpenDay={setJourOuvert} {...common} />}
+            {moisTel && <MoisTelephone anchor={anchor} fenetre={fenetre} focus={focus} onOpenDay={setJourOuvert}
+              onFenetre={(f) => { setFocus(null); setFenetre(f); setAnchor(moisMajoritaire(f)) }} />}
             {/* Semaine : briques empilées par jour, hauteur selon la durée. */}
             {view === 'semaine' && (
               <div className="flex h-full min-h-[340px] md:min-h-0">

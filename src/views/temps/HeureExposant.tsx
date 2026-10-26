@@ -4,13 +4,13 @@ import { extractHourMinute } from '../../lib/logic'
 export const heureDebut = (title: string): { hour: number; minute: number } | null =>
   /^\s*\d{1,2}[h:]/i.test(title) ? extractHourMinute(title) : null
 
-/** « 19h », ou « 19h » suivi des minutes en petit exposant (« 19h³⁰ ») : lisible sans prendre de place dans la vue Mois. */
+/** « 19³⁰ » (minutes en exposant, sans « h ») ou « 19ʰ » (heure ronde : le « h » en exposant haut) : lisible sans prendre de place dans les vues Mois. */
 export function HeureExposant({ titre }: { titre: string }) {
   const h = heureDebut(titre)
   if (!h) return null
   return (
     <span className="mr-0.5 shrink-0 font-semibold tabular-nums">
-      {h.hour}h{h.minute > 0 && <sup className="ml-px align-super text-[0.65em] leading-none">{String(h.minute).padStart(2, '0')}</sup>}
+      {h.hour}<sup className="align-super text-[0.65em] leading-none">{h.minute > 0 ? String(h.minute).padStart(2, '0') : 'h'}</sup>
     </span>
   )
 }

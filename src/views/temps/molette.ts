@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { addDays, addWeeks, startOfMonth } from 'date-fns'
+import { addDays, addWeeks, isSameMonth, startOfMonth, startOfWeek } from 'date-fns'
 
 /** Nombre de semaines de la fenêtre glissante de la vue Mois. */
 export const SEMAINES_FENETRE = 5
@@ -86,4 +86,12 @@ export function margeMois(semaines: Date[][]): { mois: Date; debut: boolean; fin
     const m = mois.toLocaleDateString('fr-FR', { month: 'long' })
     return { mois, debut: i === 0 || commence(s), fin: i === semaines.length - 1 || commence(semaines[i + 1]!), nom: m }
   })
+}
+
+/** Lundi de la semaine du haut quand rien n'est choisi : la semaine d'avant celle du jour
+ *  (mois en cours), sinon la semaine du 1er du mois. `focus` : jour demandé (lien de notification). */
+export function debutMoisTelephone(anchor: Date, focus?: Date | null): Date {
+  const lundi = (d: Date) => startOfWeek(d, { weekStartsOn: 1 })
+  if (focus) return addWeeks(lundi(focus), -1)
+  return isSameMonth(anchor, new Date()) ? addWeeks(lundi(new Date()), -1) : lundi(startOfMonth(anchor))
 }

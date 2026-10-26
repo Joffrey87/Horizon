@@ -200,7 +200,7 @@ function ColonneJour({ day, mode, niveau, colonne, onEdit, onCreate, onStep, onM
   return (
     <section
       onDragOver={(e) => { survol(e); setOver(true) }} onDragLeave={() => setOver(false)} onDrop={onDrop}
-      onClick={(e) => { if (e.target === e.currentTarget) onCreate(d) }}
+      onClick={(e) => { if (e.target === e.currentTarget) { if (tel) onOpenDay(day); else onCreate(d) } }}
       aria-label={format(day, 'EEEE d MMMM', { locale: fr })}
       // Ordinateur : la colonne couvre 3 lignes de la grille de la semaine (jour + service | évènements sur plusieurs jours | évènements du jour),
       // pour que les barres « Anglais EAO » passent en dessous des jours de travail.
@@ -233,7 +233,7 @@ function ColonneJour({ day, mode, niveau, colonne, onEdit, onCreate, onStep, onM
       </div>
 
       <div className="flex flex-col gap-1" style={tel ? undefined : { gridRow: 3 }}
-        onClick={(e) => { if (e.target === e.currentTarget) onCreate(d) }}>
+        onClick={(e) => { if (e.target === e.currentTarget) { if (tel) onOpenDay(day); else onCreate(d) } }}>
         {rempla && <RemplaChip p={rempla} />}
         {fete && (
           <button onClick={(e) => { e.stopPropagation(); openMassPicker(d, fete) }}
@@ -263,7 +263,7 @@ function ColonneJour({ day, mode, niveau, colonne, onEdit, onCreate, onStep, onM
         ))}
         {/* Les briques ont leur propre zone sous les pastilles (fêtes, messes, anniversaires…) : une brique déplacée ne peut jamais les recouvrir. */}
         <div ref={briques} className="relative flex flex-col gap-1" style={!tel && placees.length ? { minHeight: hautPlacees } : undefined}>
-        {taches.map(({ t }) => <Brique key={t.id} t={t} jour={d} mode={mode} niveau={niveau} onEdit={onEdit} pos={tel ? undefined : positions[cleBrique(t.id, d)]} />)}
+        {taches.map(({ t }) => <Brique key={t.id} t={t} jour={d} mode={mode} niveau={niveau} onEdit={tel ? () => onOpenDay(day) : onEdit} pos={tel ? undefined : positions[cleBrique(t.id, d)]} />)}
         </div>
       </div>
     </section>

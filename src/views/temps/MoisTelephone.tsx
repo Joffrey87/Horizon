@@ -1,42 +1,45 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  eachDayOfInterval, endOfMonth, endOfWeek, format, isToday, startOfMonth, startOfWeek,
-} from 'date-fns'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { addDays, addWeeks, differenceInCalendarWeeks, format, isToday } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Church, Circle, CheckCircle2 } from 'lucide-react'
+import { Church } from 'lucide-react'
 import { HeureExposant, heureDebut } from './HeureExposant'
 import { useHorizon } from '../../lib/store'
 import {
   birthdaysForDay, compareTasksByTitleTime, feastOnDay, firstFridayOrSaturday, iso, sansHeure, spanPart, tasksForDay, todayIso,
 } from '../../lib/logic'
 import type { Task } from '../../lib/types'
-import { couleurMois, margeMois, semainesFenetre, teinteMois } from './molette'
+import { couleurMois, debutMoisTelephone, margeMois, teinteMois } from './molette'
 import { EVENT_DEFAULT_COLOR, remplaProposeOn, stepsForDay } from './partage'
 
-/** Vue Mois pour téléphone : le mois ENTIER sur un écran, façon agenda de poche.
- *  Chaque semaine est une ligne qui se partage la hauteur ; dans chaque jour, des
- *  lignes colorées (domaine) et, s'il y en a trop, un « +n ». Un appui sur un jour
- *  ouvre son détail complet. Glisser à gauche/droite avance/recule d'une semaine
- *  (fenêtre glissante de 5 semaines) ; les flèches du haut changent de mois. */
+/** Vue Mois pour téléphone : 4 semaines à l'écran (par défaut la semaine d'avant, la
+ *  semaine en cours et les 2 suivantes), façon agenda de poche. Chaque semaine est une
+ *  ligne ; dans chaque jour, des lignes colorées (domaine) et, s'il y en a trop, un « +n ».
+ *  On défile verticalement, une semaine à la fois. Un appui sur un jour ouvre son détail. */
 const LIGNE = 14 // hauteur d'une ligne d'évènement (px)
 const ENTETE = 17 // numéro du jour
+const VISIBLES = 4 // semaines à l'écran
+const RANGEES = 41 // semaines rendues (fenêtre recentrée quand on s'approche du bord)
+const RECENTRE = 20 // semaines avant la semaine du haut, à la recentrage
+const BORD = 8 // à moins de 8 semaines du bord, on recentre
 
 type Ligne = { cle: string; texte: string; couleur: string; bande?: boolean; fine?: boolean; heure?: string; fait?: boolean; tache?: Task; icone?: 'messe' | 'fete' }
 
-export function MoisTelephone({ anchor, fenetre, onShift, onOpenDay }: {
-  anchor: Date; fenetre?: Date | null; onShift: (dir: 1 | -1) => void; onOpenDay: (d: Date) => void
+export function MoisTelephone({ anchor, fenetre, focus, onFenetre, onOpenDay }: {
+  anchor: Date; fenetre?: Date | null; focus?: Date | null; onFenetre: (debut: Date) => void; onOpenDay: (d: Date) => void
 }) {
   const s = useHorizon()
   const zoneRef = useRef<HTMLDivElement>(null)
   const [hauteur, setHauteur] = useState(0)
+  const voulu = fenetre ?? debutMoisTelephone(anchor, focus)
+  const [base, setBase] = useState(() => addWeeks(voulu, -RECENTRE))
+  // Lundi de la semaine tout en haut de l'écran (celle que le défilement vient de poser).
+  const haut = useRef(voulu)
+  // Semaine à amener en haut au prochain rendu (changement de fenêtre ou demande extérieure).
+  const aPoser = useRef<Date | null>(voulu)
 
-  const semaines = useMemo(() => {
-    if (fenetre) return semainesFenetre(fenetre)
-    const debut = startOfWeek(startOfMonth(anchor), { weekStartsOn: 1 })
-    const fin = endOfWeek(endOfMonth(anchor), { weekStartsOn: 1 })
-    const jours = eachDayOfInterval({ start: debut, end: fin })
-    return Array.from({ length: jours.length / 7 }, (_, i) => jours.slice(i * 7, i * 7 + 7))
-  }, [anchor, fenetre])
+  const semaines = Array.from({ length: RANGEES }, (_, i) =>
+    Array.from({ length: 7 }, (_, j) => addDays(addWeeks(base, i), j)))
+  const hLigne = hauteur / VISIBLES
 
   useEffect(() => {
     const el = zoneRef.current
@@ -46,8 +49,45 @@ export function MoisTelephone({ anchor, fenetre, onShift, onOpenDay }: {
     setHauteur(el.clientHeight)
     return () => ro.disconnect()
   }, [])
+
+  // Période choisie hors du défilement (flèches, sélecteur, lien) : on amène cette semaine en haut.
+  // Trop près du bord de la fenêtre rendue : on la recentre d'abord (le rendu suivant fait le défilement).
+  useLayoutEffect(() => {
+    const el = zoneRef.current
+    if (!el || hLigne <= 0) return
+    if (iso(voulu) !== iso(haut.current)) aPoser.current = voulu
+    const cible = aPoser.current
+    if (!cible) return
+    const rang = differenceInCalendarWeeks(cible, base, { weekStartsOn: 1 })
+    if (rang < BORD || rang > RANGEES - BORD - VISIBLES) { setBase(addWeeks(cible, -RECENTRE)); return }
+    aPoser.current = null
+    haut.current = cible
+    el.scrollTop = rang * hLigne
+  }, [voulu, base, hLigne])
+
+  // Défilement : la semaine du haut devient la période (en-tête). Près du bord, la fenêtre se recentre.
+  const enCours = useRef(0)
+  const surDefilement = useCallback(() => {
+    if (enCours.current) return
+    enCours.current = requestAnimationFrame(() => {
+      enCours.current = 0
+      const el = zoneRef.current
+      if (!el || hLigne <= 0) return
+      const rang = Math.round(el.scrollTop / hLigne)
+      const debut = addWeeks(base, rang)
+      if (iso(debut) !== iso(haut.current)) {
+        haut.current = debut
+        onFenetre(debut)
+      }
+      if (rang < BORD || rang > RANGEES - BORD - VISIBLES) {
+        aPoser.current = debut
+        setBase(addWeeks(debut, -RECENTRE))
+      }
+    })
+  }, [base, hLigne, onFenetre])
+  useEffect(() => () => { if (enCours.current) cancelAnimationFrame(enCours.current) }, [])
+
   const marge = margeMois(semaines)
-  const hLigne = hauteur / semaines.length
   const maxLignes = Math.max(1, Math.floor((hLigne - ENTETE - 2) / LIGNE))
 
   const couleurDe = (t: Task) =>
@@ -85,24 +125,16 @@ export function MoisTelephone({ anchor, fenetre, onShift, onOpenDay }: {
     return out
   }
 
-  // Balayage horizontal = semaine précédente / suivante (fenêtre glissante).
-  const debutTouch = useRef<{ x: number; y: number } | null>(null)
-  const onTouchStart = (e: React.TouchEvent) => { debutTouch.current = { x: e.touches[0]!.clientX, y: e.touches[0]!.clientY } }
-  const onTouchEnd = (e: React.TouchEvent) => {
-    const d = debutTouch.current; debutTouch.current = null
-    if (!d) return
-    const dx = e.changedTouches[0]!.clientX - d.x, dy = e.changedTouches[0]!.clientY - d.y
-    if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.8) onShift(dx < 0 ? 1 : -1)
-  }
-
   return (
-    <div className="flex h-full flex-col" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <div className="flex h-full flex-col">
       <div className="grid shrink-0 grid-cols-[repeat(7,minmax(0,1fr))_14px] border-b border-line-2/40 text-center text-[10px] uppercase tracking-wide text-ink-3">
         {['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'].map((j) => <span key={j} className="py-0.5">{j}</span>)}
       </div>
-      <div ref={zoneRef} className="grid min-h-0 flex-1 border-l border-line-2/50" style={{ gridTemplateRows: `repeat(${semaines.length}, minmax(0, 1fr))` }}>
+      <div ref={zoneRef} onScroll={surDefilement}
+        className="min-h-0 flex-1 snap-y snap-mandatory overflow-y-auto overscroll-contain border-l border-line-2/50 [scrollbar-width:none]">
         {semaines.map((jours, i) => (
-          <div key={i} className="grid min-h-0 grid-cols-[repeat(7,minmax(0,1fr))_14px]">
+          <div key={iso(jours[0]!)} style={{ height: hLigne || undefined }}
+            className="grid snap-start grid-cols-[repeat(7,minmax(0,1fr))_14px] [scroll-snap-stop:always]">
             {jours.map((jour) => {
               const auj = isToday(jour)
               const lignes = lignesDuJour(jour)
@@ -116,19 +148,14 @@ export function MoisTelephone({ anchor, fenetre, onShift, onOpenDay }: {
                   className={`relative flex min-h-0 flex-col overflow-hidden border-b border-r border-line-2/50 text-left ${auj ? 'bg-sun/10 ring-1 ring-inset ring-sun/70' : ''} ${rempla ? 'outline outline-1 -outline-offset-1 outline-dashed outline-[#ef4444]/80' : ''}`}>
                   <span className={`flex shrink-0 items-baseline gap-0.5 px-0.5 text-[11px] leading-[17px] ${auj ? 'font-semibold text-sun-soft' : 'text-ink-2'}`}>
                     {format(jour, 'd')}
-                                      </span>
+                  </span>
                   {montrees.map((l) => (
+                    // Tâche : encadrée en pointillé, rayée une fois faite (pas de case à cocher ici).
                     <span key={l.cle} style={{ background: `${l.couleur}${l.bande ? 'cc' : '55'}`, height: l.fine ? LIGNE / 2 : LIGNE,
                       ...(l.tache ? { outline: `1px dashed ${l.couleur}`, outlineOffset: -1 } : {}) }}
                       className={`flex shrink-0 items-center gap-0.5 overflow-hidden whitespace-nowrap px-0.5 text-[8px] leading-[14px] text-white ${
                         l.bande ? '' : 'mt-px rounded-[2px]'} ${l.fait ? 'line-through opacity-60' : ''}`}>
                       {l.icone === 'messe' && <Church size={9} className="shrink-0" />}
-                      {l.tache && !l.tache.is_recurring && (
-                        <span role="button" aria-label={l.fait ? 'Marquer à faire' : 'Marquer fait'} className="shrink-0"
-                          onClick={(e) => { e.stopPropagation(); void s.update('tasks', l.tache!.id, l.fait ? { status: 'a_faire', done_at: null } : { status: 'fait', done_at: new Date().toISOString() }) }}>
-                          {l.fait ? <CheckCircle2 size={9} className="text-[#4cc79a]" /> : <Circle size={9} />}
-                        </span>
-                      )}
                       {l.heure && <HeureExposant titre={l.heure} />}
                       <span className="overflow-hidden text-clip">{l.texte}</span>
                     </span>
@@ -148,7 +175,6 @@ export function MoisTelephone({ anchor, fenetre, onShift, onOpenDay }: {
           </div>
         ))}
       </div>
-
     </div>
   )
 }
