@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Pencil, Plus } from 'lucide-react'
+import { ChevronDown, Pencil, Plus } from 'lucide-react'
 import { useHorizon } from '../lib/store'
+import { useGlisserLateral } from '../lib/useGlisserLateral'
 import { Card, Modal } from '../components/ui'
 
 /** Page Prières : un petit menu des prières (en haut sur téléphone, à gauche sur ordinateur) et la prière choisie à droite.
@@ -36,22 +37,41 @@ export function PrieresView() {
   }
 
   const courante = liste.find((p) => p.id === choix) ?? liste[0]
+  const [listeOuverte, setListeOuverte] = useState(false)
+  // Téléphone : glisser de côté n'importe où sur la page = prière suivante / précédente.
+  const rang = courante ? liste.indexOf(courante) : -1
+  const voisine = (pas: number) => { const p = liste[rang + pas]; return p ? () => setChoix(p.id) : null }
+  const glisser = useGlisserLateral(voisine(-1), voisine(1))
 
   return (
-    <div className="rise space-y-2">
+    <div className="rise min-h-[75vh] space-y-2" {...glisser}>
       <div className="flex flex-col gap-2 md:flex-row md:gap-4">
-        {/* Menu des prières : une rangée défilante compacte sur téléphone, une colonne à gauche sur ordinateur. */}
-        <nav aria-label="Prières" className="flex flex-row items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:w-56 md:shrink-0 md:flex-col md:items-stretch md:overflow-visible">
-          {liste.map((p) => (
-            <button key={p.id} onClick={() => setChoix(p.id)} data-testid="priere-menu"
-              className={`shrink-0 rounded-lg border px-2.5 py-1 text-left text-sm transition-colors max-md:whitespace-nowrap ${
-                courante?.id === p.id ? 'border-sun/50 bg-sun/10 text-ink' : 'border-line text-ink-2 hover:bg-panel-2 hover:text-ink'}`}>
-              {p.titre}
+        {/* Menu des prières : un bouton-liste déroulant sur téléphone, une colonne à gauche sur ordinateur.
+             */}
+        <nav aria-label="Prières" className="relative flex flex-col gap-1.5 md:w-56 md:shrink-0">
+          <div className="flex gap-1.5 md:hidden">
+            <button onClick={() => setListeOuverte((o) => !o)} aria-expanded={listeOuverte} data-testid="priere-liste"
+              className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg border border-sun/50 bg-sun/10 px-2.5 py-1.5 text-left text-sm">
+              <span className="min-w-0 truncate font-medium">{courante?.titre ?? 'Prières'}</span>
+              <ChevronDown size={16} className={`shrink-0 transition-transform ${listeOuverte ? 'rotate-180' : ''}`} />
             </button>
-          ))}
+            <button onClick={() => setEdition('nouvelle')} title="Ajouter une prière" aria-label="Ajouter une prière"
+              className="btn-ghost flex shrink-0 items-center gap-1 rounded-lg border border-dashed border-line px-2.5 py-1 text-sm">
+              <Plus size={14} /> Ajouter
+            </button>
+          </div>
+          <div className={`${listeOuverte ? 'flex' : 'hidden'} flex-col gap-1 max-md:rounded-lg max-md:border max-md:border-line max-md:bg-panel max-md:p-1.5 md:flex`}>
+            {liste.map((p) => (
+              <button key={p.id} onClick={() => { setChoix(p.id); setListeOuverte(false) }} data-testid="priere-menu"
+                className={`rounded-lg border px-2.5 py-1 text-left text-sm transition-colors ${
+                  courante?.id === p.id ? 'border-sun/50 bg-sun/10 text-ink' : 'border-line text-ink-2 hover:bg-panel-2 hover:text-ink'}`}>
+                {p.titre}
+              </button>
+            ))}
+          </div>
           <button onClick={() => setEdition('nouvelle')} title="Ajouter une prière" aria-label="Ajouter une prière"
-            className="btn-ghost flex shrink-0 items-center gap-1 rounded-lg border border-dashed border-line px-2.5 py-1 text-sm">
-            <Plus size={14} /> <span className="max-md:hidden">Ajouter</span>
+            className="btn-ghost flex items-center justify-center gap-1 rounded-lg border border-dashed border-line px-2.5 py-1 text-sm max-md:hidden">
+            <Plus size={14} /> Ajouter
           </button>
         </nav>
 

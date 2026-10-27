@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, Check, Trash2, RotateCcw, Repeat, ListPlus, GripVertical, Pencil } from 'lucide-react'
+import { Plus, Trash2, RotateCcw, Repeat, ListPlus, GripVertical, Pencil } from 'lucide-react'
 import { useHorizon } from '../lib/store'
 import type { ShoppingItem, ShoppingList, ShoppingSection } from '../lib/types'
 import { Card, Modal, EmptyState } from '../components/ui'
 import { trouverListeCourses } from '../lib/courses'
+import { useGlisserLateral } from '../lib/useGlisserLateral'
 
 const SECTIONS: { key: ShoppingSection; label: string }[] = [
   { key: 'alimentaire', label: 'Alimentaire' },
@@ -195,6 +196,12 @@ function ListPanel({ list, items, tab, onTab }: {
     onTab(cible)
     aller(i)
   }
+  // Glisser de côté hors des volets (en-tête, onglets, zone d'ajout, vide) : même effet que sur les articles.
+  const voisine = (pas: number) => {
+    const cible = avecSous ? sections[index + pas] : undefined
+    return cible === undefined ? null : () => { onTab(cible); aller(index + pas) }
+  }
+  const glisser = useGlisserLateral(voisine(-1), voisine(1))
   const surDefilement = () => {
     const el = volet.current
     if (!el) return
@@ -237,12 +244,7 @@ function ListPanel({ list, items, tab, onTab }: {
                 </button>
                 <button onClick={() => void s.update('shopping_items', it.id, { checked: !it.checked })}
                   className="flex flex-1 items-center gap-2.5 py-1 text-left">
-                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
-                    it.checked ? 'border-good/70 bg-good/70 text-white' : 'border-line-2 hover:border-ink-3'
-                  }`}>
-                    {it.checked && <Check size={13} />}
-                  </span>
-                  <span className="text-sm text-ink">{it.label}</span>
+                  <span className={`text-sm ${it.checked ? 'text-ink-3 line-through' : 'text-ink'}`}>{it.label}</span>
                   {textePrix(it) && <span className="ml-auto shrink-0 text-xs tabular-nums text-ink-3">{textePrix(it)}</span>}
                 </button>
               </li>
@@ -254,7 +256,7 @@ function ListPanel({ list, items, tab, onTab }: {
   )
 
   return (
-    <div onWheel={surMolette}>
+    <div onWheel={surMolette} className={avecSous ? 'min-h-[70vh]' : undefined} onTouchStart={glisser.onTouchStart} onTouchEnd={glisser.onTouchEnd}>
     <Card className="!p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-baseline gap-2">
