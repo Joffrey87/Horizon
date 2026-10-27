@@ -45,6 +45,9 @@ const InvestissementsView = lazy(() => fin().then((m) => ({ default: m.Investiss
 const AVenirView = lazy(() => fin().then((m) => ({ default: m.AVenirView })))
 const ReglagesFinancesView = lazy(() => fin().then((m) => ({ default: m.ReglagesView })))
 
+// Entraînement : chargé à la première ouverture de l'onglet.
+const EntrainementView = lazy(() => import('./views/entrainement/EntrainementView').then((m) => ({ default: m.EntrainementView })))
+
 const Chargement = () => <p className="pt-8 text-center text-sm text-ink-3">Chargement…</p>
 
 export function AppRoutes() {
@@ -73,6 +76,7 @@ export function AppRoutes() {
         <Route path="a-venir" element={<AVenirView />} />
         <Route path="reglages" element={<ReglagesFinancesView />} />
       </Route>
+      <Route path="/entrainement" element={<Suspense fallback={<Chargement />}><EntrainementView /></Suspense>} />
       <Route path="/activites" element={<ActivitesLayout />}>
         <Route index element={<Navigate to="actualites" replace />} />
         <Route path="actualites" element={<ActualitesView />} />

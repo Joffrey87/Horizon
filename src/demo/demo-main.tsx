@@ -13,9 +13,13 @@ import type { Session } from '@supabase/supabase-js'
 import { useHorizon } from '../lib/store'
 import { Shell } from '../components/Shell'
 import { AppRoutes } from '../routes'
+import { stockageMemoire, utiliserStockageEntrainement } from '../views/entrainement/stockage'
 import '../index.css'
 
 const uid = 'demo-user'
+
+// Entraînement : historique en mémoire, perdu au rechargement comme le reste de la démo.
+utiliserStockageEntrainement(stockageMemoire())
 
 // Démo vierge : aucune donnée fictive. Session simulée pour ne pas passer par
 // l'écran de connexion ; toutes les collections sont vides au départ.

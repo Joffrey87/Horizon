@@ -3,7 +3,7 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   FolderKanban, ListTodo, Compass, CalendarDays, CalendarRange,
   Repeat, ClipboardCheck, Network, Settings, Plus, LogOut, Menu, ArrowLeft, ShieldCheck, Timer, Newspaper,
-  AlertTriangle, X, RotateCw, Ellipsis, ChevronDown, ChevronRight, ArrowLeftRight, Wallet, Eye, Hourglass, ShoppingCart, Euro, Target, MessagesSquare,
+  AlertTriangle, X, RotateCw, Ellipsis, ChevronDown, ChevronRight, ArrowLeftRight, Wallet, Eye, Hourglass, ShoppingCart, Euro, Target, MessagesSquare, Dumbbell,
 } from 'lucide-react'
 import { useHorizon, vueCourante } from '../lib/store'
 import { ONGLETS_PARTAGE, pageAccueil, routeAutorisee } from '../lib/partage'
@@ -27,6 +27,7 @@ const NAV = [
   { to: '/charite', label: 'Charité', icon: CroixLatine },
   { to: '/discussions', label: 'Discussions', icon: MessagesSquare },
   { to: '/verifications/listes', label: 'Listes', icon: ShoppingCart },
+  { to: '/entrainement', label: 'Entraînement', icon: Dumbbell },
   // Rangés sous « Autres » (voir ROUTES_AUTRES) :
   { to: '/projets', label: 'Projets', icon: FolderKanban },
   { to: '/domaines', label: 'Domaines & objectifs', icon: Compass },
