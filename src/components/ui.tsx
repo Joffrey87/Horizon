@@ -209,7 +209,7 @@ export function Scale3({ value, onChange, labels }: {
     <div className="flex gap-1">
       {[1, 2, 3].map((n) => (
         <button key={n} type="button" onClick={() => onChange(n)}
-          className={`flex-1 rounded-lg border px-2 py-1 text-xs transition-colors ${
+          className={`min-w-0 flex-1 rounded-lg border px-0.5 py-1 text-[11px] transition-colors sm:px-2 sm:text-xs ${
             value === n ? 'border-sun bg-sun/10 text-sun-soft' : 'border-line-2 text-ink-3 hover:text-ink-2'
           }`}>
           {labels[n - 1]}
