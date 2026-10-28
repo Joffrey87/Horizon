@@ -25,7 +25,7 @@ describe('moisBudget (de paie à paie)', () => {
   it('installerPaies retient les crédits DDFIP REMUNERATION', () => {
     installerPaies([
       { date: '2026-09-28', amount: 7810.68, label: 'DDFIP DES YVELINES REMUNERATION DU 09/2026. MINISTERE' },
-      { date: '2026-09-29', amount: 1200, label: 'SEPA M LENOBLE JOFFREY' },
+      { date: '2026-09-29', amount: 1200, label: 'SEPA M MARTIN PAUL' },
       { date: '2026-09-28', amount: -50, label: 'REMUNERATION DU 09/2026' },
     ])
     expect(datesPaies()).toEqual(['2026-09-28'])

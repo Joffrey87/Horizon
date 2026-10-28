@@ -36,7 +36,7 @@ async function callClaude(apiKey: string, system: string, user: string, maxToken
   return { text, usage: data.usage as Usage | undefined }
 }
 
-/** Utilisateur appelant, déduit du JWT — null si inconnu (rien n'est alors consigné). */
+/** Utilisateur appelant, déduit du JWT. Null si la clé anon ou un jeton invalide. */
 async function callerId(req: Request): Promise<string | null> {
   const url = Deno.env.get('SUPABASE_URL')
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -162,6 +162,9 @@ Deno.serve(async (req) => {
     new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
 
   try {
+    const uid = await callerId(req)
+    if (!uid) return json({ error: 'Appel non authentifié' }, 401)
+
     const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
     if (!apiKey) return json({ error: 'ANTHROPIC_API_KEY manquante' }, 500)
 
@@ -183,7 +186,7 @@ Deno.serve(async (req) => {
       ? quizSystem(COMPOSITION_REVISION, PROFONDEUR_REVISION)
       : quizSystem(COMPOSITION_JOUR, PROFONDEUR_JOUR)
     const { text: raw, usage } = await callClaude(apiKey, systeme, user, 1500)
-    await logUsage(await callerId(req), format === 'revision' ? 'revision' : `jour niv. ${lvl}`, usage)
+    await logUsage(uid, format === 'revision' ? 'revision' : `jour niv. ${lvl}`, usage)
     let quiz: unknown
     try {
       quiz = JSON.parse(raw)

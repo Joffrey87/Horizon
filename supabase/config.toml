@@ -1,0 +1,17 @@
+project_id = "horizon"
+
+# Réglages des fonctions qui s'authentifient elles-mêmes.
+# Le cron n'a pas de JWT utilisateur : la passerelle ne doit pas l'exiger.
+# L'autorisation est faite dans la fonction (JWT utilisateur ou secret de cron).
+
+[functions.celeste]
+verify_jwt = false
+
+[functions.refresh-masses]
+verify_jwt = false
+
+[functions.bank-sync]
+verify_jwt = false
+
+[functions.crypto-card-webhook]
+verify_jwt = false

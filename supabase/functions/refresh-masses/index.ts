@@ -17,6 +17,7 @@
 // Déclenché mensuellement (pg_cron) et par le bouton « Rafraîchir » de l'app.
 // ================================================================
 import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { cronAutorise } from '../_shared/cronAuth.ts'
 
 type Slot = { t: string; c: string }
 type Schedule = Record<string, Slot[]> // clé = jour ISO ('1' lundi … '7' dimanche)
@@ -215,7 +216,7 @@ function corsFor(req: Request): Record<string, string> {
   const origin = req.headers.get('Origin') ?? ''
   return {
     'Access-Control-Allow-Origin': allowed(origin) ? origin : (ALLOWED_ORIGINS[0] ?? ''),
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
     'Vary': 'Origin',
   }
 }
@@ -239,18 +240,17 @@ Deno.serve(async (req) => {
 
   const url = Deno.env.get('SUPABASE_URL')!
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  // Appel d'un utilisateur connecté (bouton de l'app) ou du cron mensuel, qui
-  // n'a pas de session et passe la clé anon : comme pour la fonction `celeste`,
-  // on le rattache alors au propriétaire (secret CELESTE_HORIZON_USER_ID,
-  // app mono-utilisateur). Les horaires écrits sont publics : le pire qu'un
-  // appelant anonyme puisse faire est de relancer une mise à jour.
-  const uid = (await callerId(req, url, key)) ?? Deno.env.get('CELESTE_HORIZON_USER_ID') ?? null
+  const supabase = createClient(url, key)
+  // Bouton de l'app : JWT de l'utilisateur, qui ne met à jour que ses lignes.
+  // Cron mensuel : en-tête x-cron-secret (le même que bank-sync), rattaché au
+  // propriétaire. La clé anon seule ne suffit pas.
+  const caller = await callerId(req, url, key)
+  const cron = await cronAutorise(supabase, req)
+  const uid = caller ?? (cron ? Deno.env.get('CELESTE_HORIZON_USER_ID') ?? null : null)
   if (!uid) return json({ ok: false, error: 'Appel non authentifié' }, 401)
   // `check_id` optionnel : ne rafraîchir qu'une vérification précise.
   let onlyId: string | null = null
   try { onlyId = ((await req.json()) as { check_id?: string })?.check_id ?? null } catch { /* pas de corps */ }
-  const supabase = createClient(url, key)
-
   const scraped = await scrapeDiocesain()
   const masses = merge(scraped ?? DIOCESAIN)
   const source = scraped ? 'trouverunemesse.fr + rites latins' : 'base maintenue (scraping indisponible)'

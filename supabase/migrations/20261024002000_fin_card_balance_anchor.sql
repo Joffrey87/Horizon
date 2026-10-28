@@ -72,5 +72,4 @@ end $$;
 revoke all on function public.fin_card_balance_refresh(uuid), public.fin_card_balance_trg(), public.fin_card_recaler(uuid, numeric, text) from public, anon, authenticated;
 grant execute on function public.fin_card_balance_refresh(uuid), public.fin_card_recaler(uuid, numeric, text) to service_role;
 
--- Ancrage initial : 567,78 € relevé par l'utilisateur le 23/10/2026 au soir (inclut les 55 lignes carte alors en base, dont 3 en attente).
-select public.fin_card_recaler('68a32837-708e-42f6-a493-5f61f7322120', 567.78, 'Relevé Joffrey 23/10/2026 soir ; inclut toutes les lignes alors en base');
+-- L'ancrage initial a été posé en base, hors dépôt : pas de montant ni d'identifiant ici.

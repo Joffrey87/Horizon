@@ -12,7 +12,7 @@ const tx = [
   t('J', '2026-10-15', 200, 'Virement depuis BoursoBank'),
   t('J', '2026-10-19', 200, 'Virement interne'),
   t('J', '2026-10-19', 300, 'Virement interne depuis COMPTE S'),
-  t('J', '2026-10-19', -200, 'INST LENOBLE JOFFREY'),
+  t('J', '2026-10-19', -200, 'INST MARTIN PAUL'),
   t('C', '2026-10-19', 200, 'EUR Deposit'),
   t('J', '2026-10-21', 300, 'Virement interne'),
   t('E', '2026-10-21', -300, 'Virement interne'),
