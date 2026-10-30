@@ -1155,8 +1155,12 @@ export function grouperParIntitule(
       nom: g.manuel || (enseigne && !renomme) ? g.nom : local?.trim() || nomAuto,
       operations: g.operations.sort((a, b) => b.date.localeCompare(a.date)),
     }
-  }).sort((a, b) => b.total - a.total || a.nom.localeCompare(b.nom, 'fr'))
+  }).sort(parRecence)
 }
+
+/** Dans une catégorie : le groupe dont l'opération est la plus récente d'abord (à égalité, le plus gros). */
+const parRecence = (a: GroupeIntitules, b: GroupeIntitules) =>
+  (b.operations[0]?.date ?? '').localeCompare(a.operations[0]?.date ?? '') || b.total - a.total || a.nom.localeCompare(b.nom, 'fr')
 
 /** Même nom à l'accent, à la casse et au pluriel près (« Abonnement » = « abonnements »). */
 const memeNom = (a: string, b: string) => {
@@ -1172,7 +1176,7 @@ const memeNom = (a: string, b: string) => {
 export function aplatirGroupes(groupes: GroupeIntitules[], nomCategorie?: string): GroupeIntitules[] {
   const plats = groupes.flatMap((g) =>
     g.manuel && g.sousGroupes && (groupes.length === 1 || (nomCategorie && memeNom(g.nom, nomCategorie))) ? g.sousGroupes : [g])
-  return plats.sort((a, b) => b.total - a.total || a.nom.localeCompare(b.nom, 'fr'))
+  return plats.sort(parRecence)
 }
 
 export interface GroupePeriode extends GroupeIntitules {

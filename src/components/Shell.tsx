@@ -383,6 +383,7 @@ const RACCOURCIS = [
   { to: '/temps', label: 'Agenda', icon: CalendarDays, actif: (p: string) => p.startsWith('/temps') },
   { to: '/charite/ecritures', label: 'Écritures', icon: LivreCroix, actif: (p: string) => p.startsWith('/charite') },
   { to: '/priorites', label: 'Priorités', icon: Target, actif: (p: string) => p.startsWith('/priorites') },
+  { to: '/entrainement', label: 'Entraînement', icon: Dumbbell, actif: (p: string) => p.startsWith('/entrainement') },
 ]
 
 /** Téléphone : capsule flottante en bas ; l'onglet actif dans un rond ambre. */

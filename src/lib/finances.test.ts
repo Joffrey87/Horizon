@@ -387,7 +387,7 @@ describe('regroupements d’intitulés', () => {
       op(joint.id, '2026-09-04', -60, { label: 'CARREFOUR MARKET CB*1111' }),        // l'enseigne ne suit pas l'intitulé local
     ]
     const g = grouperParIntitule(ops, [], (t) => t.label_local)
-    expect(g.map((x) => [x.nom, x.operations.length])).toEqual([['Loyer', 3], ['Carrefour', 1], ['Pique-nique', 1]])
+    expect(g.map((x) => [x.nom, x.operations.length])).toEqual([['Carrefour', 1], ['Pique-nique', 1], ['Loyer', 3]])  // du plus récent au plus ancien
   })
   it('compacte une ligne sur 3 mois : une ligne par groupe, montant par mois et moyenne', () => {
     const mois = ['2026-07', '2026-08', '2026-09']
