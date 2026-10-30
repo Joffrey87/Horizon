@@ -31,4 +31,14 @@ describe('moisBudget (de paie à paie)', () => {
     expect(datesPaies()).toEqual(['2026-09-28'])
     expect(moisBudget('2026-09-29')).toBe('2026-10')
   })
+  it('la paie reçue sous le seul libellé « DDFIP DES YVELINES » (≥ 6000) ouvre le mois suivant', () => {
+    installerPaies([
+      { date: '2026-10-28', amount: 11604.41, label: 'DDFIP DES YVELINES' },
+      { date: '2026-10-12', amount: 300, label: 'DDFIP DES YVELINES' },
+      { date: '2026-10-13', amount: 8000, label: 'VIREMENT AMI' },
+    ])
+    expect(datesPaies()).toEqual(['2026-10-28'])
+    expect(moisBudget('2026-10-27')).toBe('2026-10')
+    expect(moisBudget('2026-10-28')).toBe('2026-11')
+  })
 })

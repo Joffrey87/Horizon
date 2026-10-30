@@ -2,8 +2,16 @@
 // arrive et finit la veille de la paie suivante. Affichage seulement : les dates des opérations ne changent pas.
 import type { FinTransaction } from './types'
 
-/** La paie : crédit « REMUNERATION » de la DDFIP. */
-export const estPaie = (t: Pick<FinTransaction, 'label' | 'amount'>) => Number(t.amount) > 0 && /ddfip.*remuneration|remuneration du \d\d\/\d{4}/i.test(t.label)
+/** Montant minimal d'un crédit « DDFIP DES YVELINES » pour être la paie (écarte remboursements d'impôt et petites régularisations). */
+export const SEUIL_PAIE = 6000
+
+/** La paie : crédit « REMUNERATION » de la DDFIP, ou crédit « DDFIP DES YVELINES » d'au moins SEUIL_PAIE
+ *  (le libellé de la banque arrive d'abord sans le détail « REMUNERATION DU … »). */
+export const estPaie = (t: Pick<FinTransaction, 'label' | 'amount'>) => {
+  const montant = Number(t.amount)
+  if (!(montant > 0)) return false
+  return /ddfip.*remuneration|remuneration du \d\d\/\d{4}/i.test(t.label) || (montant >= SEUIL_PAIE && /ddfip des yvelines/i.test(t.label))
+}
 
 let paies: string[] = []
 let source: unknown = null
