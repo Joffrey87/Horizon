@@ -38,6 +38,11 @@ export function FinancesLayout() {
   // Même en échec on affiche les pages : le bandeau d'erreur du Shell dit ce qui manque.
   useEffect(() => { void loadFinances().finally(() => setEssaye(true)) }, [loadFinances])
   const charge = dejaCharge || essaye
+  // Le mois de paie à paie dépend des opérations : tant qu'elles ne sont pas chargées, « maintenant » est le mois civil.
+  // Une fois chargées, on se place sur le bon mois — sauf si l'utilisateur en a déjà choisi un.
+  const choisi = useRef(false)
+  useEffect(() => { if (charge && !choisi.current) setMois(moisCourant()) }, [charge])
+  const changerMois = (m: string) => { choisi.current = true; setMois(m) }
 
   const chemin = pathname.replace(/\/$/, '') || '/finances'
   const etroit = useMediaQuery('(max-width: 1023px)')
@@ -46,7 +51,7 @@ export function FinancesLayout() {
   const [emplacement, setEmplacement] = useState<HTMLElement | null>(null)
   useEffect(() => { setEmplacement(document.getElementById('fin-barre-haut')) }, [chemin, etroit])
   const barreHaute = etroit && position >= 0 && emplacement !== null
-  const contexte: FinContexte = { mois, setMois, filtre, setFiltre, barreHaute }
+  const contexte: FinContexte = { mois, setMois: changerMois, filtre, setFiltre, barreHaute }
 
   const depart = useRef<{ x: number; y: number; ok: boolean } | null>(null)
   const glisser = position >= 0 && etroit ? {
@@ -69,7 +74,7 @@ export function FinancesLayout() {
     <div className="fin-voile pt-1 lg:pt-4" {...glisser}>
       {barreHaute && emplacement && createPortal(
         <div className="flex min-w-0 items-center justify-center gap-1.5" data-testid="barre-finances">
-          <NavMois mois={mois} onChange={setMois} />
+          <NavMois mois={mois} onChange={changerMois} />
           <select value={filtre} onChange={(e) => setFiltre(e.target.value as FiltreTitulaire)} aria-label="Compte affiché"
             className="field !w-auto !py-1 !pl-2 !pr-6 text-xs">
             {FILTRES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
