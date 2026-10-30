@@ -24,7 +24,7 @@ describe('libellés (identiques à import_bourso.py)', () => {
   it('forme Finary', () => {
     expect(finaryLabel('CARTE 12/10/26 CARREFOUR MARKET CB*1234')).toBe('CARREFOUR MARKET CB*1234')
     expect(finaryLabel('VIR SEPA ALAN INSURANCE')).toBe('ALAN INSURANCE')
-    expect(finaryLabel('VIR INST M LENOBLE JOFFREY')).toBe('INST M LENOBLE JOFFREY')
+    expect(finaryLabel('VIR INST M MARTIN PAUL')).toBe('INST M MARTIN PAUL')
   })
   it('clés', () => {
     expect(histKey('CARREFOUR MARKET CB*1234 X')).toBe('carrefour market')
@@ -91,8 +91,8 @@ describe('analyse', () => {
   })
   it('virement interne en attente : exclu', async () => {
     const r = await analyse('bourso', [{ accountId: ACC, l4: '4593', balances: [],
-      txs: [tx({ amt: 200, label: 'VIR INST M LENOBLE JOFFREY', status: 'PDNG', entry_reference: 'V1' })] }],
-      snap({ label_cat: [['inst m lenoble joffrey', 'Virement interne', 9, 0]] }), '2026-10-25')
+      txs: [tx({ amt: 200, label: 'VIR INST M MARTIN PAUL', status: 'PDNG', entry_reference: 'V1' })] }],
+      snap({ label_cat: [['inst m martin paul', 'Virement interne', 9, 0]] }), '2026-10-25')
     expect(r.transactions[0]).toMatchObject({ internal: true, excluded: true, category_id: 'c-vi' })
   })
   it('refuse le compte virtuel', async () => {

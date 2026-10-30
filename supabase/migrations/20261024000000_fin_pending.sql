@@ -4,14 +4,9 @@
 -- - fin_import_ops : accepte `pending` par opération, et `pending_sync` (ids de comptes dont la liste PDNG est
 --   complète) : les lignes pending de la source qui ne sont plus en attente sont retirées (la ligne comptabilisée
 --   arrive, elle, avec son propre external_id).
--- - compte Boursorama « …0665 » (3e compte courant, vu par Enable Banking ; solde 0).
 alter table public.fin_transactions add column if not exists pending boolean not null default false;
 
-insert into public.fin_accounts (user_id, name, institution, kind, owner, in_budget, balance, source, external_id, sort_order)
-select '68a32837-708e-42f6-a493-5f61f7322120', 'M LENOBLE JOFFREY (…0665)', 'BoursoBank', 'courant', 'joffrey', true, 0, 'bourso', 'cacc-0665',
-       coalesce((select max(sort_order) from public.fin_accounts where user_id = '68a32837-708e-42f6-a493-5f61f7322120'), 0) + 1
-where exists (select 1 from auth.users where id = '68a32837-708e-42f6-a493-5f61f7322120')
-on conflict (user_id, source, external_id) do nothing;
+-- Le compte courant concerné existe déjà en base. Pas de libellé ni d'identifiant ici.
 
 create or replace function public.fin_import_ops(p_token text, p_payload jsonb)
 returns jsonb

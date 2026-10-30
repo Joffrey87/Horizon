@@ -15,12 +15,12 @@
 // Une vacation acceptée entre dans « Temps » (`tasks`, source:caps + source:celeste).
 //
 // Actions (corps JSON `{ action }`) :
-//   scan      — cron (clé anon, sans utilisateur) ou bouton de l'app ;
+//   scan      — cron (en-tête x-cron-secret, le même que bank-sync) ou bouton de l'app ;
 //   accept    — bouton « Accepter » d'une proposition (JWT utilisateur requis) ;
 //   unaccept  — retire une acceptation (JWT utilisateur requis).
 //   simulate  — demande fictive { date, shift_code, start_time, end_time, team,
 //               comment } passée aux mêmes règles ; si elle passe, proposition
-//               « test-… » + notification (rien côté Céleste).
+//               « test-… » + notification (rien côté Céleste). Réservé à l'app.
 //
 // Mono-utilisateur par construction : les identifiants Céleste sont des
 // secrets de la fonction, rattachés à l'utilisateur CELESTE_HORIZON_USER_ID.
@@ -33,6 +33,7 @@
 
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2'
+import { cronAutorise } from '../_shared/cronAuth.ts'
 
 const CELESTE = 'https://celeste-app.fr/api'
 const TZ = 'Europe/Paris'
@@ -53,7 +54,7 @@ function corsFor(req: Request): Record<string, string> {
   const origin = req.headers.get('Origin') ?? ''
   return {
     'Access-Control-Allow-Origin': allowed(origin) ? origin : (ALLOWED_ORIGINS[0] ?? ''),
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cron-secret',
     'Vary': 'Origin',
   }
 }
@@ -527,19 +528,20 @@ Deno.serve(async (req) => {
     let body: { action?: string; proposal_id?: string } = {}
     try { body = await req.json() } catch { /* corps vide */ }
     const action = body.action ?? 'scan'
-    const uid = await callerId(req, url, key)   // null = cron (clé anon)
     const db = createClient(url, key)
-
+    const uid = await callerId(req, url, key)
+    const cron = await cronAutorise(db, req)
+    // Le cron (secret) ne peut que scanner. Tout le reste exige le propriétaire.
     if (action === 'scan') {
-      if (uid && uid !== proprietaire) return json({ error: 'L’agent Céleste n’est pas configuré pour ce compte' }, 403)
+      if (!cron && uid !== proprietaire) {
+        return json({ error: uid ? 'L’agent Céleste n’est pas configuré pour ce compte' : 'Appel non authentifié' }, uid ? 403 : 401)
+      }
       return json(await scan(db, proprietaire))
     }
+    if (uid !== proprietaire) return json({ error: uid ? 'L’agent Céleste n’est pas configuré pour ce compte' : 'Appel non authentifié' }, uid ? 403 : 401)
     if (action === 'simulate') {
-      if (uid && uid !== proprietaire) return json({ error: 'L’agent Céleste n’est pas configuré pour ce compte' }, 403)
       return json(await simuler(db, proprietaire, body as Simulation))
     }
-
-    if (uid !== proprietaire) return json({ error: 'Appel non authentifié' }, 401)
     if (!body.proposal_id) return json({ error: 'proposal_id manquant' }, 400)
     const { data: p } = await db.from('celeste_proposals').select('*').eq('id', body.proposal_id).eq('user_id', uid).maybeSingle()
     if (!p) return json({ error: 'Proposition introuvable' }, 404)

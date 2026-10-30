@@ -22,7 +22,7 @@ const adj = (cle: string, over: Partial<FinResteAjustement> = {}): FinResteAjust
 })
 
 const joint = compte({ balance: 233.26 })
-const carte = compte({ institution: 'Crypto.com', source: 'crypto', subtype: 'carte', balance: 567.78 })
+const carte = compte({ institution: 'Crypto.com', source: 'crypto', subtype: 'carte', balance: 400 })
 const sg = compte({ institution: 'Société Générale', balance: 23.7 })
 const pea = compte({ kind: 'investissement', in_budget: false, balance: 9000 })
 const comptes = [joint, carte, sg, pea]
@@ -48,13 +48,13 @@ describe('synthèse des comptes (noms courts, Honorine)', () => {
   const base = { transactions: [] as FinTransaction[], planned: [] as FinPlanned[], ajustements: [] as FinResteAjustement[], aujourdhui: '2026-10-23' }
   const joffrey = compte({ name: 'Compte Joffrey', balance: 100 })
   const jointN = compte({ name: 'Compte Joint', balance: 233.26 })
-  const crypto = compte({ name: 'Carte Crypto', institution: 'Crypto.com', source: 'crypto', subtype: 'carte', balance: 567.78 })
+  const crypto = compte({ name: 'Carte Crypto', institution: 'Crypto.com', source: 'crypto', subtype: 'carte', balance: 400 })
   const epargnes = ['Epargne', 'Epargne urgence', 'Epargne Avenir'].map((name) => compte({ name, kind: 'epargne', balance: 5000 }))
   it('noms courts dans l’ordre Joffrey, Joint, Crypto, sans l’épargne', () => {
     const accounts = [crypto, ...epargnes, jointN, joffrey]
     const r = calculerReste({ ...base, accounts, idx: indexer(accounts, [], []) })
     expect(r.comptes.map((c) => c.court)).toEqual(['Joffrey', 'Joint', 'Crypto'])
-    expect(r.solde).toBeCloseTo(901.04, 2)
+    expect(r.solde).toBeCloseTo(733.26, 2)
   })
   it('Honorine reste absente tant que son compte n’existe pas, puis entre automatiquement dans le RESTE', () => {
     const sans = [joffrey, jointN, crypto]
@@ -63,8 +63,8 @@ describe('synthèse des comptes (noms courts, Honorine)', () => {
     const avec = [honorine, ...sans]
     const r = calculerReste({ ...base, accounts: avec, idx: indexer(avec, [], []) })
     expect(r.comptes.map((c) => c.court)).toEqual(['Joffrey', 'Joint', 'Crypto', 'Honorine'])
-    expect(r.solde).toBeCloseTo(951.04, 2)
-    expect(r.reste).toBeCloseTo(951.04, 2)
+    expect(r.solde).toBeCloseTo(783.26, 2)
+    expect(r.reste).toBeCloseTo(783.26, 2)
   })
   it('un compte Honorine archivé ou d’épargne n’est pas compté', () => {
     expect(estCompteReste(compte({ name: 'Honorine', archived: true }))).toBe(false)
@@ -115,17 +115,17 @@ describe('calculerReste', () => {
     const tx = [...histo, op(joint.id, '2026-10-22', -80, 'RESTO', { pending: true })]
     const planned = [prevu('Dentiste', 60, '2026-10-28'), prevu('Voyage', 500, '2026-12-01'), prevu('Déjà payé', 30, '2026-10-25', { done: true })]
     const r = calculerReste({ ...base, transactions: tx, planned, aujourdhui: '2026-10-04' })
-    expect(r.solde).toBeCloseTo(801.04)          // joint + carte, rien d'autre
+    expect(r.solde).toBeCloseTo(633.26)          // joint + carte, rien d'autre
     expect(r.enAttente).toBe(80)                 // informatif seulement
     expect(r.totalRecurrentes).toBe(800)
     expect(r.planifiees.map((p) => p.title)).toEqual(['Dentiste'])
-    expect(r.reste).toBeCloseTo(801.04 - 800 - 60)
+    expect(r.reste).toBeCloseTo(633.26 - 800 - 60)
   })
   it('une récurrente exclue ne compte plus', () => {
     const cle = calculerReste({ ...base, aujourdhui: '2026-10-04' }).recurrentes[0]!.cle
     const r = calculerReste({ ...base, aujourdhui: '2026-10-04', ajustements: [adj(cle, { ignore: true })] })
     expect(r.totalRecurrentes).toBe(0)
-    expect(r.reste).toBeCloseTo(801.04)
+    expect(r.reste).toBeCloseTo(633.26)
   })
 })
 

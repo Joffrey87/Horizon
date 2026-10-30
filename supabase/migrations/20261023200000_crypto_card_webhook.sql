@@ -26,12 +26,8 @@ create table if not exists public.fin_webhook_log (
 alter table public.fin_webhook_log enable row level security;
 revoke all on public.fin_webhook_log from anon, authenticated;
 
--- Compte carte (idempotent)
-insert into public.fin_accounts (user_id, name, institution, kind, subtype, owner, in_budget, balance, source, external_id, sort_order)
-select '68a32837-708e-42f6-a493-5f61f7322120', 'Crypto.com Carte', 'Crypto.com', 'courant', 'carte', 'joffrey', true, 0, 'crypto', 'card-visa',
-       coalesce((select max(sort_order) from public.fin_accounts where user_id = '68a32837-708e-42f6-a493-5f61f7322120'), 0) + 1
-where exists (select 1 from auth.users where id = '68a32837-708e-42f6-a493-5f61f7322120')
-on conflict (user_id, source, external_id) do nothing;
+-- Le compte carte existe déjà en base. Il n'est pas recréé ici : une migration
+-- versionnée ne doit pas contenir d'identifiant ni de libellé de compte.
 
 create or replace function public.fin_norm(p text) returns text
 language sql immutable set search_path = '' as $$

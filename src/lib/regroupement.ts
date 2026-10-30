@@ -2,7 +2,7 @@ import { moisBudget } from './moisPaie'
 import type { FinAccount, FinCategory, FinTransaction } from './types'
 import { normaliserLibelle } from './finances'
 
-/** Compte « Epargne Dépenses » : BoursoBank n° 00040660665 (external_id « cacc-0665 »), à défaut par son nom. */
+/** Compte « Epargne Dépenses » : external_id finissant par 0665, à défaut par son nom. */
 export const estCompteEpargneDepenses = (a: FinAccount) => (a.external_id ?? '').endsWith('0665') || /^epargne( d[ée]penses?)?$/i.test(a.name.trim())
 /** Compte CSL (compte sur livret, épargne vacances) : reconnu à son nom. */
 export const estCompteCSL = (a: FinAccount) => /\bcsl\b|compte sur livret/i.test(a.name)
