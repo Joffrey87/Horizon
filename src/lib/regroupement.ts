@@ -1,4 +1,4 @@
-import { moisBudget } from './moisPaie'
+import { moisAffecte } from './moisPaie'
 import type { FinAccount, FinCategory, FinTransaction } from './types'
 import { normaliserLibelle } from './finances'
 
@@ -20,9 +20,9 @@ export function epargneDepenses({ transactions, comptes, categories, mois }: { t
   const parId = new Map(comptes.map((c) => [c.id, c]))
   const cats = new Map(categories.map((c) => [c.id, c]))
   const compte = comptes.find(estCompteEpargneDepenses)
-  const debits = transactions.filter((t) => moisBudget(t.date) === mois && t.amount < 0 && parId.get(t.account_id)?.kind === 'courant' && !estCompteEpargneDepenses(parId.get(t.account_id)!)
+  const debits = transactions.filter((t) => moisAffecte(t) === mois && t.amount < 0 && parId.get(t.account_id)?.kind === 'courant' && !estCompteEpargneDepenses(parId.get(t.account_id)!)
     && (nomCat(t, cats) === 'epargne depenses' || /depenses annualis|epargne d[ée]penses?\b/i.test(normaliserLibelle(t.label))))
-  const credits = compte ? transactions.filter((t) => t.account_id === compte.id && moisBudget(t.date) === mois && t.amount > 0
+  const credits = compte ? transactions.filter((t) => t.account_id === compte.id && moisAffecte(t) === mois && t.amount > 0
     && !debits.some((d) => -d.amount === t.amount && Math.abs(Date.parse(d.date) - Date.parse(t.date)) <= 2 * 864e5)) : []
   const virements = [...debits, ...credits].map(mv).sort((a, b) => b.date.localeCompare(a.date))
   return { virements, idsDebits: new Set(debits.map((t) => t.id)), totalDebits: debits.reduce((n, t) => n - t.amount, 0), total: somme(virements), solde: compte ? Number(compte.balance ?? 0) : null, compte: compte?.name ?? null }
@@ -35,7 +35,7 @@ export function epargneDepenses({ transactions, comptes, categories, mois }: { t
 export function epargneVacances({ transactions, comptes, categories, mois }: { transactions: FinTransaction[]; comptes: FinAccount[]; categories: FinCategory[]; mois: string }) {
   const parId = new Map(comptes.map((c) => [c.id, c]))
   const cats = new Map(categories.map((c) => [c.id, c]))
-  const duMois = transactions.filter((t) => moisBudget(t.date) === mois)
+  const duMois = transactions.filter((t) => moisAffecte(t) === mois)
   const verse = duMois.filter((t) => t.amount < 0 && !estCompteCSL(parId.get(t.account_id) ?? ({ name: '' } as FinAccount))
     && (nomCat(t, cats) === 'epargne vacances' || /epargne vacances/.test(normaliserLibelle(t.label)))).map(mv)
   const csl = comptes.find(estCompteCSL)

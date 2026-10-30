@@ -1,4 +1,4 @@
-import { moisBudget } from './moisPaie'
+import { moisAffecte } from './moisPaie'
 // ================================================================
 // Finances — règles pures (sans réseau) : budget du mois, bilan,
 // patrimoine, allocation, provisions. Testées dans finances.test.ts.
@@ -186,7 +186,7 @@ export function agreger(transactions: FinTransaction[], idx: IndexFinances, filt
     if (!correspond(filtre, titulaireDe(tx, idx))) continue
     const c = classer(tx, idx)
     if (c.type === 'ignoree') continue
-    const m = moisBudget(tx.date)
+    const m = moisAffecte(tx)
     let mois = agg.get(m)
     if (!mois) { mois = { lignes: new Map(), entrees: 0 }; agg.set(m, mois) }
     const montant = Number(tx.amount)
@@ -207,7 +207,7 @@ export function appliquerRemboursements(transactions: FinTransaction[]): FinTran
   const parId = new Map(transactions.map((t) => [t.id, t]))
   return transactions.map((t) => {
     const origine = t.rembourse_de ? parId.get(t.rembourse_de) : undefined
-    return origine ? { ...t, date: origine.date, category_id: origine.category_id, owner: origine.owner } : t
+    return origine ? { ...t, date: origine.date, mois_affecte: origine.mois_affecte, category_id: origine.category_id, owner: origine.owner } : t
   })
 }
 
@@ -222,7 +222,7 @@ export function remboursementsRecus(opts: {
   const { mois, transactions, idx, filtre } = opts
   const effectives = new Map(appliquerRemboursements(transactions).map((t) => [t.id, t]))
   const operations = transactions.filter((t) => {
-    if (Number(t.amount) <= 0 || moisBudget(t.date) !== mois) return false
+    if (Number(t.amount) <= 0 || moisAffecte(t) !== mois) return false
     if (!correspond(filtre, titulaireDe(t, idx))) return false
     const vue = effectives.get(t.id) ?? t
     if (classer(vue, idx).type === 'ignoree') return false
@@ -492,13 +492,13 @@ export function capitalDuMois(opts: OptionsCapital & { mois: string }): CapitalM
         if (c.type === 'ignoree' && c.raison === 'compte') {
           if (!correspond(filtre, titulaireDe(tx, idx))) continue
           horsBudgetVu = true
-          if (moisBudget(tx.date) === mois) { debiteHors -= Number(tx.amount); operations.push({ id: tx.id, date: tx.date, montant: -Number(tx.amount) }) }
+          if (moisAffecte(tx) === mois) { debiteHors -= Number(tx.amount); operations.push({ id: tx.id, date: tx.date, montant: -Number(tx.amount) }) }
           continue
         }
         if (c.type !== 'ligne' || !correspond(filtre, titulaireDe(tx, idx))) continue
         budgetVu = true
         ligneVue = c.ligne
-        if (moisBudget(tx.date) === mois) { debite -= Number(tx.amount); ligneId = c.ligne; operations.push({ id: tx.id, date: tx.date, montant: -Number(tx.amount) }) }
+        if (moisAffecte(tx) === mois) { debite -= Number(tx.amount); ligneId = c.ligne; operations.push({ id: tx.id, date: tx.date, montant: -Number(tx.amount) }) }
       }
     }
     const surCompteBudget = (pret.debit_account_ids ?? []).some((id) => idx.comptes.get(id)?.in_budget)
@@ -646,7 +646,7 @@ export function entreesPrevues(opts: {
   const rang = new Map(precedents.map((m, i) => [m, i]))
   const parCle = new Map<string, { nom: string; parMois: number[] }>()
   for (const tx of opts.transactions) {
-    const i = rang.get(moisBudget(tx.date))
+    const i = rang.get(moisAffecte(tx))
     if (i === undefined || !correspond(opts.filtre, titulaireDe(tx, opts.idx))) continue
     if (classer(tx, opts.idx).type !== 'revenu' || Number(tx.amount) <= 0) continue
     const { cle, nom } = cleGroupe(tx.label)
@@ -691,7 +691,7 @@ export function depensesAVenir(opts: {
     if (!correspond(opts.filtre, titulaireDe(tx, opts.idx))) continue
     const c = classer(tx, opts.idx)
     if (c.type !== 'ligne') continue
-    const m = moisBudget(tx.date)
+    const m = moisAffecte(tx)
     const i = rang.get(m)
     if (c.ligne === courses) {
       if (i !== undefined) coursesParMois[i]! -= Number(tx.amount)
@@ -798,7 +798,7 @@ export function detailLigne(opts: {
   const { cle, mois, transactions, idx, filtre } = opts
   const groupes = new Map<string, GroupeCategorie>()
   for (const tx of transactions) {
-    if (moisBudget(tx.date) !== mois || !correspond(filtre, titulaireDe(tx, idx))) continue
+    if (moisAffecte(tx) !== mois || !correspond(filtre, titulaireDe(tx, idx))) continue
     const c = classer(tx, idx)
     const k = c.type === 'ligne' ? c.ligne : c.type === 'non_classe' ? NON_CLASSE : null
     if (k !== cle) continue
@@ -1196,13 +1196,13 @@ export function detailPeriode(opts: {
   const { cle, mois, transactions, idx, filtre } = opts
   const rang = new Map(mois.map((m, i) => [m, i]))
   const retenues = transactions.filter((tx) => {
-    if (!rang.has(moisBudget(tx.date)) || !correspond(filtre, titulaireDe(tx, idx))) return false
+    if (!rang.has(moisAffecte(tx)) || !correspond(filtre, titulaireDe(tx, idx))) return false
     const c = classer(tx, idx)
     return (c.type === 'ligne' ? c.ligne : c.type === 'non_classe' ? NON_CLASSE : null) === cle
   })
   const parPeriode = (g: GroupeIntitules): GroupePeriode => {
     const parMois = mois.map(() => 0)
-    for (const tx of g.operations) parMois[rang.get(moisBudget(tx.date))!]! -= Number(tx.amount)
+    for (const tx of g.operations) parMois[rang.get(moisAffecte(tx))!]! -= Number(tx.amount)
     const { sousGroupes, ...reste } = g
     return {
       ...reste, parMois, moyenne: mois.length ? g.total / mois.length : 0,

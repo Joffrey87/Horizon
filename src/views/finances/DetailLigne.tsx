@@ -3,7 +3,8 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
-import { categoriesParLigne, categorieEffective, aplatirGroupes, detailHorsCapital, detailLigne, euros, grouperParIntitule, hierarchieDetail, nomPropres, nomLisible, titulaireDe, type GroupeCategorie, type GroupeIntitules } from '../../lib/finances'
+import { moisAffecte } from '../../lib/moisPaie'
+import { decaleMois, libelleMois, categoriesParLigne, categorieEffective, aplatirGroupes, detailHorsCapital, detailLigne, euros, grouperParIntitule, hierarchieDetail, nomPropres, nomLisible, titulaireDe, type GroupeCategorie, type GroupeIntitules } from '../../lib/finances'
 import type { FinTransaction } from '../../lib/types'
 import { cleCommercant, clesDuGroupe, planAlias, planRegrouper, planSeparer, type Ecriture } from '../../lib/editionGroupes'
 import { ProgressBar } from '../../components/ui'
@@ -142,6 +143,7 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
   const [nom, setNom] = useState(nomAffiche)
   const [envoi, setEnvoi] = useState(false)
   const [choixCat, setChoixCat] = useState(false)
+  const [choixMois, setChoixMois] = useState(false)
   const [conso, setConso] = useState(false)
   const [lien, setLien] = useState(false)
   const idx = useIndex()
@@ -161,6 +163,29 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
 
   // Catégorie de CETTE opération seulement : même écriture que le classement à la main (LigneOperation).
   const changerCategorie = (id: string) => sel.type === 'op' && lancer(async () => { await useHorizon.getState().update('fin_transactions', sel.tx.id, { category_id: id, category_manual: true }) })
+  // Mois de CETTE opération seulement : elle y compte malgré sa date bancaire ; « Automatique » revient au mois de paie.
+  const changerMois = (m: string | null) => sel.type === 'op' && lancer(async () => { await useHorizon.getState().update('fin_transactions', sel.tx.id, { mois_affecte: m }) })
+  if (choixMois && sel.type === 'op') {
+    const actuel = moisAffecte(sel.tx)
+    const manuel = !!sel.tx.mois_affecte
+    return (
+      <div data-testid="panneau-mois" className="my-1.5 rounded-lg border border-line-2 bg-panel-2 p-2">
+        <p className="mb-1 text-[10.5px] text-ink-3">Compter cette opération dans le mois de…</p>
+        <div className="flex flex-wrap gap-1">
+          {[-2, -1, 0, 1, 2].map((n) => decaleMois(actuel, n)).map((m) => (
+            <button key={m} disabled={envoi} onClick={() => void changerMois(m)} aria-pressed={m === actuel}
+              className={`rounded-md px-1.5 py-0.5 text-[11.5px] ${m === actuel ? 'bg-[#eda145]/10 text-[#eda145] ring-1 ring-[#eda145]/60' : 'bg-[#c9b48a]/10 text-ink-2 hover:text-ink'}`}>
+              {libelleMois(m, true)}
+            </button>
+          ))}
+        </div>
+        <div className="mt-1.5 flex gap-1.5">
+          {manuel && <button disabled={envoi} onClick={() => void changerMois(null)} className={BTN_NEUTRE}>Automatique</button>}
+          <button onClick={() => setChoixMois(false)} className={BTN_NEUTRE}>Annuler</button>
+        </div>
+      </div>
+    )
+  }
   if (choixCat && sel.type === 'op') {
     const actuelle = categorieEffective(sel.tx.category_id, idx)?.id
     const puce = (id: string, libelle: string) => (
@@ -226,6 +251,8 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
       <div className="mt-2 flex flex-wrap gap-1.5">
         <button disabled={envoi} onClick={() => void renommer()} className={BTN_OK}>Renommer</button>
         {sel.type === 'op' && <button onClick={() => setChoixCat(true)} className={BTN_NEUTRE}>Catégorie</button>}
+        {sel.type === 'op' && <button data-testid="btn-mois" onClick={() => setChoixMois(true)}
+          className={sel.tx.mois_affecte ? `${BTN} border-[#eda145]/70 text-[#eda145]` : BTN_NEUTRE}>Mois…</button>}
         {sel.type === 'op' && Number(sel.tx.amount) > 0 && <button data-testid="btn-rembourse" onClick={() => setLien(true)} className={BTN_NEUTRE}>{sel.tx.rembourse_de ? 'Dépense liée…' : 'Rembourse…'}</button>}
         {site && <button onClick={() => setConso(!conso)} aria-pressed={conso} className={BTN_NEUTRE}>Consommation</button>}
         {autres.length > 0 && <button onClick={() => { const c = autres.find((g) => g.cle === cible) ?? autres[0]; if (c) { setCible(c.cle); setNom(c.nom) } setFusion(true) }} className={BTN_NEUTRE}>Regrouper avec…</button>}

@@ -1,4 +1,4 @@
-import { moisBudget } from '../../lib/moisPaie'
+import { moisAffecte } from '../../lib/moisPaie'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Search } from 'lucide-react'
@@ -30,7 +30,7 @@ export function OperationsView() {
   const liste = useMemo(() => {
     const q = texte.trim().toLowerCase()
     return transactions.filter((tx) => {
-      if (!tousLesMois && moisBudget(tx.date) !== mois) return false
+      if (!tousLesMois && moisAffecte(tx) !== mois) return false
       if (compte && tx.account_id !== compte) return false
       if (!correspond(filtre, titulaireDe(tx, idx))) return false
       if (q && !tx.label.toLowerCase().includes(q) && !reco.libelle(tx).toLowerCase().includes(q)) return false
@@ -46,7 +46,7 @@ export function OperationsView() {
 
   const total = liste.reduce((s, tx) => s + Number(tx.amount), 0)
   const aClasser = useMemo(
-    () => transactions.filter((tx) => (tousLesMois || moisBudget(tx.date) === mois) && classer(tx, idx).type === 'non_classe').length,
+    () => transactions.filter((tx) => (tousLesMois || moisAffecte(tx) === mois) && classer(tx, idx).type === 'non_classe').length,
     [transactions, tousLesMois, mois, idx])
 
   if (!transactions.length) {

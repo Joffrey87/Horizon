@@ -1,4 +1,4 @@
-import { moisBudget } from '../../lib/moisPaie'
+import { moisAffecte } from '../../lib/moisPaie'
 // Recherche d'opérations de la page Budget : champ (à droite du choix du mois)
 // et résultats sur tous les mois, regroupés par mois.
 import { useMemo, useState } from 'react'
@@ -48,7 +48,7 @@ export function ResultatsRecherche({ requete }: { requete: string }) {
     [transactions, requete, idx, filtre, reco])
   const parMois = useMemo(() => {
     const m = new Map<string, FinTransaction[]>()
-    for (const tx of liste.slice(0, limite)) m.set(moisBudget(tx.date), [...(m.get(moisBudget(tx.date)) ?? []), tx])
+    for (const tx of liste.slice(0, limite)) m.set(moisAffecte(tx), [...(m.get(moisAffecte(tx)) ?? []), tx])
     return [...m.entries()]
   }, [liste, limite])
   const total = liste.reduce((s, tx) => s + Number(tx.amount), 0)

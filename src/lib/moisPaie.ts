@@ -41,3 +41,6 @@ export function moisBudget(date: string, liste: readonly string[] = paies): stri
   const m = moisOuvertPar(derniere)
   return m > civil ? m : civil
 }
+
+/** Mois d'une opération : celui que Joffrey lui a affecté à la main (`mois_affecte`), sinon le mois de paie de sa date. */
+export const moisAffecte = (t: { date: string; mois_affecte?: string | null }): string => t.mois_affecte || moisBudget(t.date)

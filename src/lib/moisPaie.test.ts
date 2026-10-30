@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { installerPaies, moisBudget, moisOuvertPar, datesPaies } from './moisPaie'
+import { installerPaies, moisAffecte, moisBudget, moisOuvertPar, datesPaies } from './moisPaie'
 
 const P = ['2026-06-26', '2026-07-29', '2026-08-27', '2026-09-28']
 describe('moisBudget (de paie à paie)', () => {
@@ -40,5 +40,10 @@ describe('moisBudget (de paie à paie)', () => {
     expect(datesPaies()).toEqual(['2026-10-28'])
     expect(moisBudget('2026-10-27')).toBe('2026-10')
     expect(moisBudget('2026-10-28')).toBe('2026-11')
+  })
+  it('moisAffecte : le mois choisi à la main prime sur la date', () => {
+    expect(moisAffecte({ date: '2026-10-29', mois_affecte: '2026-11' }, )).toBe('2026-11')
+    expect(moisAffecte({ date: '2026-10-29', mois_affecte: '2026-09' })).toBe('2026-09')
+    expect(moisAffecte({ date: '2026-03-10', mois_affecte: null })).toBe('2026-03')
   })
 })

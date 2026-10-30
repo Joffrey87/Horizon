@@ -567,6 +567,8 @@ export interface FinTransaction {
   pending?: boolean
   /** Dépense que cette opération rembourse : elle compte dans le mois et la catégorie de cette dépense. */
   rembourse_de?: UUID | null
+  /** Mois choisi à la main ('yyyy-MM') : l'opération y compte malgré sa date bancaire. null = mois de paie de sa date. */
+  mois_affecte?: string | null
   source: string
   external_id: string | null
   created_at: string
