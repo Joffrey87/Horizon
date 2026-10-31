@@ -232,6 +232,11 @@ export function ResumeView() {
   const prevuFraisFixe = tFF ? complement(tFF.budget, tFF.depense) : 0
   const prevuVac = tVac ? complement(tVac.budget && tVac.budget > 0 ? tVac.budget : CIBLE_VACANCES, tVac.depense + epVac.total) : 0
   const prevuCourses = tCourses ? complement(CIBLE_COURSES, tCourses.depense) : 0
+  // « Reste après frais fixes » : le mois en cours aussi compte ce qui va encore partir (frais fixes jusqu'à leur budget, courses jusqu'à 750 €),
+  // sans passer en italique les lignes elles-mêmes. Mois à venir : mêmes valeurs que ci-dessus ; mois passé : rien.
+  const complementReste = (budget: number | null | undefined, reel: number) => foyer && mois >= moisCourant() ? Math.max(0, (budget ?? 0) - reel) : 0
+  const resteFraisFixe = tFF ? complementReste(tFF.budget, tFF.depense) : 0
+  const resteCourses = tCourses ? complementReste(CIBLE_COURSES, tCourses.depense) : 0
   // Épargne Avenir : budget d'épargne (PER, capital de Reims…) complété jusqu'à son budget ; le capital Lille (hors budget) s'y ajoute
   // à l'affichage seulement, il n'entre jamais dans le Reste.
   const capitalHorsBudget = (capitalMois?.prets ?? []).filter((p) => p.horsBudget && p.etat === 'fait').reduce((n, p) => n + p.extrait, 0)
@@ -418,7 +423,7 @@ export function ResumeView() {
     const montant = (t?: TuileBudget) => t?.depense ?? 0
     const bloc3 = [...apart, ...ordre2]
     const reste1 = !foyer || budgetTuile <= 0 ? null
-      : budgetTuile - (montant(ffTot) + prevuFraisFixe + epHabAffichee + montant(vac) + epVac.total + prevuVac + montant(courses) + prevuCourses)
+      : budgetTuile - (montant(ffTot) + resteFraisFixe + epHabAffichee + montant(vac) + epVac.total + prevuVac + montant(courses) + resteCourses)
     // Ce qui est venu d'Épargne Dépenses (colonne « Épargne dép » de Dépenses exceptionnelles) est déduit des dépenses retranchées :
     // une dépense payée par cette épargne ne pèse pas sur le Reste du salaire.
     const apportTotal = apportEp ? apportEp.lignes.reduce((n, l) => n + l.montant, 0) : 0
@@ -438,8 +443,8 @@ export function ResumeView() {
       </div>
     )
     const calculReste1: [string, number][] = [
-      ['Frais fixe', montant(ffTot) + prevuFraisFixe], ['Épargne Avenir', epHabAffichee],
-      ['Vacances', montant(vac) + epVac.total + prevuVac], ['Courses', montant(courses) + prevuCourses],
+      ['Frais fixe', montant(ffTot) + resteFraisFixe], ['Épargne Avenir', epHabAffichee],
+      ['Vacances', montant(vac) + epVac.total + prevuVac], ['Courses', montant(courses) + resteCourses],
     ]
     return [
       { noeuds: bloc1.filter(Boolean), apres: texteReste('reste-apres-vacances', reste1, false, 'Reste après frais fixes', [['Budget', -budgetTuile], ...calculReste1]) },
