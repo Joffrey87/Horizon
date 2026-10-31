@@ -246,6 +246,9 @@ export function ResumeView() {
   const prevuEpargne = prevuEpargneHabituelle + lillePrevu
   // Épargne habituelle affichée (et retirée du Reste) : arrondie à l'euro. Capital Airbnb = capital Lille, fait ou prévu.
   const epHabAffichee = Math.round(epargne - exceptionnelle - capitalHorsBudget + prevuEpargneHabituelle)
+  // Pour le Reste (mois en cours compris) : l'épargne habituelle complétée jusqu'à son budget, et les vacances jusqu'à leur cible (700 €).
+  const epHabReste = Math.round(epargne - exceptionnelle - capitalHorsBudget + complementReste(budgetEpargne, epargne - exceptionnelle - capitalHorsBudget))
+  const resteVac = tVac ? complementReste(tVac.budget && tVac.budget > 0 ? tVac.budget : CIBLE_VACANCES, tVac.depense + epVac.total) : 0
   const capitalAirbnb = (capitalMois?.prets ?? []).filter((p) => p.horsBudget).reduce((n, p) => n + (p.etat === 'fait' ? p.extrait : p.prevu), 0)
 
   // Sous-catégorie « Épargne Dépenses » de Dépenses exceptionnelles : ce qui est venu de ce compte (téléphone, achat vêtements…),
@@ -423,7 +426,7 @@ export function ResumeView() {
     const montant = (t?: TuileBudget) => t?.depense ?? 0
     const bloc3 = [...apart, ...ordre2]
     const reste1 = !foyer || budgetTuile <= 0 ? null
-      : budgetTuile - (montant(ffTot) + resteFraisFixe + epHabAffichee + montant(vac) + epVac.total + prevuVac + montant(courses) + resteCourses)
+      : budgetTuile - (montant(ffTot) + resteFraisFixe + epHabReste + montant(vac) + epVac.total + resteVac + montant(courses) + resteCourses)
     // Ce qui est venu d'Épargne Dépenses (colonne « Épargne dép » de Dépenses exceptionnelles) est déduit des dépenses retranchées :
     // une dépense payée par cette épargne ne pèse pas sur le Reste du salaire.
     const apportTotal = apportEp ? apportEp.lignes.reduce((n, l) => n + l.montant, 0) : 0
@@ -443,8 +446,8 @@ export function ResumeView() {
       </div>
     )
     const calculReste1: [string, number][] = [
-      ['Frais fixe', montant(ffTot) + resteFraisFixe], ['Épargne Avenir', epHabAffichee],
-      ['Vacances', montant(vac) + epVac.total + prevuVac], ['Courses', montant(courses) + resteCourses],
+      ['Frais fixe', montant(ffTot) + resteFraisFixe], ['Épargne Avenir', epHabReste],
+      ['Vacances', montant(vac) + epVac.total + resteVac], ['Courses', montant(courses) + resteCourses],
     ]
     return [
       { noeuds: bloc1.filter(Boolean), apres: texteReste('reste-apres-vacances', reste1, false, 'Reste après frais fixes', [['Budget', -budgetTuile], ...calculReste1]) },
