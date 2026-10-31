@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight, Info } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
+import { useVue } from './contexte'
+import { useNomsEpargne } from './nomsEpargne'
 import { DetailLigneLecture } from './DetailLigne'
 import { euros, type LigneBudget, type listeEpargnes } from '../../lib/finances'
 import type { epargneUtilisee } from '../../lib/epargneUtilisee'
@@ -46,27 +48,51 @@ const MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 
 /** « 1 oct. » */
 const dateJour = (iso: string) => `${Number(iso.slice(8, 10))} ${MOIS_COURTS[Number(iso.slice(5, 7)) - 1]}`
 
-/** Épargnes du mois, une ligne chacune : faite, prévue (ou prêt payé hors budget, pour information). */
+/** Nom affiché d'une ligne d'épargne : on le change en cliquant sur la ligne (valable pour tous les mois). Vide = nom d'origine. */
+function ChampNom({ origine, affiche, renomme, onValider }: { origine: string; affiche: string; renomme: boolean; onValider: (v: string) => Promise<void> }) {
+  const [valeur, setValeur] = useState(renomme ? affiche : '')
+  const [envoi, setEnvoi] = useState(false)
+  const valider = async (v: string) => { setEnvoi(true); await onValider(v); setEnvoi(false) }
+  return (
+    <div data-testid="renommer-epargne" className="flex items-center gap-1.5 py-1 pl-4">
+      <input aria-label="Nom affiché" value={valeur} placeholder={origine} onChange={(e) => setValeur(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') void valider(valeur) }} className="field min-w-0 flex-1 !py-0.5 text-sm" />
+      <button type="button" disabled={envoi} onClick={() => void valider(valeur)} className="rounded-full border border-[#4cc79a]/70 px-2 py-0.5 text-xs text-[#4cc79a]">Renommer</button>
+      {renomme && <button type="button" disabled={envoi} onClick={() => { setValeur(''); void valider('') }} title={`Revenir à « ${origine} »`}
+        className="rounded-full border border-line-2 px-2 py-0.5 text-xs text-ink-2">Nom d’origine</button>}
+    </div>
+  )
+}
+
+/** Épargnes du mois, une ligne chacune : faite, prévue (ou prêt payé hors budget, pour information).
+ *  Un clic sur une ligne l'ouvre : son nom affiché se change (pour tous les mois), puis ses opérations. */
 export function DetailEpargne({ liste, utilisee }: { liste: ReturnType<typeof listeEpargnes>; utilisee?: ReturnType<typeof epargneUtilisee> }) {
-  // Détail d'une ligne (prêt de Reims : opérations, intérêts, assurance) : replié tant qu'on ne clique pas dessus.
   const [ouverts, setOuverts] = useState<Set<string>>(new Set())
   const basculer = (cle: string) => setOuverts((o) => { const n = new Set(o); if (n.has(cle)) n.delete(cle); else n.add(cle); return n })
+  const { nom: nomAffiche, renomme, renommer } = useNomsEpargne()
+  const lecture = !!useVue()   // vue partagée : rien à modifier
   const badge = (etat: 'fait' | 'prevu') => etat === 'fait'
     ? <span className="whitespace-nowrap rounded-full border border-[#4cc79a]/50 px-1.5 text-[10px] uppercase tracking-wider text-[#4cc79a]">fait</span>
     : <span className="whitespace-nowrap rounded-full border border-[#eda145]/50 px-1.5 text-[10px] uppercase tracking-wider text-[#eda145]">prévu</span>
   return (
     <div data-testid="detail-epargne" className="card mx-auto w-full max-w-md space-y-1 px-4 py-3 text-sm">
       {liste.lignes.length === 0 && <p className="text-ink-3">Aucune épargne ce mois-ci.</p>}
-      {liste.lignes.map((l) => {
-        const cle = `${l.nom}-${l.etat}`
+      {liste.lignes.map((ligne) => {
+        const cle = `${ligne.nom}-${ligne.etat}`
+        const origine = ligne.nom
+        const l = { ...ligne, nom: nomAffiche(origine) }
         const detaille = !!l.pastilles?.length
         const avecOperations = !!l.ligneId && l.etat === 'fait'
         const ouvert = ouverts.has(cle)
-        const entete = (
+        const testid = avecOperations ? 'epargne-ligne-operations' : detaille ? 'epargne-ligne-detail' : 'epargne-ligne'
+        const contenu = (
           <>
-            <span className="flex min-w-0 items-center gap-2">
+            <span className="flex min-w-0 items-center gap-1.5">
+              {!lecture || detaille || avecOperations
+                ? (ouvert ? <ChevronDown size={13} className="shrink-0 text-ink-3" /> : <ChevronRight size={13} className="shrink-0 text-ink-3" />)
+                : null}
               <span className="truncate">{l.nom}</span>
-              {detaille && <Info size={13} aria-hidden className={`shrink-0 ${ouvert ? 'text-[#d8c7a3]' : 'text-ink-3'}`} />}
+              {renomme(origine) && !lecture && <span aria-hidden className="shrink-0 text-[10px] text-[#eda145]">✎</span>}
               {badge(l.etat)}
             </span>
             <span className="shrink-0 tabular-nums">{euros(l.montant)}</span>
@@ -74,16 +100,13 @@ export function DetailEpargne({ liste, utilisee }: { liste: ReturnType<typeof li
         )
         return (
           <div key={cle}>
-            {avecOperations
-              ? <button type="button" data-testid="epargne-ligne-operations" aria-expanded={ouvert} onClick={() => basculer(cle)} title="Voir les opérations"
-                  className="flex w-full items-center justify-between gap-3 text-left">
-                  <span className="flex min-w-0 items-center gap-1.5">{ouvert ? <ChevronDown size={13} className="shrink-0 text-ink-3" /> : <ChevronRight size={13} className="shrink-0 text-ink-3" />}<span className="truncate">{l.nom}</span>{badge(l.etat)}</span>
-                  <span className="shrink-0 tabular-nums">{euros(l.montant)}</span>
-                </button>
-              : detaille
-              ? <button type="button" data-testid="epargne-ligne-detail" aria-expanded={ouvert} onClick={() => basculer(cle)} title="Voir le détail"
-                  className="flex w-full items-center justify-between gap-3 text-left">{entete}</button>
-              : <div className="flex items-center justify-between gap-3">{entete}</div>}
+            {lecture && !detaille && !avecOperations
+              ? <div className="flex items-center justify-between gap-3">{contenu}</div>
+              : <button type="button" data-testid={testid} aria-expanded={ouvert} onClick={() => basculer(cle)}
+                  title={lecture ? 'Voir le détail' : 'Voir le détail et changer le nom affiché'} className="flex w-full items-center justify-between gap-3 text-left">{contenu}</button>}
+            {ouvert && !lecture && (
+              <ChampNom origine={origine} affiche={l.nom} renomme={renomme(origine)} onValider={(v) => renommer(origine, v)} />
+            )}
             {avecOperations && ouvert && <div className="pl-1"><DetailLigneLecture cle={l.ligneId!} couleur="#6ebe78" deplie /></div>}
             {detaille && ouvert && (
               <div data-testid="pastilles-epargne" className="flex flex-wrap gap-1 pl-3">
