@@ -560,15 +560,11 @@ export function epargnesPrevues(opts: {
 }): { total: number; details: EpargnePrevue[] } {
   if (opts.mois < opts.moisCourant) return { total: 0, details: [] }
   const details: EpargnePrevue[] = []
-  // Le capital remboursé ou encore à débiter (prêts payés depuis le budget) fait partie de l'épargne habituelle : il consomme le budget d'épargne
-  // avant qu'on prévoie le reste (300 de PER + ~1 000 de capital = 1 300 : plus rien de prévu ; le capital à venir reste listé à part, sans doublon). Un prêt hors budget (Lille) n'y compte pas.
-  let capitalFait = Math.max(0, (opts.capital?.fait ?? 0) + (opts.capital?.prevu ?? 0) - (opts.capital?.horsBudget ?? 0))
+  // Le budget d'une ligne d'épargne est le montant viré (300 € pour l'Épargne avenir) : le capital des prêts s'y ajoute, il ne le consomme pas.
+  // Le capital à venir est listé à part ci-dessous ; un prêt hors budget (Lille) n'y compte pas.
   for (const l of opts.lignes) {
     if (!estEpargneComptee(l.ligne) || l.budget === null) continue
-    let reste = l.budget - l.reel
-    const pris = Math.min(capitalFait, Math.max(0, reste))
-    reste -= pris
-    capitalFait -= pris
+    const reste = l.budget - l.reel
     if (reste > 0.5) details.push({ nom: l.ligne.name, montant: reste, type: 'ligne' })
   }
   for (const p of opts.capital?.prets ?? []) {
