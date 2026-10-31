@@ -12,7 +12,10 @@ import { DetailEpargne, DetailReste } from './DetailsTuiles'
 import { somme, useTuilesMois } from './tuilesMois'
 import { DetailTroisMois } from './DetailTroisMois'
 import { ChampRecherche, ResultatsRecherche } from './RechercheOperations'
-import { useFin, useIndex, useVue, useTransactionsBudget } from './contexte'
+import { moisCourant, useFin, useIndex, useVue, useTransactionsBudget } from './contexte'
+
+/** Courses prévues sur un mois, en euros : ce qui reste à dépenser (prévu − déjà dépensé) est retiré du Reste des dépenses. */
+const COURSES_PREVUES = 750
 import { MontantBudget, useBudgetMois } from './budgetMois'
 import { estFraisFixe, estMoisSansObjectif } from '../../lib/moisSansObjectif'
 import { BoutonDetails, DetailLigne, type Niveau } from './DetailLigne'
@@ -170,14 +173,22 @@ export function BudgetView() {
     )
   }
 
-  const sousTotal = (titre: string, ls: LigneBudget[], avecBudget = true) => {
+  // Le Reste du sous-total « Dépenses » retire ce qui va encore partir : les frais fixes pas encore passés ce mois-ci,
+  // et les courses prévues (COURSES_PREVUES) moins ce qui est déjà dépensé en courses. Rien à venir pour un mois passé.
+  const fixesAVenir = aVenir.details.filter((d) => !d.nom.startsWith('Courses')).reduce((n, d) => n + d.montant, 0)
+  const coursesReel = somme(depenses.filter((l) => l.ligne?.name.toLowerCase().startsWith('courses')), (l) => l.reel)
+  const coursesAVenir = mois >= moisCourant() ? Math.max(0, COURSES_PREVUES - coursesReel) : 0
+  const sousTotal = (titre: string, ls: LigneBudget[], avecBudget = true, retireFixes = false) => {
     const budget = foyer && avecBudget ? somme(ls, (l) => l.budget) : null
     const reel = somme(ls, (l) => l.reel)
+    const aRetirer = retireFixes ? Math.max(0, fixesAVenir) + coursesAVenir : 0
     return (
       <tr className="border-t border-line text-xs text-ink-3">
         <td className="py-1.5 pr-2 uppercase tracking-wider">{titre}</td>
         <td className="px-2">{!sansObjectif && <BarreBudget reel={reel} budget={budget} depasse={budget !== null && budget > 0 && reel > budget + 0.5} discret />}</td>
-        <td className="px-2 text-right tabular-nums">{sansObjectif ? euros(reel) : budget !== null ? euros(budget - reel) : ''}</td>
+        <td className="px-2 text-right tabular-nums" title={aRetirer > 0.5 && budget !== null ? `Reste une fois passés les frais fixes à venir (${euros(fixesAVenir)}) et les courses prévues (${euros(coursesAVenir)})` : undefined}>
+          {sansObjectif ? euros(reel) : budget !== null ? euros(budget - reel - aRetirer) : ''}
+        </td>
         <td className="px-2 text-right tabular-nums">{euros(somme(ls, (l) => l.moyenne3))}</td>
         <td className="px-2 text-right">{voirM1 && montantPrecedent(somme(ls, (l) => l.precedent))}</td>
         <td className="pl-2 text-right tabular-nums">{voirPrev && budget !== null ? euros(somme(ls, (l) => l.prevision)) : ''}</td>
@@ -265,7 +276,7 @@ export function BudgetView() {
                     <td colSpan={2} />
                   </tr>
                 )}
-                {sousTotal('Dépenses', depenses.filter((l) => l.cle !== NON_CLASSE))}
+                {sousTotal('Dépenses', depenses.filter((l) => l.cle !== NON_CLASSE), true, true)}
                 {depenses.filter((l) => l.cle !== NON_CLASSE).map(ligneTableau)}
                 {epargnes.length > 0 && sousTotal('Épargne', epargnes)}
                 {epargnes.map(ligneTableau)}
