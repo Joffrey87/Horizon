@@ -247,7 +247,10 @@ export function ResumeView() {
   // Épargne habituelle affichée (et retirée du Reste) : arrondie à l'euro. Capital Airbnb = capital Lille, fait ou prévu.
   const epHabAffichee = Math.round(epargne - exceptionnelle - capitalHorsBudget + prevuEpargneHabituelle)
   // Pour le Reste (mois en cours compris) : l'épargne habituelle complétée jusqu'à son budget, et les vacances jusqu'à leur cible (700 €).
-  const epHabReste = Math.round(epargne - exceptionnelle - capitalHorsBudget + complementReste(budgetEpargne, epargne - exceptionnelle - capitalHorsBudget))
+  // Ce qui dépasse son budget est du bonus (hors budget) : il ne diminue pas le Reste, qui ne retire que l'épargne prévue.
+  const epHabReste = foyer && mois >= moisCourant() && budgetEpargne > 0
+    ? Math.round(budgetEpargne)
+    : Math.round(epargne - exceptionnelle - capitalHorsBudget)
   const resteVac = tVac ? complementReste(tVac.budget && tVac.budget > 0 ? tVac.budget : CIBLE_VACANCES, tVac.depense + epVac.total) : 0
   const capitalAirbnb = (capitalMois?.prets ?? []).filter((p) => p.horsBudget).reduce((n, p) => n + (p.etat === 'fait' ? p.extrait : p.prevu), 0)
 
