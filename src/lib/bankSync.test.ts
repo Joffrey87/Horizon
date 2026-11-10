@@ -53,6 +53,21 @@ describe('catégorisation', () => {
     expect(pickCategory('INCONNU', -3, h)).toEqual(['Dépenses du mois › Achats', 'defaut-achats'])
     expect(pickCategory('INCONNU', 3, h)).toEqual(['Non catégorisé', 'defaut'])
   })
+
+  it('une référence qui change chaque mois (Spotify P…) ne casse pas l\'historique', () => {
+    const h = buildHistory(snap({ transactions: [
+      { account_id: ACC, date: '2026-10-05', amount: -17.2, label: 'Spotify P478E5253 CB*9781', category: 'Frais fixe › Abonnements' },
+    ] }))
+    expect(pickCategory('Spotify P48BCB88F CB*9781', -17.2, h)).toEqual(['Frais fixe › Abonnements', 'historique'])
+  })
+
+  it('un prélèvement daté (ECH PRET … DU jj/mm/aa) suit son historique d\'un mois à l\'autre', () => {
+    const h = buildHistory(snap({ transactions: [
+      { account_id: ACC, date: '2026-10-01', amount: -1183.16, label: 'ECH PRET 164522C DU 01/10/26', category: 'Frais fixe › Rembours. Emprunt Reims' },
+      { account_id: ACC, date: '2026-09-01', amount: -1183.16, label: 'ECH PRET 164522C DU 01/09/26', category: 'Frais fixe › Rembours. Emprunt Reims' },
+    ] }))
+    expect(pickCategory('ECH PRET 164522C DU 01/11/26', -1183.16, h)).toEqual(['Frais fixe › Rembours. Emprunt Reims', 'historique'])
+  })
 })
 
 describe('analyse', () => {

@@ -68,6 +68,11 @@ export function key(label: string): string {
   s = s.replace(/\bcb\*\d+/g, '')
   s = s.replace(/\b\d+,\d+ [a-z]{3} \/ 1 euro = [\d,.]+/g, '')
   s = s.replace(/\bref\s*:?.*$/, '')
+  // « … DU 01/11/26 » : la date d'échéance change chaque mois (ECH PRET 164522C DU 01/11/26) ; sans ça, un
+  // prélèvement récurrent n'est jamais reconnu dans l'historique et tombe en « Achats ».
+  s = s.replace(/\bdu \d\d\/\d\d\/\d\d(\d\d)?\b/g, '')
+  // Référence qui change à chaque prélèvement (« Spotify P48BCB88F ») : jeton mêlant lettres et chiffres, 8 signes ou plus.
+  s = s.replace(/\b(?=[a-z0-9]*\d)(?=[a-z0-9]*[a-z])[a-z0-9]{8,}\b/g, '')
   s = s.replace(/^(vir inst|vir|prlv sepa|prlv)\s+/, '')
   return s.replace(/[^a-z0-9]+/g, ' ').trim()
 }
