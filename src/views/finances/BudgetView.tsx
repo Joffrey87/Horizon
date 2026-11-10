@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowRight, ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react'
+import { ArrowRight, ChevronsDownUp, ChevronsUpDown, Eye, EyeOff } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import {
   NON_CLASSE, decaleMois, entreesPrevues, euros, fondLigne, libelleMois, type LigneBudget,
@@ -39,7 +39,7 @@ export function BudgetView() {
   const idx = useIndex()
   const [depli, setDepli] = useState<Depli>(null)
   // Pastille Détails d'une ligne du tableau : toutes ses catégories ouvertes sur leurs groupes (1) ou leurs opérations (2).
-  const [niveauTous, setNiveauTous] = useState<{ cle: string; n: Niveau } | null>(null)
+  const [niveauTous, setNiveauTous] = useState<{ cle: string; n: Niveau; v: number } | null>(null)
   // Mois d'où l'on est parti en cliquant un montant de M-1 : tant qu'on ne l'a pas retrouvé,
   // une flèche dans l'en-tête de la colonne M-1 avance d'un mois.
   const [retour, setRetour] = useState<string | null>(null)
@@ -83,7 +83,13 @@ export function BudgetView() {
   }
   const reglerTous = (cle: string, n: Niveau) => {
     setDepli(n ? { cle, vue: 'mois' } : null)
-    setNiveauTous(n ? { cle, n } : null)
+    setNiveauTous(n ? { cle, n, v: 0 } : null)
+  }
+  // Icône à côté du titre d'une ligne ouverte : tout déplier (catégories, groupes, opérations) / tout replier
+  // (la ligne reste ouverte). Le compteur `v` remet à zéro les réglages faits catégorie par catégorie.
+  const toutDeplier = (cle: string, n: Niveau) => {
+    setDepli({ cle, vue: 'mois' })
+    setNiveauTous({ cle, n, v: (niveauTous?.v ?? 0) + 1 })
   }
   // Changer de mois ne referme rien : ligne, groupes et opérations dépliés restent ouverts.
   const allerPrecedent = () => { setRetour(retour ?? mois); setMois(precedent) }
@@ -108,7 +114,6 @@ export function BudgetView() {
           <td className="py-2 pr-2">
             <div className="flex items-center justify-between gap-2">
               <button onClick={() => basculer(l.cle, 'mois')} aria-expanded={ouvert === 'mois'} className="flex items-center gap-1.5 text-left">
-                {ouvert === 'mois' ? <ChevronDown size={14} className="text-ink-3" /> : <ChevronRight size={14} className="text-ink-3" />}
                 <span className="flex flex-col">
                   <span className={l.ligne ? '' : 'italic text-ink-2'}>{l.ligne?.name ?? 'Non classé'}</span>
                   {(capitalMois?.extraitParLigne.get(l.cle) ?? 0) > 0.5 && (
@@ -118,6 +123,17 @@ export function BudgetView() {
                   )}
                 </span>
               </button>
+              {ouvert === 'mois' && (() => {
+                const toutOuvert = niveauTous?.cle === l.cle && niveauTous.n === 2
+                const Icone = toutOuvert ? ChevronsDownUp : ChevronsUpDown
+                return (
+                  <button onClick={() => toutDeplier(l.cle, toutOuvert ? 0 : 2)} aria-pressed={toutOuvert}
+                    title={toutOuvert ? 'Tout replier' : 'Tout déplier'} aria-label={toutOuvert ? 'Tout replier' : 'Tout déplier'}
+                    className="mr-auto rounded p-1 text-ink-3 hover:bg-panel-3 hover:text-ink">
+                    <Icone size={14} />
+                  </button>
+                )
+              })()}
               <BoutonDetails niveau={ouvert === 'mois' && niveauTous?.cle === l.cle ? niveauTous.n : 0} onChange={(n) => reglerTous(l.cle, n)} />
             </div>
           </td>
@@ -164,7 +180,7 @@ export function BudgetView() {
           <tr>
             <td colSpan={6} className="bg-panel-2/40 px-3 pb-3 pt-1">
               {ouvert === 'mois'
-                ? <DetailLigne cle={l.cle} niveauTous={niveauTous?.cle === l.cle ? niveauTous.n : 0} />
+                ? <DetailLigne key={`${l.cle}-${niveauTous?.cle === l.cle ? niveauTous.v : 0}`} cle={l.cle} niveauTous={niveauTous?.cle === l.cle ? niveauTous.n : 0} />
                 : <DetailTroisMois cle={l.cle} />}
             </td>
           </tr>

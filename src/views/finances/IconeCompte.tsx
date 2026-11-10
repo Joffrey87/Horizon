@@ -4,7 +4,7 @@ import creditCooperatif from '../../assets/comptes/credit-cooperatif.png'
 import cryptoCom from '../../assets/comptes/crypto-com.svg'
 import { titulaireDe, type IndexFinances } from '../../lib/finances'
 import { sourceCompte, type CalqueCompte, type LogoCompte } from '../../lib/sourceCompte'
-import type { FinAccount, FinTransaction } from '../../lib/types'
+import type { FinAccount, FinOwner, FinTransaction } from '../../lib/types'
 
 const LOGOS: Record<LogoCompte, string> = { boursorama, 'credit-cooperatif': creditCooperatif, 'crypto-com': cryptoCom, airbnb }
 const ROSE = '#e8559a'
@@ -38,5 +38,15 @@ export function IconeDeCompte({ compte, taille = 18 }: { compte: FinAccount; tai
       <img src={LOGOS[s.logo]} alt="" className={plein ? 'h-full w-full' : 'h-[74%] w-[74%] object-contain'} />
       {s.calque && <span className="absolute inset-0 opacity-50" style={{ background: CALQUES[s.calque] }} />}
     </span>
+  )
+}
+
+const CALQUE_TITULAIRE: Record<FinOwner, Exclude<CalqueCompte, null>> = { joffrey: 'joffrey', honorine: 'honorine', commun: 'partage' }
+
+/** Pastille d'attribution dans Horizon, sans logo : fond bleu (Joffrey), rose (Honorine) ou bleu/rose (Commun). */
+export function IconeTitulaire({ titulaire, taille = 18 }: { titulaire: FinOwner; taille?: number }) {
+  return (
+    <span data-testid={`icone-titulaire-${titulaire}`} data-titulaire={titulaire} title={titulaire === 'commun' ? 'Commun' : titulaire === 'joffrey' ? 'Joffrey' : 'Honorine'}
+      className="inline-block shrink-0 self-center rounded-[28%]" style={{ width: taille, height: taille, background: CALQUES[CALQUE_TITULAIRE[titulaire]] }} />
   )
 }

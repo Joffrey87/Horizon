@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Heart, PiggyBank, Receipt, Plane, ShoppingCart, Sofa, Wallet, Zap, type LucideIcon } from 'lucide-react'
+import { ChevronsDownUp, ChevronsUpDown, Heart, PiggyBank, Receipt, Plane, ShoppingCart, Sofa, Wallet, Zap, type LucideIcon } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import { budgetDe, BUDGET_MOIS_DEFAUT, entreesPrevues, euros } from '../../lib/finances'
 import { COULEURS_ANNEAU, eclaircie, rgba, tuilesBudgets, type TuileBudget } from '../../lib/resume'
@@ -79,7 +79,10 @@ function ColMontant({ titre, montant, budget, bureau, italique, couleur, test, i
 }
 const ColVide = ({ bureau, principal }: { bureau: boolean; principal?: boolean }) => <div aria-hidden className={`shrink-0 ${largeurCol(bureau, principal)}`} />
 
-function CorpsTuile({ t, edition, bureau, apport, prevu }: { t: TuileBudget; edition: ReturnType<typeof useBudgetMois>; bureau: boolean; apport?: ApportLigne; prevu?: number }) {
+/** Icône à côté du titre d'une tuile ouverte : tout déplier (catégories et leurs groupes) / tout replier. */
+type ToutProps = { toutOuvert: boolean; onTout: () => void }
+
+function CorpsTuile({ t, edition, bureau, apport, prevu, tout }: { t: TuileBudget; edition: ReturnType<typeof useBudgetMois>; bureau: boolean; apport?: ApportLigne; prevu?: number; tout?: ToutProps }) {
   const Icone = ICONES[t.cle] ?? Wallet
   const depasse = t.ton === 'depasse'
   const clair = eclaircie(t.rvb, 0.24)
@@ -101,7 +104,16 @@ function CorpsTuile({ t, edition, bureau, apport, prevu }: { t: TuileBudget; edi
         <Icone size={bureau ? 12 : 14} color={clair} strokeWidth={1.8} />
       </Anneau>
       <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-        <p className={`font-semibold leading-tight text-ink-2 ${bureau ? 'truncate text-[14px]' : 'line-clamp-2 text-[12px]'}`}>{t.titre}</p>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <p className={`min-w-0 font-semibold leading-tight text-ink-2 ${bureau ? 'truncate text-[14px]' : 'line-clamp-2 text-[12px]'}`}>{t.titre}</p>
+          {tout && (
+            <button type="button" onClick={tout.onTout} data-testid="tout-deplier" aria-pressed={tout.toutOuvert}
+              title={tout.toutOuvert ? 'Tout replier' : 'Tout déplier'} aria-label={tout.toutOuvert ? 'Tout replier' : 'Tout déplier'}
+              className="shrink-0 rounded p-1 text-ink-3 hover:bg-white/10 hover:text-ink">
+              {tout.toutOuvert ? <ChevronsDownUp size={14} /> : <ChevronsUpDown size={14} />}
+            </button>
+          )}
+        </div>
       </div>
       {/* Dépensé (avec « / budget » en gris) à gauche, à droite de l'intitulé ; l'épargne utilisée dans la colonne de droite. */}
       <div className="flex shrink-0 gap-1">
@@ -131,8 +143,8 @@ function enTete(depliable: boolean, ouvert: boolean, onBasculer: () => void) {
 }
 
 /** Téléphone : tuile teintée de la couleur du budget ; toucher la déplie (détail par catégorie, comme dans le Budget). */
-function TuileBudgetAnneau({ t, edition, ouvert, onBasculer, exclureFF, apport, prevu }: {
-  exclureFF?: Set<string>; apport?: ApportLigne; prevu?: number; t: TuileBudget; edition: ReturnType<typeof useBudgetMois>; ouvert: boolean; onBasculer: () => void
+function TuileBudgetAnneau({ t, edition, ouvert, onBasculer, exclureFF, apport, prevu, tout, toutEtat }: {
+  tout?: () => void; toutEtat?: { ouvert: boolean; v: number }; exclureFF?: Set<string>; apport?: ApportLigne; prevu?: number; t: TuileBudget; edition: ReturnType<typeof useBudgetMois>; ouvert: boolean; onBasculer: () => void
 }) {
   const clair = eclaircie(t.rvb, 0.24)
   const alpha = t.separe ? [0.1, 0.03] : [0.24, 0.06]
@@ -142,11 +154,11 @@ function TuileBudgetAnneau({ t, edition, ouvert, onBasculer, exclureFF, apport, 
       <div {...enTete(depliable, ouvert, onBasculer)}
         className={`flex min-h-[40px] flex-1 items-center gap-2 border px-3 py-1 md:gap-3 ${depliable ? 'cursor-pointer' : ''} ${ouvert ? 'rounded-t-[14px] border-b-transparent' : 'rounded-[14px]'}`}
         style={{ background: `linear-gradient(100deg, ${rgba(t.rvb, alpha[0]!)}, ${rgba(t.rvb, alpha[1]!)} 80%), #15110e`, borderColor: rgba(t.rvb, 0.28) }}>
-        <CorpsTuile t={t} edition={edition} bureau={false} apport={apport} prevu={prevu} />
+        <CorpsTuile t={t} edition={edition} bureau={false} apport={apport} prevu={prevu} tout={ouvert && depliable && tout ? { toutOuvert: !!toutEtat?.ouvert, onTout: tout } : undefined} />
       </div>
       {ouvert && t.ligneId && (
-        <div className={`${t.cle === 'fraisfixe' || t.cle === 'courses' || t.cle === 'amenagement' || t.cle === 'exceptionnelles' ? '' : 'max-h-[45dvh] overflow-y-auto'} rounded-b-[14px] border border-t-0 px-3 py-0.5`} style={{ borderColor: rgba(t.rvb, 0.28), background: 'rgba(33,28,22,.55)' }}>
-          <DetailLigneLecture cle={t.ligneId} couleur={clair} deplie={t.cle === 'courses' || t.cle === 'amenagement' || t.cle === 'exceptionnelles'} aplat={t.cle === 'fraisfixe'} exclure={t.cle === 'fraisfixe' ? exclureFF : undefined} apport={apport} />
+        <div className={` rounded-b-[14px] border border-t-0 px-3 py-0.5`} style={{ borderColor: rgba(t.rvb, 0.28), background: 'rgba(33,28,22,.55)' }}>
+          <DetailLigneLecture key={toutEtat?.v ?? 0} tout={toutEtat?.ouvert} cle={t.ligneId} couleur={clair} deplie={t.cle === 'courses' || t.cle === 'amenagement' || t.cle === 'exceptionnelles'} aplat={t.cle === 'fraisfixe'} exclure={t.cle === 'fraisfixe' ? exclureFF : undefined} apport={apport} />
         </div>
       )}
     </div>
@@ -157,18 +169,18 @@ function TuileBudgetAnneau({ t, edition, ouvert, onBasculer, exclureFF, apport, 
  * Bureau : ligne posée dans un panneau de verre, presque transparente, séparée de la précédente par un filet.
  * Le clic la déplie (détail par catégorie).
  */
-function LigneVerre({ t, edition, ouvert, onBasculer, exclureFF, apport, prevu }: {
-  exclureFF?: Set<string>; apport?: ApportLigne; prevu?: number; t: TuileBudget; edition: ReturnType<typeof useBudgetMois>; ouvert: boolean; onBasculer: () => void
+function LigneVerre({ t, edition, ouvert, onBasculer, exclureFF, apport, prevu, tout, toutEtat }: {
+  tout?: () => void; toutEtat?: { ouvert: boolean; v: number }; exclureFF?: Set<string>; apport?: ApportLigne; prevu?: number; t: TuileBudget; edition: ReturnType<typeof useBudgetMois>; ouvert: boolean; onBasculer: () => void
 }) {
   const clair = eclaircie(t.rvb, 0.24)
   const depliable = t.ligneId !== null
   return (
     <div data-testid={`tuile-${t.cle}`} data-ton={t.ton} data-ouvert={ouvert || undefined} className="border-t border-white/[.09] first:border-t-0">
       <div {...enTete(depliable, ouvert, onBasculer)} className={`flex h-[38px] items-center gap-3 ${depliable ? 'cursor-pointer' : ''}`}>
-        <CorpsTuile t={t} edition={edition} bureau apport={apport} prevu={prevu} />
+        <CorpsTuile t={t} edition={edition} bureau apport={apport} prevu={prevu} tout={ouvert && depliable && tout ? { toutOuvert: !!toutEtat?.ouvert, onTout: tout } : undefined} />
       </div>
       {ouvert && t.ligneId && (
-        <div className={`${t.cle === 'fraisfixe' || t.cle === 'courses' || t.cle === 'amenagement' || t.cle === 'exceptionnelles' ? '' : 'max-h-[45dvh] overflow-y-auto'} pb-2`}><DetailLigneLecture cle={t.ligneId} couleur={clair} deplie={t.cle === 'courses' || t.cle === 'amenagement' || t.cle === 'exceptionnelles'} aplat={t.cle === 'fraisfixe'} exclure={t.cle === 'fraisfixe' ? exclureFF : undefined} apport={apport} /></div>
+        <div className={` pb-2`}><DetailLigneLecture key={toutEtat?.v ?? 0} tout={toutEtat?.ouvert} cle={t.ligneId} couleur={clair} deplie={t.cle === 'courses' || t.cle === 'amenagement' || t.cle === 'exceptionnelles'} aplat={t.cle === 'fraisfixe'} exclure={t.cle === 'fraisfixe' ? exclureFF : undefined} apport={apport} /></div>
       )}
     </div>
   )
@@ -188,6 +200,9 @@ export function ResumeView() {
   // Tuiles de budget dépliées (détail par catégorie).
   const [ouvertes, setOuvertes] = useState<Set<string>>(new Set())
   const [totalOuvert, setTotalOuvert] = useState(false)
+  // Icône « tout déplier / tout replier » d'une tuile ouverte ; `v` remet à zéro les ouvertures faites une à une.
+  const [toutes, setToutes] = useState<Map<string, { ouvert: boolean; v: number }>>(new Map())
+  const basculerTout = (cle: string) => setToutes((m) => { const e = m.get(cle); return new Map(m).set(cle, { ouvert: !e?.ouvert, v: (e?.v ?? 0) + 1 }) })
   // « Total dépensé » ouvert : la page défile pour montrer tout le détail qui vient de s'afficher.
   const syntheseRef = useRef<HTMLDivElement>(null)
   useEffect(() => { if (totalOuvert) syntheseRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' }) }, [totalOuvert])
@@ -500,7 +515,7 @@ export function ResumeView() {
     </div>
   )
   const prevuDe = (t: TuileBudget) => t.cle === 'fraisfixe' ? prevuFraisFixe : t.cle === 'courses' ? prevuCourses : 0
-  const basculer = (t: TuileBudget) => ({ t, edition, prevu: prevuDe(t) || undefined, ouvert: ouvertes.has(t.cle), onBasculer: () => basculerTuile(t.cle), apport: t.cle === 'exceptionnelles' ? apportEp : undefined })
+  const basculer = (t: TuileBudget) => ({ t, edition, prevu: prevuDe(t) || undefined, ouvert: ouvertes.has(t.cle), onBasculer: () => basculerTuile(t.cle), tout: () => basculerTout(t.cle), toutEtat: toutes.get(t.cle), apport: t.cle === 'exceptionnelles' ? apportEp : undefined })
 
   if (bureau) {
     return (

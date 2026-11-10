@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest'
 import type { FinAccount, FinBudget, FinEcheance, FinLoan, FinCategory, FinHolding, FinLine, FinPlanned, FinTarget, FinTransaction } from './types'
 import {
-  estEnAttente, NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, capitalRembourse, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, operationsRecentes, segmentsSurlignes, categoriesParLigne, ligneDeCategorie, budgetDe, budgetAjuste, ecrituresBudgetMois, estEpargneComptee, fondLigne, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
+  estEnAttente, NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, capitalRembourse, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, operationsRecentes, segmentsSurlignes, categoriesParLigne, blocsChoixCategorie, ligneDeCategorie, budgetDe, budgetAjuste, ecrituresBudgetMois, estEpargneComptee, fondLigne, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
   libelleMois, moisEcoules, patrimoine, previsionDe, provision, syntheseMois,
   agregerHorsCapital, appliquerRemboursements, remboursementsRecus, hierarchieDetail, nomPropres, detailHorsCapital, NOM_PRET_REIMS, capitalDuMois, epargnesPrevues, listeEpargnes,
 } from './finances'
@@ -826,6 +826,19 @@ describe('choix de catégorie par ligne', () => {
       expect(g.ligne ? l : null).toBe(g.ligne ? g.ligne.id : null)
     }
     expect(new Set(ids).size).toBe(ids.length)
+  })
+})
+
+describe('blocs du choix de catégorie', () => {
+  const c = (id: string, court: string, parent: string | null = null) => ({ id, nom: parent ? `${parent} › ${court}` : court, court, parent })
+  it('à plat le parent du nom de la ligne et « Dépenses du mois » ; garde les autres parents en titre', () => {
+    const ff = blocsChoixCategorie('Frais fixe', [c('1', 'Frais fixe'), c('2', 'Loyer', 'Frais fixe'), c('3', 'Impôts & taxes'), c('4', 'CFE', 'Impôts & taxes'), c('5', 'Frais bancaires')])
+    expect(ff[0]).toEqual({ titre: null, puces: [
+      { id: '5', libelle: 'Frais bancaires', propre: false }, { id: '2', libelle: 'Loyer', propre: false }, { id: '1', libelle: 'Autres', propre: true }] })
+    expect(ff[1]?.titre).toBe('Impôts & taxes')
+    const dc = blocsChoixCategorie('Dépenses courantes', [c('1', 'Dépenses du mois'), c('2', 'Coiffeur', 'Dépenses du mois')])
+    expect(dc).toHaveLength(1)
+    expect(dc[0]?.titre).toBeNull()
   })
 })
 

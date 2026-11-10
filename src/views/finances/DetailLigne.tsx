@@ -4,13 +4,14 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import { moisAffecte } from '../../lib/moisPaie'
-import { decaleMois, libelleMois, categoriesParLigne, categorieEffective, aplatirGroupes, detailHorsCapital, detailLigne, euros, grouperParIntitule, hierarchieDetail, nomPropres, nomLisible, titulaireDe, type GroupeCategorie, type GroupeIntitules } from '../../lib/finances'
-import type { FinTransaction } from '../../lib/types'
+import { ChoixCategorie } from './ChoixCategorie'
+import { decaleMois, libelleMois, categorieEffective, aplatirGroupes, detailHorsCapital, detailLigne, euros, grouperParIntitule, hierarchieDetail, nomPropres, nomLisible, titulaireDe, TITULAIRES, type GroupeCategorie, type GroupeIntitules, type IndexFinances } from '../../lib/finances'
+import type { FinOwner, FinTransaction } from '../../lib/types'
 import { cleCommercant, clesDuGroupe, planAlias, planRegrouper, planSeparer, type Ecriture } from '../../lib/editionGroupes'
 import { ProgressBar } from '../../components/ui'
 import { EditeurLibelle, LigneOperation } from './partage'
 import { LierRemboursement } from './LierRemboursement'
-import { IconeCompte } from './IconeCompte'
+import { IconeCompte, IconeTitulaire } from './IconeCompte'
 import { FenetreConso, varianteEnergie } from './ConsoEnergie'
 import { siteEnergie } from '../../lib/energie'
 import { dateCourte, useFin, useIndex, useReconnaissance, useTransactionsBudget } from './contexte'
@@ -93,17 +94,6 @@ export function DetailLigne({ cle, niveauTous = 0 }: { cle: string; niveauTous?:
   )
 }
 
-type ChoixCat = { id: string; nom: string; court: string; parent: string | null }
-/** Catégories d'une ligne en blocs : celles sans sous-catégorie ensemble, puis chaque parent suivi de ses sous-catégories. */
-function grouperParParent(cats: ChoixCat[]): { titre: string | null; parentId: string | null; enfants: ChoixCat[] }[] {
-  const parents = new Set(cats.filter((c) => c.parent).map((c) => c.parent!))
-  const seules = cats.filter((c) => !c.parent && !parents.has(c.court))
-  const blocs = [...parents].sort((a, b) => a.localeCompare(b, 'fr')).map((p) => ({
-    titre: p, parentId: cats.find((c) => !c.parent && c.court === p)?.id ?? null, enfants: cats.filter((c) => c.parent === p),
-  }))
-  return [...(seules.length ? [{ titre: null, parentId: null, enfants: seules }] : []), ...blocs]
-}
-
 /** Opérations d'un nœud (sous-catégorie, « Autres » = opérations propres du parent, ou catégorie seule). */
 function opsDe(groupes: GroupeCategorie[], parent: string, enfant: string | null): FinTransaction[] {
   if (enfant === null || enfant === nomPropres(parent)) return groupes.find((g) => g.nom === parent)?.operations ?? []
@@ -133,6 +123,29 @@ const CHAMP = 'mt-0.5 w-full rounded-md border border-line-2 bg-panel px-2 py-1 
 
 /** Panneau d'édition, dans la boîte sable sous le groupe touché : intitulé (opération)
  *  ou nom (groupe), puis « Regrouper avec… » (choix du groupe et du nom), et Séparer. */
+/** Attribue UNE opération à Joffrey (bleu), Honorine (rose) ou Commun (bleu/rose), dans Horizon seulement :
+ *  le compte bancaire et son titulaire ne changent pas. Choisir le titulaire du compte revient à « pas d'attribution ». */
+function Attribution({ tx, idx }: { tx: FinTransaction; idx: IndexFinances }) {
+  const actuel = titulaireDe(tx, idx)
+  const proprietaire = idx.comptes.get(tx.account_id)?.owner
+  const choisir = (o: FinOwner) => {
+    if (o === actuel) return
+    void useHorizon.getState().update('fin_transactions', tx.id, { owner: o === proprietaire ? null : o })
+  }
+  return (
+    <div data-testid="attribution" className="mt-2 flex items-center gap-2">
+      <span className="text-[10.5px] text-ink-3">Compter pour</span>
+      {(['joffrey', 'commun', 'honorine'] as FinOwner[]).map((o) => (
+        <button key={o} type="button" onClick={() => choisir(o)} aria-pressed={o === actuel}
+          title={`${TITULAIRES[o]}${tx.owner === o ? ' (attribué dans Horizon)' : ''}`} aria-label={TITULAIRES[o]}
+          className={`rounded-[28%] p-0.5 ${o === actuel ? 'ring-2 ring-[#eda145]' : 'opacity-70 hover:opacity-100'}`}>
+          <IconeTitulaire titulaire={o} />
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
   sel: Selection; groupe: GroupeIntitules; autres: GroupeIntitules[]; nomAffiche: string; onClose: () => void
 }) {
@@ -188,34 +201,10 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
   }
   if (choixCat && sel.type === 'op') {
     const actuelle = categorieEffective(sel.tx.category_id, idx)?.id
-    const puce = (id: string, libelle: string) => (
-      <button key={id} disabled={envoi} onClick={() => void changerCategorie(id)} aria-pressed={id === actuelle}
-        className={`rounded-md px-1.5 py-0.5 text-[11.5px] ${id === actuelle ? 'bg-[#eda145]/10 text-[#eda145] ring-1 ring-[#eda145]/60' : 'bg-[#c9b48a]/10 text-ink-2 hover:text-ink'}`}>
-        {libelle}
-      </button>
-    )
     return (
-      <div data-testid="panneau-categorie" className="my-1.5 rounded-lg border border-line-2 bg-panel-2 p-2">
-        <div className="max-h-56 overflow-y-auto">
-          {categoriesParLigne(idx).map((g) => (
-            <div key={g.ligne?.id ?? '-'} className="mb-1.5">
-              <p className="px-1 text-[10.5px] text-ink-3">{g.ligne?.name ?? '—'}</p>
-              {/* Le parent une seule fois, en tête ; ses sous-catégories dessous, en retrait, sans répéter son nom. */}
-              {grouperParParent(g.categories).map((b) => (
-                <div key={b.titre ?? '-'} className="mb-1">
-                  {b.titre !== null && (b.parentId
-                    ? <div className="flex">{puce(b.parentId, b.titre)}</div>
-                    : <p className="px-1 text-[11.5px] text-ink-2">{b.titre}</p>)}
-                  <div className={`flex flex-wrap gap-1 ${b.titre !== null ? 'mt-1 pl-3' : ''}`}>
-                    {b.enfants.map((c) => puce(c.id, c.court))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-        <div className="mt-1.5 flex"><button onClick={() => setChoixCat(false)} className={BTN_NEUTRE}>Annuler</button></div>
-      </div>
+      <ChoixCategorie idx={idx} actuelle={actuelle} occupe={envoi} titre="Catégorie de l'opération"
+        detail={`${sel.tx.label_local ?? nomAffiche} · ${euros(Math.abs(Number(sel.tx.amount)))}`}
+        onChoisir={(id) => void changerCategorie(id)} onClose={() => setChoixCat(false)} />
     )
   }
   if (fusion) return (
@@ -244,10 +233,17 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
   )
   return (
     <div data-testid="panneau-edition" className="my-1.5 rounded-lg border border-line-2 bg-panel-2 p-2">
-      {sel.type === 'op' && <p className="truncate text-[10.5px] text-ink-3" title={sel.tx.label}>{sel.tx.label}</p>}
+      {sel.type === 'op' && (
+        <p className="flex items-center gap-1.5 text-[10.5px] text-ink-3" title={`${sel.tx.label}
+${idx.comptes.get(sel.tx.account_id)?.name ?? ''}`}>
+          <IconeCompte tx={sel.tx} idx={idx} />
+          <span className="min-w-0 truncate">{sel.tx.label}</span>
+        </p>
+      )}
       <input aria-label={sel.type === 'op' ? 'Intitulé' : 'Nom du groupe'} value={nom}
         onChange={(e) => setNom(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void renommer() }} className={CHAMP} />
       {sel.type === 'op' && <p className="mt-1 text-[10.5px] text-ink-3">Pour toutes les opérations {groupe.nom}</p>}
+      {sel.type === 'op' && <Attribution tx={sel.tx} idx={idx} />}
       <div className="mt-2 flex flex-wrap gap-1.5">
         <button disabled={envoi} onClick={() => void renommer()} className={BTN_OK}>Renommer</button>
         {sel.type === 'op' && <button onClick={() => setChoixCat(true)} className={BTN_NEUTRE}>Catégorie</button>}
@@ -300,7 +296,7 @@ function MarchandsLecture({ operations, nomCategorie }: { operations: FinTransac
               <button data-testid="souscat-op" onClick={() => choisir({ type: 'op', tx, groupe: g.cle })}
                 className={`flex w-full items-baseline gap-3 py-1 text-left text-[12px] ${actif ? 'text-[#eda145]' : 'text-ink-2'}`}>
                 <span className={`w-11 shrink-0 tabular-nums ${actif ? '' : 'text-ink-3'}`}>{dateCourte(tx.date)}</span>
-                <IconeCompte tx={tx} idx={idx} />
+                <IconeTitulaire titulaire={titulaireDe(tx, idx)} />
                 <span className="min-w-0 flex-1 truncate">{nom(tx)}</span>
                 {m(-Number(tx.amount))}
               </button>
@@ -316,7 +312,7 @@ function MarchandsLecture({ operations, nomCategorie }: { operations: FinTransac
                 {ouvert ? <ChevronDown size={12} className="inline" /> : <ChevronRight size={12} className="inline" />}
               </button>
               {g.operations.every((o) => o.account_id === g.operations[0]!.account_id && titulaireDe(o, idx) === titulaireDe(g.operations[0]!, idx))
-                ? <IconeCompte tx={g.operations[0]!} idx={idx} /> : <span className="w-[18px] shrink-0" />}
+                ? <IconeTitulaire titulaire={titulaireDe(g.operations[0]!, idx)} /> : <span className="w-[18px] shrink-0" />}
               <button data-testid="souscat-groupe-nom" onClick={() => (ouvert ? choisir({ type: 'groupe', groupe: g.cle }) : bascule(g.cle))}
                 className={`min-w-0 flex-1 truncate text-left ${sel?.type === 'groupe' && sel.groupe === g.cle ? 'text-[#eda145]' : ''}`}>
                 {g.nom}
@@ -380,7 +376,12 @@ function LigneApport({ apport }: { apport: ApportLigne }) {
   )
 }
 
-export function DetailLigneLecture({ cle, couleur, barres = false, aplat = false, deplie = false, exclure, apport }: { cle: string; couleur: string; barres?: boolean; aplat?: boolean; deplie?: boolean; exclure?: Set<string>; apport?: ApportLigne }) {
+export function DetailLigneLecture({ cle, couleur, barres = false, aplat = false, deplie: depliePropose = false, tout, exclure, apport }: {
+  cle: string; couleur: string; barres?: boolean; aplat?: boolean; deplie?: boolean
+  /** Icône « tout déplier / tout replier » du Résumé : true = toutes les catégories ouvertes, false = toutes fermées, absent = réglage d'origine. */
+  tout?: boolean; exclure?: Set<string>; apport?: ApportLigne
+}) {
+  const deplie = tout ?? depliePropose
   const { mois, filtre } = useFin()
   const toutes = useTransactionsBudget()
   const transactions = useMemo(() => exclure?.size ? toutes.filter((t) => !exclure.has(t.id)) : toutes, [toutes, exclure])

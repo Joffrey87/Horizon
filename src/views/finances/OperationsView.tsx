@@ -6,7 +6,8 @@ import { useHorizon } from '../../lib/store'
 import { NON_CLASSE, classer, correspond, euros, lignesTriees, titulaireDe } from '../../lib/finances'
 import { EmptyState } from '../../components/ui'
 import { FiltreSeg, LigneOperation, NavMois } from './partage'
-import { useFin, useIndex, useReconnaissance } from './contexte'
+import { useFin, useIndex, useReconnaissance, useVue } from './contexte'
+import { ImportCsvCarte } from './ImportCsvCarte'
 
 type Portee = 'tout' | 'budget' | typeof NON_CLASSE | 'revenus' | 'hors' | string
 
@@ -19,6 +20,7 @@ export function OperationsView() {
   const accounts = useHorizon((s) => s.finAccounts)
   const lines = useHorizon((s) => s.finLines)
   const idx = useIndex()
+  const vue = useVue()
   const reco = useReconnaissance()
   const [params] = useSearchParams()
   const [tousLesMois, setTousLesMois] = useState(() => !!params.get('compte'))
@@ -62,7 +64,10 @@ export function OperationsView() {
             <input type="checkbox" checked={tousLesMois} onChange={(e) => setTousLesMois(e.target.checked)} /> Tous les mois
           </label>
         </div>
-        <FiltreSeg value={filtre} onChange={setFiltre} />
+        <div className="flex items-center gap-2">
+          {!vue && <ImportCsvCarte />}
+          <FiltreSeg value={filtre} onChange={setFiltre} />
+        </div>
       </header>
 
       <div className="flex flex-wrap items-center gap-2">

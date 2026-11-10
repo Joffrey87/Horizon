@@ -146,6 +146,37 @@ export function categoriesParLigne(idx: IndexFinances): { ligne: FinLine | null;
   }))
 }
 
+/** Parents techniques dont le titre n'apporte rien dans le choix : leurs sous-catégories passent à plat. */
+const PARENTS_A_PLAT = new Set(['depenses du mois'])
+
+export interface BlocChoix { titre: string | null; puces: { id: string; libelle: string; propre: boolean }[] }
+
+/**
+ * Catégories d'UNE ligne en blocs pour la fenêtre de choix, sans redite : un parent qui porte le nom de la ligne
+ * (Frais fixe › Frais fixe) ou un parent technique (Dépenses du mois) n'est pas affiché, ses sous-catégories passent
+ * à plat avec les catégories sans enfant. Les autres parents (Impôts & taxes, Travaux & Aménagement…) deviennent un
+ * titre de bloc. Le parent lui-même reste choisissable via une puce « propre » (« Autres », « Supermarché »).
+ */
+export function blocsChoixCategorie(ligneNom: string | null, cats: { id: string; nom: string; court: string; parent: string | null }[]): BlocChoix[] {
+  const norm = (s: string) => normaliserLibelle(s)
+  const parents = new Set(cats.filter((c) => c.parent).map((c) => c.parent!))
+  const tri = (a: { libelle: string; propre: boolean }, b: { libelle: string; propre: boolean }) =>
+    Number(a.propre) - Number(b.propre) || a.libelle.localeCompare(b.libelle, 'fr')
+  const plat: BlocChoix['puces'] = []
+  const blocs: BlocChoix[] = []
+  for (const c of cats) {
+    if (c.parent) continue
+    if (!parents.has(c.court)) { plat.push({ id: c.id, libelle: c.court, propre: false }); continue }
+    const enfants = cats.filter((e) => e.parent === c.court).map((e) => ({ id: e.id, libelle: e.court, propre: false }))
+    const propre = { id: c.id, libelle: nomPropres(c.court), propre: true }
+    if ((ligneNom && norm(c.court) === norm(ligneNom)) || PARENTS_A_PLAT.has(norm(c.court))) plat.push(...enfants, propre)
+    else blocs.push({ titre: c.court, puces: [...enfants, propre].sort(tri) })
+  }
+  // Parent masqué dont la catégorie n'est pas dans la liste (autre ligne) : seules ses sous-catégories restent.
+  for (const c of cats) if (c.parent && !cats.some((p) => !p.parent && p.court === c.parent)) plat.push({ id: c.id, libelle: c.court, propre: false })
+  return [...(plat.length ? [{ titre: null, puces: plat.sort(tri) }] : []), ...blocs.sort((a, b) => a.titre!.localeCompare(b.titre!, 'fr'))]
+}
+
 export type Classement =
   | { type: 'ligne'; ligne: string }
   | { type: 'non_classe' }
