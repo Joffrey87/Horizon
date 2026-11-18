@@ -5,6 +5,9 @@
 // ================================================================
 import { supabase } from '../../lib/supabase'
 import { useHorizon } from '../../lib/store'
+import { echecReseau } from '../../lib/capture'
+import { appliquerActions, enfiler, lireFile, nouvelleAction, reseauAbsent } from '../../lib/horsLigne/file'
+import { ecrireSeances, lireSeances } from '../../lib/horsLigne/copie'
 import type { SeanceId } from './programme'
 
 export interface SerieFaite {
@@ -46,24 +49,45 @@ interface Ligne {
 
 const TABLE = 'training_sessions'
 
+const versSeance = (l: Ligne): SeanceFaite => ({
+  id: l.id,
+  seance: l.session_type,
+  debut: l.started_at,
+  fin: l.ended_at,
+  dureeSec: l.duration_sec,
+  notes: l.notes ?? '',
+  series: l.sets ?? [],
+})
+
+const trier = (lignes: Ligne[]) => [...lignes].sort((a, b) => b.started_at.localeCompare(a.started_at))
+
+/** Hors ligne : la séance attend le réseau sur l'appareil (file des petites actions du store). */
+function garderHorsLigne(op: 'upsert' | 'delete', id: string, values: Record<string, unknown>) {
+  const file = enfiler(nouvelleAction(TABLE, op, id, values))
+  useHorizon.setState({ actionsEnAttente: file.length })
+  if (!horsLigne()) void useHorizon.getState().viderFile()
+}
+
+const horsLigne = () => reseauAbsent() || useHorizon.getState().horsLigne
+
+// Hors ligne, l'historique vient de la copie de l'appareil (rafraîchie à chaque
+// lecture réussie), avec par-dessus les séances qui attendent le réseau.
 export const stockageSupabase: StockageEntrainement = {
   async lister() {
+    const uid = useHorizon.getState().session?.user.id
+    const depuisAppareil = async () => trier(appliquerActions((uid ? await lireSeances<Ligne>(uid) : undefined) ?? [], TABLE, lireFile())).map(versSeance)
+    if (horsLigne()) return depuisAppareil()
     const { data, error } = await supabase.from(TABLE).select('*').order('started_at', { ascending: false })
+    if (error && echecReseau(error.message)) return depuisAppareil()
     if (error) throw new Error(error.message)
-    return ((data ?? []) as Ligne[]).map((l) => ({
-      id: l.id,
-      seance: l.session_type,
-      debut: l.started_at,
-      fin: l.ended_at,
-      dureeSec: l.duration_sec,
-      notes: l.notes ?? '',
-      series: l.sets ?? [],
-    }))
+    const lignes = (data ?? []) as Ligne[]
+    if (uid) void ecrireSeances(uid, lignes)
+    return trier(appliquerActions(lignes, TABLE, lireFile())).map(versSeance)
   },
   async enregistrer(s) {
     const uid = useHorizon.getState().session?.user.id
     if (!uid) throw new Error('session expirée, reconnectez-vous')
-    const { error } = await supabase.from(TABLE).upsert({
+    const ligne = {
       id: s.id,
       user_id: uid,
       session_type: s.seance,
@@ -72,11 +96,16 @@ export const stockageSupabase: StockageEntrainement = {
       duration_sec: s.dureeSec,
       notes: s.notes || null,
       sets: s.series,
-    })
+    }
+    if (horsLigne() || lireFile().length) { garderHorsLigne('upsert', s.id, ligne); return }
+    const { error } = await supabase.from(TABLE).upsert(ligne)
+    if (error && echecReseau(error.message)) { garderHorsLigne('upsert', s.id, ligne); return }
     if (error) throw new Error(error.message)
   },
   async supprimer(id) {
+    if (horsLigne()) { garderHorsLigne('delete', id, {}); return }
     const { error } = await supabase.from(TABLE).delete().eq('id', id)
+    if (error && echecReseau(error.message)) { garderHorsLigne('delete', id, {}); return }
     if (error) throw new Error(error.message)
   },
 }

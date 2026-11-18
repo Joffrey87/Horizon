@@ -7,7 +7,12 @@ import { installerPaies } from './moisPaie'
 import { create } from 'zustand'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
-import { capturesEnAttente, depiler } from './capture'
+import { capturesEnAttente, depiler, echecReseau } from './capture'
+import {
+  actionPermise, appliquerActions, ecrireFile, enfiler, lireFile, marquerEnvoi, nouvelleAction, reseauAbsent,
+  type OpHorsLigne,
+} from './horsLigne/file'
+import { ecrireCopie, enregistrerCopieFinances, lireCopie, oublierAppareil, ouvrirCopieFinances, sessionStockee } from './horsLigne/copie'
 import { messageFonction } from './functionError'
 import { ecrituresBudgetMois, LIGNE_BUDGET_MOIS } from './finances'
 import { ecriturePermise, projetsVisibles, tachesVisibles, vueActive } from './partage'
@@ -39,6 +44,12 @@ interface HorizonState {
   /** Captures faites hors ligne, encore sur l'appareil. Renvoyées dès que
    *  le réseau revient — se vider la tête ne dépend jamais du réseau. */
   enAttente: number
+  /** Pas de réseau : l'app montre ce qu'elle a (copie de l'appareil ou dernier chargement). */
+  horsLigne: boolean
+  /** Date (ISO) des données affichées : dernier chargement réussi, ou copie de l'appareil. */
+  donneesDu: string | null
+  /** Petites actions faites hors ligne (cocher, noter une séance…), pas encore envoyées. */
+  actionsEnAttente: number
   domains: Domain[]
   objectives: Objective[]
   projects: Project[]
@@ -66,6 +77,8 @@ interface HorizonState {
   /** Finances : chargées à la première ouverture de l'onglet, pas au démarrage
    *  (des milliers d'opérations que les autres pages n'utilisent pas). */
   finLoaded: boolean
+  /** Finances ouvertes depuis la copie chiffrée de l'appareil (hors ligne, lecture seule) : sa date ; null sinon. */
+  finCopieDu: string | null
   finLines: FinLine[]
   /** Ligne cachée qui porte le budget global du mois (voir LIGNE_BUDGET_MOIS) ; null tant qu'elle n'existe pas. */
   finBudgetMoisId: string | null
@@ -130,6 +143,10 @@ interface HorizonState {
   /** Réessaie d'envoyer les captures mises de côté. Sans effet si la file est
    *  vide ; s'arrête au premier échec (le réseau est manifestement toujours là). */
   flushCaptures: () => Promise<void>
+  /** Envoie, dans l'ordre, les petites actions faites hors ligne. S'arrête au premier échec réseau. */
+  viderFile: () => Promise<void>
+  /** Hors ligne : ouvre la copie chiffrée des Finances avec le mot de passe. Lève MotDePasseIncorrect ; false = pas de copie. */
+  ouvrirFinancesHorsLigne: (motDePasse: string) => Promise<boolean>
   refreshEnAttente: () => void
   signOut: () => Promise<void>
 }
@@ -156,7 +173,7 @@ const LECTURE_SEULE = 'Lecture seule : cette vue partagée ne permet pas de modi
 
 /** Les vides de l'onglet Finances (état initial et déconnexion). */
 const FIN_VIDE = {
-  finLoaded: false, finLines: [], finBudgetMoisId: null, finAccounts: [], finCategories: [], finTransactions: [], finBudgets: [],
+  finLoaded: false, finCopieDu: null, finLines: [], finBudgetMoisId: null, finAccounts: [], finCategories: [], finTransactions: [], finBudgets: [],
   finNetworth: [], finHoldings: [], finTargets: [], finDca: [], finPlanned: [], finLabels: [], finGroups: [], finMerchantAlias: [], finEcheances: [], finLoans: [], finResteAjustements: [], finEnergie: [],
 }
 
@@ -181,13 +198,86 @@ const TABLES = [
   'listes de courses', 'articles', 'agendas', 'règles Céleste', 'remplas Céleste', 'partages',
 ]
 
-export const useHorizon = create<HorizonState>((set, get) => ({
+// ---- Hors ligne ----
+
+/** Ce que garde la copie de l'appareil (tout `loadAll`). Les Finances ont leur copie, chiffrée. */
+const CLES_COPIE = [
+  'domains', 'objectives', 'projects', 'steps', 'tasks', 'ideas', 'habits', 'habitLogs', 'reviews', 'layouts',
+  'birthdays', 'checks', 'olafatcoJobs', 'newsTopics', 'newsDigests', 'shoppingLists', 'shoppingItems',
+  'calendarFeeds', 'celesteRules', 'celesteProposals', 'settings', 'partages',
+] as const satisfies readonly (keyof HorizonState)[]
+const CLES_FIN = (Object.keys(FIN_VIDE) as (keyof typeof FIN_VIDE)[]).filter((k) => k !== 'finLoaded' && k !== 'finCopieDu')
+/** Les données des Finances, telles que les garde leur copie chiffrée. */
+export const donneesFinances = (s: HorizonState): Record<string, unknown> => Object.fromEntries(CLES_FIN.map((k) => [k, s[k]]))
+
+/** Valeurs affichées d'une ligne créée hors ligne, en attendant celles du serveur. */
+const DEFAUTS_LOCAUX: Partial<Record<Table, Record<string, unknown>>> = {
+  shopping_items: { section: null, category: null, checked: false, price_min: null, price_max: null, sort_order: 0 },
+  habit_logs: { done: true },
+}
+
+const HORS_LIGNE = "Hors ligne : cette modification demande le réseau (elle n'a pas été faite)."
+const HORS_LIGNE_FONCTION = 'Hors ligne : cela demande le réseau.'
+
+/** Des données sont-elles déjà venues du serveur depuis l'ouverture ? (La copie de
+ *  l'appareil, lue en parallèle, ne doit jamais écraser des données fraîches.) */
+let chargeEnLigne = false
+let videEnCours = false
+
+const attendre = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
+export const useHorizon = create<HorizonState>((set, get) => {
+  /** Réseau absent, ou dernier chargement tombé faute de réseau. */
+  const horsLigneMaintenant = () => reseauAbsent() || get().horsLigne
+
+  /** Garde une petite action sur l'appareil et l'applique tout de suite à l'écran. */
+  const garder = (table: Table, op: OpHorsLigne, rowId: string, values: Record<string, unknown>, locale?: Record<string, unknown>) => {
+    const action = nouvelleAction(table, op, rowId, values, locale)
+    const file = enfiler(action)
+    const key = COLLECTION[table]
+    set({
+      [key]: appliquerActions(get()[key] as { id: string }[], table, [action]),
+      actionsEnAttente: file.length,
+    } as Partial<HorizonState>)
+    // En ligne mais avec une file : on la vide (l'ordre des gestes est respecté).
+    if (!horsLigneMaintenant()) void get().viderFile()
+    return (get()[key] as { id: string }[]).find((r) => r.id === rowId) ?? null
+  }
+
+  /** La petite action doit-elle passer par la file plutôt que par le réseau ? */
+  const parLaFile = (table: Table, op: OpHorsLigne, values: Record<string, unknown>) =>
+    actionPermise(table, op, values) && (horsLigneMaintenant() || lireFile().length > 0)
+
+  /** Rejoue la file sur les données (après un chargement ou une copie). */
+  const rejouerFile = () => {
+    const file = lireFile()
+    const maj: Record<string, unknown> = { actionsEnAttente: file.length }
+    for (const table of new Set(file.map((a) => a.table))) {
+      const key = COLLECTION[table as Table] as keyof HorizonState | undefined
+      if (key) maj[key] = appliquerActions(get()[key] as { id: string }[], table, file)
+    }
+    set(maj as Partial<HorizonState>)
+  }
+
+  /** Affiche la copie de l'appareil, sauf si des données fraîches sont déjà là. */
+  const lireCopieAppareil = async (uid: string) => {
+    const copie = await lireCopie(uid)
+    if (!copie || chargeEnLigne || get().session?.user.id !== uid) return
+    set({ ...(copie.donnees as Partial<HorizonState>), donneesDu: copie.at })
+    rejouerFile()
+  }
+
+  return {
+
   session: null,
   recovery: false,
   ready: false,
   loading: false,
   error: null,
   enAttente: capturesEnAttente().length,
+  horsLigne: false,
+  donneesDu: null,
+  actionsEnAttente: lireFile().length,
   domains: [], objectives: [], projects: [], steps: [], tasks: [], ideas: [],
   habits: [], habitLogs: [], reviews: [], layouts: [], birthdays: [], checks: [], olafatcoJobs: [],
   newsTopics: [], newsDigests: [], shoppingLists: [], shoppingItems: [], calendarFeeds: [],
@@ -195,11 +285,31 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   ...FIN_VIDE, partages: [], apercu: null,
 
   init: async () => {
-    const { data } = await supabase.auth.getSession()
-    set({ session: data.session, ready: true })
+    // Hors ligne avec un jeton expiré, getSession() relance le rafraîchissement
+    // pendant ~30 s puis rend « pas de session » — tout en la gardant sur
+    // l'appareil. On n'attend pas : la session gardée suffit pour afficher la
+    // copie, et Supabase rafraîchira le jeton de lui-même au retour du réseau.
+    const lecture = supabase.auth.getSession().then((r) => r.data.session).catch(() => null)
+    let session: Session | null
+    let depuisAppareil = false
+    if (reseauAbsent() && sessionStockee()) {
+      session = sessionStockee()
+      depuisAppareil = true
+    } else {
+      const r = await Promise.race([lecture, attendre(4000).then(() => 'delai' as const)])
+      session = r === 'delai' ? null : r
+      // Supabase n'a pas rendu la session mais l'a gardée : il n'a pas pu rafraîchir le jeton (réseau).
+      if (!session && sessionStockee()) { session = sessionStockee(); depuisAppareil = true }
+    }
+    set({ session, horsLigne: depuisAppareil })
+    if (session) await lireCopieAppareil(session.user.id)
+    set({ ready: true })
     supabase.auth.onAuthStateChange((event, session) => {
       const prev = get().session
       if (event === 'PASSWORD_RECOVERY') set({ recovery: true })
+      // « Pas de session » sans déconnexion alors que l'appareil la garde : jeton à
+      // rafraîchir faute de réseau. On reste connecté (Supabase réessaiera).
+      if (!session && event !== 'SIGNED_OUT' && sessionStockee()) return
       set({ session })
       if (session && session.user.id !== prev?.user.id) void get().loadAll()
       if (!session) {
@@ -212,15 +322,24 @@ export const useHorizon = create<HorizonState>((set, get) => ({
         })
       }
     })
-    // Le réseau revient : on renvoie ce qui attendait sur l'appareil.
+    // Le réseau revient : on renvoie ce qui attendait sur l'appareil, puis on recharge.
     if (typeof window !== 'undefined') {
-      window.addEventListener('online', () => { void get().flushCaptures() })
+      window.addEventListener('online', () => { if (get().session) void get().loadAll() })
+      window.addEventListener('offline', () => set({ horsLigne: true }))
+      // « online » ne se déclenche pas toujours (app remise au premier plan) : on retente au retour.
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && get().horsLigne && !reseauAbsent() && get().session) void get().loadAll()
+      })
     }
-    if (data.session) await get().loadAll()
+    if (session && !reseauAbsent()) await get().loadAll()
   },
 
   loadAll: async () => {
+    // Sans réseau, rien à demander : on garde ce qui est affiché (copie ou dernier chargement).
+    if (reseauAbsent()) { set({ horsLigne: true, loading: false }); return }
     set({ loading: true, error: null })
+    // D'abord ce qui a été fait hors ligne : sinon le chargement l'effacerait de l'écran.
+    if (lireFile().length) await get().viderFile()
     // Un compte invité rejoint le partage prévu pour son e-mail (confirmé) ; sans effet sinon.
     await supabase.rpc('rejoindre_partage')
     // Des fabriques et non des promesses : on doit pouvoir relancer une requête.
@@ -257,6 +376,9 @@ export const useHorizon = create<HorizonState>((set, get) => ({
     // « JWT issued at future » (PGRST303) quand l'horloge de son service d'auth
     // devance celle de son API — le jeton doit « vieillir » de quelques secondes
     // pour être accepté. On relance les requêtes tombées avant d'alarmer.
+    const faute = (r: Reponse) => r.error && echecReseau(r.error.message)
+    // Tout est tombé faute de réseau : mode hors ligne, sans alarme (le bandeau dédié le dit).
+    if (responses.every(faute)) { set({ horsLigne: true, loading: false }); return }
     for (const attente of [900, 3000]) {
       if (!responses.some((r) => r.error)) break
       await new Promise((r) => setTimeout(r, attente))
@@ -305,6 +427,20 @@ export const useHorizon = create<HorizonState>((set, get) => ({
         layouts: [], checks: [], celesteProposals: [], propositionsAgenda: [],
       })
     }
+    chargeEnLigne = true
+    set({ horsLigne: false, donneesDu: new Date().toISOString() })
+    // Ce qui n'a pas encore pu partir reste visible.
+    rejouerFile()
+    const uid = get().session?.user.id
+    if (failed.length === 0 && uid && !get().apercu) {
+      const s = get()
+      const donnees: Record<string, unknown> = Object.fromEntries(CLES_COPIE.map((k) => [k, s[k]]))
+      // L'adresse iCal est une clé d'accès en lecture : elle ne reste pas sur l'appareil.
+      donnees.calendarFeeds = s.calendarFeeds.map((f) => ({ ...f, ical_url: '' }))
+      void ecrireCopie(uid, donnees)
+    }
+    // Finances ouvertes depuis la copie hors ligne : on les relit pour de bon.
+    if (get().finCopieDu) void get().loadFinances(true)
     if (failed.length === 0 && !vue) void get().flushCaptures()
   },
 
@@ -315,7 +451,20 @@ export const useHorizon = create<HorizonState>((set, get) => ({
     if (!ecriturePermise(table, vue)) { set({ error: LECTURE_SEULE }); return null }
     // Un membre écrit dans les données du propriétaire (ex. une règle d'intitulé).
     const user_id = vue && vue.member_id === moi ? vue.owner_id : moi
+    // Petite action hors ligne : créée sur l'appareil (id choisi ici), envoyée au retour du réseau.
+    const horsLigneCree = () => {
+      const id = crypto.randomUUID()
+      return garder(table, 'insert', id, { ...values, id, user_id },
+        { ...DEFAUTS_LOCAUX[table], created_at: new Date().toISOString() }) as never
+    }
+    if (parLaFile(table, 'insert', values)) return horsLigneCree()
+    if (reseauAbsent()) { set({ error: HORS_LIGNE }); return null }
     const { data, error } = await supabase.from(table).insert({ ...values, user_id }).select().single()
+    if (error && echecReseau(error.message)) {
+      set({ horsLigne: true })
+      if (actionPermise(table, 'insert', values)) return horsLigneCree()
+      set({ error: HORS_LIGNE }); return null
+    }
     if (error || !data) { set({ error: `Création impossible : ${error?.message ?? 'réponse vide'}` }); return null }
     const key = COLLECTION[table]
     set({ [key]: [...(get()[key] as unknown[]), data] } as Partial<HorizonState>)
@@ -324,7 +473,14 @@ export const useHorizon = create<HorizonState>((set, get) => ({
 
   update: async (table, id, values) => {
     if (!ecriturePermise(table, vueCourante(get()))) { set({ error: LECTURE_SEULE }); return null }
+    if (parLaFile(table, 'update', values)) return garder(table, 'update', id, values) as never
+    if (reseauAbsent()) { set({ error: HORS_LIGNE }); return null }
     const { data, error } = await supabase.from(table).update(values).eq('id', id).select().single()
+    if (error && echecReseau(error.message)) {
+      set({ horsLigne: true })
+      if (actionPermise(table, 'update', values)) return garder(table, 'update', id, values) as never
+      set({ error: HORS_LIGNE }); return null
+    }
     if (error || !data) { set({ error: `Enregistrement impossible : ${error?.message ?? 'réponse vide'}` }); return null }
     const key = COLLECTION[table]
     set({
@@ -336,6 +492,8 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   updateMany: async (table, ids, values) => {
     if (!ids.length) return true
     if (!ecriturePermise(table, vueCourante(get()))) { set({ error: LECTURE_SEULE }); return false }
+    if (parLaFile(table, 'update', values)) { for (const id of ids) garder(table, 'update', id, values); return true }
+    if (reseauAbsent()) { set({ error: HORS_LIGNE }); return false }
     const { data, error } = await supabase.from(table).update(values).in('id', ids).select()
     if (error || !data) { set({ error: `Enregistrement impossible : ${error?.message ?? 'réponse vide'}` }); return false }
     const key = COLLECTION[table]
@@ -346,7 +504,14 @@ export const useHorizon = create<HorizonState>((set, get) => ({
 
   remove: async (table, id) => {
     if (!ecriturePermise(table, vueCourante(get()))) { set({ error: LECTURE_SEULE }); return }
+    if (parLaFile(table, 'delete', {})) { garder(table, 'delete', id, {}); return }
+    if (reseauAbsent()) { set({ error: HORS_LIGNE }); return }
     const { error } = await supabase.from(table).delete().eq('id', id)
+    if (error && echecReseau(error.message)) {
+      set({ horsLigne: true })
+      if (actionPermise(table, 'delete')) { garder(table, 'delete', id, {}); return }
+      set({ error: HORS_LIGNE }); return
+    }
     if (error) { set({ error: `Suppression impossible : ${error.message}` }); return }
     const key = COLLECTION[table]
     set({ [key]: (get()[key] as { id: string }[]).filter((row) => row.id !== id) } as Partial<HorizonState>)
@@ -380,46 +545,25 @@ export const useHorizon = create<HorizonState>((set, get) => ({
     set({ settings: data })
   },
 
+  // Passent par insert/update/remove : cocher une habitude marche aussi hors ligne.
   toggleHabitToday: async (habitId, date) => {
     const existing = get().habitLogs.find((l) => l.habit_id === habitId && l.log_date === date)
-    if (existing) {
-      const { error } = await supabase.from('habit_logs').delete().eq('id', existing.id)
-      if (error) { set({ error: `Habitude non mise à jour : ${error.message}` }); return }
-      set({ habitLogs: get().habitLogs.filter((l) => l.id !== existing.id) })
-    } else {
-      const user_id = get().session?.user.id
-      if (!user_id) return
-      const { data, error } = await supabase.from('habit_logs')
-        .insert({ user_id, habit_id: habitId, log_date: date, done: true }).select().single()
-      if (error || !data) { set({ error: `Habitude non mise à jour : ${error?.message ?? 'réponse vide'}` }); return }
-      set({ habitLogs: [...get().habitLogs, data] })
-    }
+    if (existing) await get().remove('habit_logs', existing.id)
+    else await get().insert('habit_logs', { habit_id: habitId, log_date: date, done: true })
   },
 
   // Cycle à 3 états pour une case d'habitude : rien → validé (done=true) → non validé (done=false) → rien.
   cycleHabitDay: async (habitId, date) => {
     const existing = get().habitLogs.find((l) => l.habit_id === habitId && l.log_date === date)
-    if (!existing) {
-      const user_id = get().session?.user.id
-      if (!user_id) return
-      const { data, error } = await supabase.from('habit_logs')
-        .insert({ user_id, habit_id: habitId, log_date: date, done: true }).select().single()
-      if (error || !data) { set({ error: `Habitude non mise à jour : ${error?.message ?? 'réponse vide'}` }); return }
-      set({ habitLogs: [...get().habitLogs, data] })
-    } else if (existing.done) {
-      const { error } = await supabase.from('habit_logs').update({ done: false }).eq('id', existing.id)
-      if (error) { set({ error: `Habitude non mise à jour : ${error.message}` }); return }
-      set({ habitLogs: get().habitLogs.map((l) => (l.id === existing.id ? { ...l, done: false } : l)) })
-    } else {
-      const { error } = await supabase.from('habit_logs').delete().eq('id', existing.id)
-      if (error) { set({ error: `Habitude non mise à jour : ${error.message}` }); return }
-      set({ habitLogs: get().habitLogs.filter((l) => l.id !== existing.id) })
-    }
+    if (!existing) await get().insert('habit_logs', { habit_id: habitId, log_date: date, done: true })
+    else if (existing.done) await get().update('habit_logs', existing.id, { done: false })
+    else await get().remove('habit_logs', existing.id)
   },
 
   // Déclenche la régénération des synthèses d'actualités (edge function), puis
   // recharge le cache local. Le cron fait la même chose chaque matin.
   refreshNews: async (mode = 'jour') => {
+    if (reseauAbsent()) return { ok: false, error: HORS_LIGNE_FONCTION }
     try {
       const { data, error } = await supabase.functions.invoke('horizon-news', { body: { source: 'app', mode } })
       if (error) throw new Error(await messageFonction(error))
@@ -435,6 +579,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   // Page Écritures : quiz de mémorisation généré à la demande par l'edge function.
   // (Le passage lui-même vient de getbible.net, sans clé — voir lib/bible.ts.)
   syncAgenda: async () => {
+    if (horsLigneMaintenant()) return { ok: false, error: HORS_LIGNE_FONCTION }
     try {
       const { data, error } = await supabase.functions.invoke('sync-agenda')
       if (error) throw error
@@ -473,6 +618,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   },
 
   gospelQuiz: async (reference, passage, level, opts) => {
+    if (reseauAbsent()) return { ok: false, error: 'Hors ligne : le quizz se prépare avec le réseau.' }
     try {
       const { data, error } = await supabase.functions.invoke('horizon-gospel', {
         body: {
@@ -501,6 +647,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
   // L'agent (fonction Edge) fait le travail auprès de Céleste ; on recharge
   // ensuite règles et propositions, qu'il a mises à jour lui-même.
   celesteAction: async (action, proposalId) => {
+    if (reseauAbsent()) return { ok: false, error: HORS_LIGNE_FONCTION }
     try {
       const { data, error } = await supabase.functions.invoke('celeste', { body: { action, proposal_id: proposalId } })
       if (error) throw error
@@ -523,6 +670,10 @@ export const useHorizon = create<HorizonState>((set, get) => ({
 
   // Remet à zéro une liste de courses (décoche tout) pour la prochaine tournée.
   resetShopping: async (listId) => {
+    if (parLaFile('shopping_items', 'update', { checked: false })) {
+      for (const it of get().shoppingItems) if (it.list_id === listId && it.checked) garder('shopping_items', 'update', it.id, { checked: false })
+      return
+    }
     const { error } = await supabase.from('shopping_items').update({ checked: false }).eq('list_id', listId)
     if (error) { set({ error: `Liste non réinitialisée : ${error.message}` }); return }
     set({ shoppingItems: get().shoppingItems.map((it) => (it.list_id === listId ? { ...it, checked: false } : it)) })
@@ -530,6 +681,8 @@ export const useHorizon = create<HorizonState>((set, get) => ({
 
   loadFinances: async (force = false) => {
     if (get().finLoaded && !force) return
+    // Hors ligne : l'onglet propose d'ouvrir la copie chiffrée (FinancesLayout).
+    if (horsLigneMaintenant()) return
     const lectures: [keyof HorizonState, string, string, boolean?][] = [
       ['finLines', 'fin_lines', 'sort_order'], ['finAccounts', 'fin_accounts', 'sort_order'],
       ['finCategories', 'fin_categories', 'name'], ['finTransactions', 'fin_transactions', 'date', false],
@@ -540,6 +693,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       ['finResteAjustements', 'fin_reste_ajustements', 'created_at'], ['finEnergie', 'fin_energie_conso', 'periode_debut'],
     ]
     const res = await Promise.all(lectures.map(([, table, ordre, croissant]) => toutLire(table, ordre, croissant)))
+    if (res.every((r) => r.error && echecReseau(r.error))) { set({ horsLigne: true }); return }
     const maj: Partial<HorizonState> = {}
     const echecs: string[] = []
     res.forEach((r, i) => {
@@ -555,7 +709,7 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       maj.finLines = maj.finLines.filter((l) => l !== special)
       maj.finBudgetMoisId = special?.id ?? null
     }
-    set({ ...maj, finLoaded: echecs.length === 0 || get().finLoaded })
+    set({ ...maj, finLoaded: echecs.length === 0 || get().finLoaded, ...(echecs.length === 0 ? { finCopieDu: null } : {}) })
     // Vue partagée : budget, bilan et patrimoine seulement (opérations des comptes du budget).
     const vue = vueCourante(get())
     if (vue) {
@@ -566,6 +720,11 @@ export const useHorizon = create<HorizonState>((set, get) => ({
       })
     }
     if (echecs.length) set({ error: `Finances : chargement incomplet — ${echecs.join(', ')}.` })
+    // Copie chiffrée de l'appareil (si elle est activée), rafraîchie sans mot de passe.
+    const uid = get().session?.user.id
+    if (!echecs.length && uid && !get().apercu) {
+      void enregistrerCopieFinances(uid, donneesFinances(get()))
+    }
   },
 
   setFinBudget: async (lineId, kind, month, amount) => {
@@ -614,8 +773,57 @@ export const useHorizon = create<HorizonState>((set, get) => ({
     get().refreshEnAttente()
   },
 
-  signOut: async () => { await supabase.auth.signOut() },
-}))
+  viderFile: async () => {
+    if (videEnCours || !get().session) return
+    videEnCours = true
+    const perdues: string[] = []
+    try {
+      for (const a of lireFile()) {
+        marquerEnvoi(a.id)
+        const q = supabase.from(a.table)
+        const { error } = a.op === 'insert' ? await q.insert(a.values)
+          : a.op === 'update' ? await q.update(a.values).eq('id', a.rowId)
+          : a.op === 'delete' ? await q.delete().eq('id', a.rowId)
+          : await q.upsert(a.values)
+        marquerEnvoi(null)
+        if (error && echecReseau(error.message)) { set({ horsLigne: true }); break }
+        // Déjà créée (un envoi précédent a abouti sans réponse) : rien de perdu.
+        if (error && !(a.op === 'insert' && error.code === '23505')) perdues.push(error.message)
+        ecrireFile(lireFile().filter((x) => x.id !== a.id))
+      }
+    } finally {
+      marquerEnvoi(null)
+      videEnCours = false
+    }
+    set({ actionsEnAttente: lireFile().length })
+    if (perdues.length) {
+      set({ error: perdues.length === 1
+        ? `Une action faite hors ligne n'a pas pu être enregistrée : ${perdues[0]}.`
+        : `${perdues.length} actions faites hors ligne n'ont pas pu être enregistrées (${perdues[0]}).` })
+    }
+  },
+
+  ouvrirFinancesHorsLigne: async (motDePasse) => {
+    const uid = get().session?.user.id
+    if (!uid) return false
+    const copie = await ouvrirCopieFinances(uid, motDePasse)
+    if (!copie) return false
+    set({ ...(copie.donnees as Partial<HorizonState>), finLoaded: true, finCopieDu: copie.at })
+    return true
+  },
+
+  signOut: async () => {
+    const uid = get().session?.user.id
+    const n = lireFile().length
+    if (n && !window.confirm(`${n} action${n > 1 ? 's' : ''} faite${n > 1 ? 's' : ''} hors ligne ne ${n > 1 ? 'sont' : 'est'} pas encore envoyée${n > 1 ? 's' : ''}. Se déconnecter quand même (elle${n > 1 ? 's' : ''} sera perdue${n > 1 ? 's' : ''}) ?`)) return
+    await supabase.auth.signOut()
+    // Plus rien du compte ne reste sur l'appareil (copies, clés des Finances, file).
+    ecrireFile([])
+    set({ actionsEnAttente: 0 })
+    if (uid) await oublierAppareil(uid)
+  },
+  }
+})
 
 // Mois de paie à paie : les dates des paies suivent la liste des opérations (voir moisPaie.ts).
 useHorizon.subscribe((s) => installerPaies(s.finTransactions))

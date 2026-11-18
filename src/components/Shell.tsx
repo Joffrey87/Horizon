@@ -3,7 +3,7 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   FolderKanban, ListTodo, Compass, CalendarDays, CalendarRange,
   Repeat, ClipboardCheck, Network, Settings, Plus, LogOut, Menu, ArrowLeft, ShieldCheck, Timer, Newspaper,
-  AlertTriangle, X, RotateCw, Ellipsis, ChevronDown, ChevronRight, ArrowLeftRight, Wallet, Eye, Hourglass, ShoppingCart, Euro, Target, MessagesSquare, Dumbbell,
+  AlertTriangle, X, RotateCw, Ellipsis, ChevronDown, ChevronRight, ArrowLeftRight, Wallet, Eye, Hourglass, ShoppingCart, Euro, Target, MessagesSquare, Dumbbell, WifiOff,
 } from 'lucide-react'
 import { useHorizon, vueCourante } from '../lib/store'
 import { ONGLETS_PARTAGE, pageAccueil, routeAutorisee } from '../lib/partage'
@@ -13,6 +13,7 @@ import { QuickAdd } from './QuickAdd'
 import { PAGES_DISCUSSIONS } from './discussionsNav'
 import { CroixLatine,LivreCroix, PAGES_CHARITE } from './chariteNav'
 import { useMediaQuery } from '../lib/useMediaQuery'
+import { prechargerEcritures } from '../lib/horsLigne/ecritures'
 import { ROUTE_ACCUEIL, ROUTE_COURSES } from '../lib/navigation'
 
 // Agendas externes : on resynchronise au plus une fois par demi-heure. Inutile
@@ -90,6 +91,9 @@ export function Shell({ children }: { children: ReactNode }) {
   const loadAll = useHorizon((s) => s.loadAll)
   const syncAgenda = useHorizon((s) => s.syncAgenda)
   const nbAgendas = useHorizon((s) => s.calendarFeeds.length)
+  const horsLigne = useHorizon((s) => s.horsLigne)
+  const donneesDu = useHorizon((s) => s.donneesDu)
+  const actionsEnAttente = useHorizon((s) => s.actionsEnAttente)
   const navigate = useNavigate()
   const { pathname } = useLocation()
   // Vue partagée (compte invité, ou aperçu « Voir comme… ») : menu et pages limités.
@@ -118,8 +122,15 @@ export function Shell({ children }: { children: ReactNode }) {
   const plusEnHaut = false
   const pleineLargeur = pathname === ROUTE_ACCUEIL || pathname.startsWith('/temps')
 
+  // En ligne : les lectures des jours qui viennent sont gardées pour le hors-ligne (une fois par jour).
   useEffect(() => {
-    if (nbAgendas === 0 || vue) return
+    if (horsLigne || !donneesDu) return
+    const t = setTimeout(() => { void prechargerEcritures() }, 5000)
+    return () => clearTimeout(t)
+  }, [horsLigne, donneesDu])
+
+  useEffect(() => {
+    if (nbAgendas === 0 || vue || horsLigne) return
     let dernier = 0
     try { dernier = Number(localStorage.getItem(SYNC_KEY) ?? 0) } catch { /* stockage indispo */ }
     if (Date.now() - dernier < SYNC_MS) return
@@ -130,7 +141,7 @@ export function Shell({ children }: { children: ReactNode }) {
     void syncAgenda().then((r) => {
       if (!r.ok) useHorizon.setState({ error: `Agenda non synchronisé : ${r.error}` })
     })
-  }, [nbAgendas, syncAgenda, vue])
+  }, [nbAgendas, syncAgenda, vue, horsLigne])
 
   return (
     <div className="flex min-h-dvh overflow-x-clip">
@@ -334,6 +345,16 @@ export function Shell({ children }: { children: ReactNode }) {
               <button onClick={clearError} className="btn-ghost shrink-0 p-1 text-ink-3 hover:text-ink" aria-label="Masquer">
                 <X size={14} />
               </button>
+            </div>
+          )}
+          {/* Hors ligne : on le dit, sans alarme, avec la date de ce qui est affiché. */}
+          {horsLigne && (
+            <div role="status" className="mb-3 flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-sm">
+              <WifiOff size={15} className="shrink-0 text-ink-3" />
+              <p className="min-w-0 flex-1 text-ink-2">
+                Hors ligne{donneesDu ? ` · données du ${new Date(donneesDu).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}
+                {actionsEnAttente > 0 && <span className="text-ink-3"> · {actionsEnAttente} action{actionsEnAttente > 1 ? 's' : ''} en attente d'envoi</span>}
+              </p>
             </div>
           )}
           {/* Aperçu « Voir comme… » : on le sait toujours, et on en sort d'un clic. */}

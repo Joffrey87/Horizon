@@ -9,6 +9,7 @@ import { todayIso } from '../lib/logic'
 import type { AiUsage } from '../lib/types'
 import { Card, DomainDot } from '../components/ui'
 import { PartageCard } from '../components/PartageCard'
+import { HorsLigneCard } from '../components/HorsLigneCard'
 
 export function SettingsView() {
   const s = useHorizon()
@@ -118,6 +119,8 @@ export function SettingsView() {
       </Card>
 
       <PartageCard />
+
+      <HorsLigneCard />
 
       <Card title="Limitation du travail en cours">
         <label className="block space-y-1 text-xs text-ink-3">

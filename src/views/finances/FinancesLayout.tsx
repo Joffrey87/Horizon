@@ -7,6 +7,7 @@ import { PAGES_GLISSANTES, pagesFinancesVisibles } from '../../lib/financesNav'
 import { useMediaQuery } from '../../lib/useMediaQuery'
 import { moisCourant, useVue, type FinContexte } from './contexte'
 import { NavMois } from './partage'
+import { CopieHorsLigne } from './CopieHorsLigne'
 
 const FILTRES: { value: FiltreTitulaire; label: string }[] = [
   { value: 'foyer', label: 'Foyer' }, { value: 'commun', label: 'Commun' },
@@ -29,6 +30,8 @@ function dansZoneDefilante(cible: EventTarget | null): boolean {
 export function FinancesLayout() {
   const loadFinances = useHorizon((s) => s.loadFinances)
   const dejaCharge = useHorizon((s) => s.finLoaded)
+  const horsLigne = useHorizon((s) => s.horsLigne)
+  const copieDu = useHorizon((s) => s.finCopieDu)
   const [essaye, setEssaye] = useState(false)
   const [mois, setMois] = useState(moisCourant)
   const [filtre, setFiltre] = useState<FiltreTitulaire>('foyer')
@@ -36,7 +39,8 @@ export function FinancesLayout() {
   const navigate = useNavigate()
   const vue = useVue()
   // Même en échec on affiche les pages : le bandeau d'erreur du Shell dit ce qui manque.
-  useEffect(() => { void loadFinances().finally(() => setEssaye(true)) }, [loadFinances])
+  // Le réseau revient pendant qu'on est sur l'onglet : on charge pour de bon.
+  useEffect(() => { void loadFinances().finally(() => setEssaye(true)) }, [loadFinances, horsLigne])
   const charge = dejaCharge || essaye
   // Le mois de paie à paie dépend des opérations : tant qu'elles ne sont pas chargées, « maintenant » est le mois civil.
   // Une fois chargées, on se place sur le bon mois — sauf si l'utilisateur en a déjà choisi un.
@@ -80,7 +84,13 @@ export function FinancesLayout() {
             {FILTRES.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
           </select>
         </div>, emplacement)}
-      {charge ? <Outlet context={contexte} /> : <p className="pt-8 text-center text-sm text-ink-3">Chargement des finances…</p>}
+      {copieDu && (
+        <p className="mb-2 text-center text-xs text-ink-3">
+          Copie hors ligne du {new Date(copieDu).toLocaleString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })} — lecture seule.
+        </p>
+      )}
+      {!dejaCharge && horsLigne ? <CopieHorsLigne />
+        : charge ? <Outlet context={contexte} /> : <p className="pt-8 text-center text-sm text-ink-3">Chargement des finances…</p>}
       {barreHaute && pages.length > 1 && (
         <div className="mt-2 flex justify-center gap-1.5" aria-hidden>
           {pages.map((to) => <span key={to} className={`h-1.5 w-1.5 rounded-full ${to === chemin ? 'bg-sun-soft' : 'bg-white/20'}`} />)}
