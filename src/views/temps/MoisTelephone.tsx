@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { addDays, addWeeks, differenceInCalendarWeeks, format, isToday, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Church } from 'lucide-react'
@@ -9,7 +9,7 @@ import {
 } from '../../lib/logic'
 import type { Task } from '../../lib/types'
 import { couleurMois, debutMoisTelephone, margeMois, teinteMois } from './molette'
-import { EVENT_DEFAULT_COLOR, remplaProposeOn, stepsForDay } from './partage'
+import { EVENT_DEFAULT_COLOR, MassPickCtx, remplaProposeOn, stepsForDay } from './partage'
 
 /** Vue Mois pour téléphone : 4 semaines à l'écran (par défaut la semaine d'avant, la
  *  semaine en cours et les 2 suivantes), façon agenda de poche. Chaque semaine est une
@@ -115,6 +115,7 @@ const Semaine = memo(function Semaine({ debut, hauteur, maxLignes, moisMs, nomMo
   debut: string; hauteur: number; maxLignes: number; moisMs: number; nomMois: string; onOpenDay: (d: Date) => void
 }) {
   const s = useHorizon()
+  const openMassPicker = useContext(MassPickCtx)
   const jours = Array.from({ length: 7 }, (_, j) => addDays(parseISO(debut), j))
   const mois = new Date(moisMs)
 
@@ -163,10 +164,11 @@ const Semaine = memo(function Semaine({ debut, hauteur, maxLignes, moisMs, nomMo
         const montrees = trop ? lignes.slice(0, Math.max(0, maxLignes - 1)) : lignes
         const rempla = remplaProposeOn(s.celesteProposals, iso(jour))
         return (
-          <button key={jour.toISOString()} type="button" onClick={() => onOpenDay(jour)}
+          <div key={jour.toISOString()} role="button" tabIndex={0} onClick={() => onOpenDay(jour)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenDay(jour) } }}
             aria-label={format(jour, 'EEEE d MMMM', { locale: fr })}
             style={auj ? { background: 'linear-gradient(rgba(245,158,11,.14), rgba(245,158,11,.14)), rgba(15,13,10,.62)' } : { backgroundColor: teinteMois(jour) }}
-            className={`relative flex min-h-0 flex-col overflow-hidden border-b border-r border-line-2/50 text-left ${auj ? 'bg-sun/10 ring-1 ring-inset ring-sun/70' : ''} ${rempla ? 'outline outline-1 -outline-offset-1 outline-dashed outline-[#ef4444]/80' : ''}`}>
+            className={`relative flex min-h-0 cursor-pointer flex-col overflow-hidden border-b border-r border-line-2/50 text-left ${auj ? 'bg-sun/10 ring-1 ring-inset ring-sun/70' : ''} ${rempla ? 'outline outline-1 -outline-offset-1 outline-dashed outline-[#ef4444]/80' : ''}`}>
             <span className={`flex shrink-0 items-baseline gap-0.5 px-0.5 text-[11px] leading-[17px] ${auj ? 'font-semibold text-sun-soft' : 'text-ink-2'}`}>
               {format(jour, 'd')}
             </span>
@@ -182,7 +184,11 @@ const Semaine = memo(function Semaine({ debut, hauteur, maxLignes, moisMs, nomMo
               </span>
             ))}
             {trop && <span className="px-0.5 text-[10px] leading-[14px] text-ink-3">+{lignes.length - montrees.length}</span>}
-          </button>
+            {/* Croix ✝ : choisir la messe du jour (même sélecteur que dans les autres vues). */}
+            <button type="button" aria-label="Choisir la messe"
+              onClick={(e) => { e.stopPropagation(); openMassPicker(iso(jour), feastOnDay(jour) ?? '') }}
+              className="absolute right-0 top-0 z-10 px-[3px] text-[11px] font-semibold leading-[17px] text-ink-3/80 active:opacity-60">✝</button>
+          </div>
         )
       })}
       {/* Marge : bande teintée du mois, nom à la verticale en tête de bande. */}

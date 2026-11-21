@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, X } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 
-/** Colonne « À planifier » de la vue Semaine (ordinateur) : une liste libre par semaine, chaque élément se coche
+/** Colonne « À planifier » de la vue Semaine (ordinateur), en deux parties : en haut une liste COMMUNE à toutes les
+ *  semaines (`commun`), en bas une liste propre à la semaine affichée. Chaque élément se coche
  *  quand il est planifié dans la semaine. Mémorisée dans un layout (projection `temps-aplanifier`, une entrée par lundi),
  *  donc retrouvée sur tous les appareils ; les semaines de plus de 10 semaines sont oubliées. */
 const PROJECTION = 'temps-aplanifier'
@@ -10,38 +11,69 @@ const GARDER_SEMAINES = 10
 
 interface Element { id: string; texte: string; fait: boolean }
 type Semaines = Record<string, Element[]>
+type Donnees = { semaines?: Semaines; commun?: Element[] }
 
 const lire = (data: unknown, semaine: string): Element[] => {
   const s = (data as { semaines?: Semaines } | undefined)?.semaines
   return Array.isArray(s?.[semaine]) ? s![semaine]! : []
 }
 
+const lireCommun = (data: unknown): Element[] => {
+  const c = (data as Donnees | undefined)?.commun
+  return Array.isArray(c) ? c : []
+}
+
 export function APlanifier({ semaine }: { semaine: string }) {
   const layout = useHorizon((s) => s.layouts.find((l) => l.projection === PROJECTION))
   const [items, setItems] = useState<Element[]>(() => lire(layout?.data, semaine))
-  const [texte, setTexte] = useState('')
-  // Glisser-déposer pour réordonner : l'élément saisi et l'endroit visé (avant/après un autre, ou tout en bas).
-  const [saisi, setSaisi] = useState<string | null>(null)
-  const [visee, setVisee] = useState<{ id: string | null; apres: boolean } | null>(null)
+  const [commun, setCommun] = useState<Element[]>(() => lireCommun(layout?.data))
   const modifie = useRef(false)
   const file = useRef<Promise<void>>(Promise.resolve())
 
   // Changement de semaine, ou données serveur arrivées : on repart de ce qui est enregistré (sauf frappe en cours).
-  useEffect(() => { modifie.current = false; setItems(lire(layout?.data, semaine)) }, [semaine]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (!modifie.current) setItems(lire(layout?.data, semaine)) }, [layout]) // eslint-disable-line react-hooks/exhaustive-deps
+  const recharger = () => { setItems(lire(layout?.data, semaine)); setCommun(lireCommun(layout?.data)) }
+  useEffect(() => { modifie.current = false; recharger() }, [semaine]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!modifie.current) recharger() }, [layout]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const ecrire = (next: Element[]) => {
+  const ecrire = (fusion: (d: Donnees) => Donnees) => {
     file.current = file.current.then(async () => {
       const s = useHorizon.getState()
       const cur = s.layouts.find((l) => l.projection === PROJECTION)
-      const semaines: Semaines = { ...((cur?.data as { semaines?: Semaines } | undefined)?.semaines ?? {}), [semaine]: next }
-      for (const k of Object.keys(semaines).sort().slice(0, -GARDER_SEMAINES)) delete semaines[k]
-      const data = { ...(cur?.data ?? {}), semaines }
+      const data = fusion({ ...((cur?.data as Donnees | undefined) ?? {}) })
       if (cur) await s.update('layouts', cur.id, { data, updated_at: new Date().toISOString() })
       else await s.insert('layouts', { name: 'À planifier', projection: PROJECTION, is_default: false, data })
     })
   }
-  const maj = (next: Element[]) => { modifie.current = true; setItems(next); ecrire(next) }
+  const majSemaine = (next: Element[]) => {
+    modifie.current = true; setItems(next)
+    ecrire((d) => {
+      const semaines: Semaines = { ...(d.semaines ?? {}), [semaine]: next }
+      for (const k of Object.keys(semaines).sort().slice(0, -GARDER_SEMAINES)) delete semaines[k]
+      return { ...d, semaines }
+    })
+  }
+  const majCommun = (next: Element[]) => {
+    modifie.current = true; setCommun(next)
+    ecrire((d) => ({ ...d, commun: next }))
+  }
+
+  return (
+    <section aria-label="À planifier" data-testid="a-planifier" style={{ gridColumn: 1, gridRow: '1 / span 3' }}
+      // Sans coller au bord : le contenu a sa propre marge intérieure.
+      className="flex min-h-0 min-w-0 flex-col gap-2 rounded-xl bg-white/[0.03] px-2.5 pb-2">
+      <ListeLibre titre="Toutes les semaines" items={commun} onChange={majCommun} />
+      <div className="border-t border-line-2/50" />
+      <ListeLibre titre="Cette semaine" items={items} onChange={majSemaine} />
+    </section>
+  )
+}
+
+function ListeLibre({ titre, items, onChange }: { titre: string; items: Element[]; onChange: (next: Element[]) => void }) {
+  const [texte, setTexte] = useState('')
+  // Glisser-déposer pour réordonner : l'élément saisi et l'endroit visé (avant/après un autre, ou tout en bas).
+  const [saisi, setSaisi] = useState<string | null>(null)
+  const [visee, setVisee] = useState<{ id: string | null; apres: boolean } | null>(null)
+  const maj = onChange
 
   const ajouter = (e: React.FormEvent) => {
     e.preventDefault()
@@ -65,16 +97,14 @@ export function APlanifier({ semaine }: { semaine: string }) {
 
   const restants = items.filter((i) => !i.fait).length
   return (
-    <section aria-label="À planifier" data-testid="a-planifier" style={{ gridColumn: 1, gridRow: '1 / span 3' }}
-      // Sans coller au bord : le contenu a sa propre marge intérieure.
-      className="flex min-w-0 flex-col rounded-xl bg-white/[0.03] px-2.5 pb-2"
+    <div aria-label={titre} className="flex min-h-0 flex-1 flex-col"
       onDragOver={(e) => { if (saisi) { e.preventDefault(); setVisee((v) => v ?? { id: null, apres: true }) } }}
       onDrop={(e) => { if (saisi) { e.preventDefault(); deposer() } }}>
       <div className="mb-1.5 w-full py-1 text-center">
-        <small className="block text-[10px] uppercase tracking-[0.08em] text-ink-3">À planifier</small>
+        <small className="block text-[10px] uppercase tracking-[0.08em] text-ink-3">{titre}</small>
         <span className="inline-block px-1.5 py-px text-[13px] font-semibold text-ink">{items.length ? `${restants}/${items.length}` : '—'}</span>
       </div>
-      <ul className="flex flex-col gap-1">
+      <ul className="flex flex-col gap-1 overflow-y-auto">
         {items.map((i) => (
           <li key={i.id} draggable
             onDragStart={(e) => { e.dataTransfer.setData('application/horizon-aplanifier', i.id); e.dataTransfer.effectAllowed = 'move'; setSaisi(i.id) }}
@@ -99,9 +129,9 @@ export function APlanifier({ semaine }: { semaine: string }) {
         ))}
       </ul>
       <form onSubmit={ajouter} className="mt-1.5">
-        <input value={texte} onChange={(e) => setTexte(e.target.value)} placeholder="À planifier…" aria-label="Ajouter à planifier"
+        <input value={texte} onChange={(e) => setTexte(e.target.value)} placeholder="À planifier…" aria-label={`Ajouter — ${titre}`}
           className="field w-full !px-2 !py-1 text-[12px]" />
       </form>
-    </section>
+    </div>
   )
 }
