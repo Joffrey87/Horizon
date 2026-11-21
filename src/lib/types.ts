@@ -179,6 +179,8 @@ export interface Layout {
     sizes?: Record<string, { w: number; h: number }>
     /** Bloc-notes de la vue Semaine (4 colonnes). */
     notes?: string[]
+    /** Couleur d'Honorine dans Finances (code #RRGGBB). */
+    couleur?: string
     filters?: Record<string, unknown>
   }
   created_at: string

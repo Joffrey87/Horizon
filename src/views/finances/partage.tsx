@@ -6,6 +6,7 @@ import { useHorizon } from '../../lib/store'
 import { TITULAIRES, categorieEffective, nomCategorie, normaliserLibelle, operationsSemblables, decaleMois, estEnAttente, euros, libelleMois, type FiltreTitulaire, type IndexFinances } from '../../lib/finances'
 import type { FinOwner, FinTransaction } from '../../lib/types'
 import { IconeCompte } from './IconeCompte'
+import { COULEUR_HONORINE_DEFAUT, enregistrerCouleurHonorine, normaliserCouleur, useCouleurHonorine } from '../../lib/couleurHonorine'
 import { Modal, Seg } from '../../components/ui'
 import { dateCourte, dateLongue, moisCourant, useArbreCategories, useReconnaissance, useVue } from './contexte'
 
@@ -32,12 +33,57 @@ export function NavMois({ mois, onChange }: { mois: string; onChange: (m: string
 
 export function FiltreSeg({ value, onChange }: { value: FiltreTitulaire; onChange: (f: FiltreTitulaire) => void }) {
   return (
-    <Seg compact value={value} onChange={onChange} options={[
-      { value: 'foyer', label: 'Foyer', separe: true },
-      { value: 'commun', label: 'Commun', titre: 'Compte bancaire commun' },
-      { value: 'joffrey', label: 'Joffrey', titre: 'Carte bleue Joffrey' },
-      { value: 'honorine', label: 'Honorine', titre: 'Carte bleue Honorine' },
-    ]} />
+    <span className="inline-flex items-center gap-1.5">
+      <Seg compact value={value} onChange={onChange} options={[
+        { value: 'foyer', label: 'Foyer', separe: true },
+        { value: 'commun', label: 'Commun', titre: 'Compte bancaire commun' },
+        { value: 'joffrey', label: 'Joffrey', titre: 'Carte bleue Joffrey' },
+        { value: 'honorine', label: 'Honorine', titre: 'Carte bleue Honorine' },
+      ]} />
+      <ChoixCouleurHonorine />
+    </span>
+  )
+}
+
+/** Pastille de la couleur d'Honorine ; un clic ouvre la saisie d'un code hexadécimal (ex. AC5AD6). */
+function ChoixCouleurHonorine() {
+  const couleur = useCouleurHonorine()
+  const [ouvert, setOuvert] = useState(false)
+  const [code, setCode] = useState('')
+  const [occupe, setOccupe] = useState(false)
+  const valide = normaliserCouleur(code)
+  const valider = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!valide) return
+    setOccupe(true)
+    try { await enregistrerCouleurHonorine(valide); setOuvert(false) } finally { setOccupe(false) }
+  }
+  return (
+    <>
+      <button type="button" onClick={() => { setCode(couleur.slice(1)); setOuvert(true) }}
+        title="Choisir la couleur d’Honorine" aria-label="Choisir la couleur d’Honorine"
+        className="h-4 w-4 shrink-0 rounded-full border border-white/30" style={{ background: couleur }} />
+      {ouvert && (
+        <Modal open onClose={() => setOuvert(false)} title="Couleur d’Honorine">
+          <form onSubmit={valider} className="space-y-3">
+            <label className="block text-xs text-ink-3">Code couleur (6 caractères : chiffres 0-9 et lettres A-F)
+              <span className="mt-1 flex items-center gap-2">
+                <span className="text-ink-3">#</span>
+                <input value={code} onChange={(e) => setCode(e.target.value.replace(/^#/, ''))} maxLength={6} autoFocus
+                  placeholder="AC5AD6" aria-label="Code couleur" className="field w-28 uppercase" />
+                <span className="h-6 w-6 rounded-full border border-white/30" style={{ background: valide ?? 'transparent' }} />
+              </span>
+            </label>
+            {code && !valide && <p className="text-xs text-[#eda145]">Code invalide (ex. AC5AD6).</p>}
+            <div className="flex justify-between gap-2">
+              <button type="button" className="btn-ghost text-xs" disabled={occupe}
+                onClick={() => setCode(COULEUR_HONORINE_DEFAUT.slice(1))}>Valeur d’origine</button>
+              <button type="submit" className="btn-primary" disabled={!valide || occupe}>Enregistrer</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </>
   )
 }
 

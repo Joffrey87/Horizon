@@ -123,7 +123,7 @@ const CHAMP = 'mt-0.5 w-full rounded-md border border-line-2 bg-panel px-2 py-1 
 
 /** Panneau d'édition, dans la boîte sable sous le groupe touché : intitulé (opération)
  *  ou nom (groupe), puis « Regrouper avec… » (choix du groupe et du nom), et Séparer. */
-/** Attribue UNE opération à Joffrey (bleu), Honorine (rose) ou Commun (bleu/rose), dans Horizon seulement :
+/** Attribue UNE opération à Joffrey (bleu), Honorine (violet) ou Commun (bleu/violet), dans Horizon seulement :
  *  le compte bancaire et son titulaire ne changent pas. Choisir le titulaire du compte revient à « pas d'attribution ». */
 function Attribution({ tx, idx }: { tx: FinTransaction; idx: IndexFinances }) {
   const actuel = titulaireDe(tx, idx)
