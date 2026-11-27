@@ -5,7 +5,7 @@ import { useOutletContext } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { useHorizon, vueCourante } from '../../lib/store'
-import { appliquerRemboursements, creerReconnaissance, indexer, type FiltreTitulaire, type IndexFinances } from '../../lib/finances'
+import { appliquerRemboursements, creerReconnaissance, indexer, masquerSurprises, type FiltreTitulaire, type IndexFinances } from '../../lib/finances'
 import type { FinCategory } from '../../lib/types'
 import { todayIso } from '../../lib/logic'
 import { moisBudget } from '../../lib/moisPaie'
@@ -35,8 +35,20 @@ export function useIndex(): IndexFinances {
 
 /** Opérations pour les calculs de budget : un remboursement rattaché compte dans le mois et la catégorie de sa dépense. */
 export function useTransactionsBudget() {
-  const transactions = useHorizon((s) => s.finTransactions)
+  const transactions = useTransactions()
   return useMemo(() => appliquerRemboursements(transactions), [transactions])
+}
+
+/** Qui regarde : le membre de la vue partagée (Honorine, ou l'aperçu « Voir comme… »), sinon le propriétaire. */
+export const useMoi = () => useHorizon((s) => { const v = vueCourante(s); return v ? v.member_id : s.session?.user.id ?? null })
+
+/** Toutes les opérations, surprises des autres masquées (intitulé « Surprise », montant tu à l'affichage,
+ *  gardé dans les totaux). À utiliser partout où l'on AFFICHE des opérations. */
+export function useTransactions() {
+  const transactions = useHorizon((s) => s.finTransactions)
+  const moi = useMoi()
+  const jour = todayIso()
+  return useMemo(() => masquerSurprises(transactions, moi, jour), [transactions, moi, jour])
 }
 
 /** Reconnaissance des intitulés locaux, recalculée quand les règles changent. */

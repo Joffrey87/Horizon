@@ -6,14 +6,14 @@ import { useHorizon } from '../../lib/store'
 import { categorieEffective, euros, nomLisible } from '../../lib/finances'
 import type { FinTransaction } from '../../lib/types'
 import { Modal } from '../../components/ui'
-import { dateLongue, useIndex, useReconnaissance } from './contexte'
+import { dateLongue, useIndex, useReconnaissance, useTransactions } from './contexte'
 
 /** Dépenses avant (jusqu'à 120 j) ou juste après (45 j : la dépense peut n'être pas encore passée) le remboursement. */
 const AVANT = 120
 const APRES = 45
 
 export function LierRemboursement({ tx, onClose }: { tx: FinTransaction; onClose: () => void }) {
-  const brutes = useHorizon((s) => s.finTransactions)
+  const brutes = useTransactions()
   const update = useHorizon((s) => s.update)
   const idx = useIndex()
   const reco = useReconnaissance()
@@ -27,7 +27,7 @@ export function LierRemboursement({ tx, onClose }: { tx: FinTransaction; onClose
   const candidates = useMemo(() => {
     const q = filtre.trim().toLowerCase().replace(',', '.')
     return brutes
-      .filter((t) => t.id !== brute.id && Number(t.amount) < 0 && !t.internal && !t.excluded)
+      .filter((t) => t.id !== brute.id && Number(t.amount) < 0 && !t.internal && !t.excluded && !t.surprise_cachee)
       .map((t) => ({ t, ecart: differenceInCalendarDays(parseISO(t.date), parseISO(brute.date)) }))
       .filter(({ ecart }) => ecart >= -AVANT && ecart <= APRES)
       .filter(({ t }) => !q || nom(t).toLowerCase().includes(q) || t.label.toLowerCase().includes(q) || Math.abs(Number(t.amount)).toFixed(2).startsWith(q))

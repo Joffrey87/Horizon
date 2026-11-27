@@ -571,6 +571,12 @@ export interface FinTransaction {
   rembourse_de?: UUID | null
   /** Mois choisi à la main ('yyyy-MM') : l'opération y compte malgré sa date bancaire. null = mois de paie de sa date. */
   mois_affecte?: string | null
+  /** Surprise (catégorie Cadeaux) : compte qui l'a cachée à l'autre personne du foyer. null = pas de surprise. */
+  surprise_de?: UUID | null
+  /** Date de révélation ('yyyy-MM-dd') : la surprise est visible de tous à partir de ce jour. */
+  surprise_jusqu?: string | null
+  /** Calculé à l'affichage, jamais en base : surprise cachée à la personne qui regarde (intitulé masqué, montant à taire). */
+  surprise_cachee?: boolean
   source: string
   external_id: string | null
   created_at: string

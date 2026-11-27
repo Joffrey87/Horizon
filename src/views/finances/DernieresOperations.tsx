@@ -4,10 +4,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, X } from 'lucide-react'
-import { useHorizon } from '../../lib/store'
-import { categorieEffective, euros, nomCategorie, operationsRecentes, segmentsSurlignes } from '../../lib/finances'
+import { MONTANT_CACHE, categorieEffective, euros, nomCategorie, operationsRecentes, segmentsSurlignes } from '../../lib/finances'
 import type { FinTransaction } from '../../lib/types'
-import { dateCourte, useFin, useIndex, useReconnaissance } from './contexte'
+import { dateCourte, useFin, useIndex, useReconnaissance, useTransactions } from './contexte'
 import { EditionOperation } from './DetailLigne'
 import { IconeCompte } from './IconeCompte'
 
@@ -21,7 +20,7 @@ function Surligne({ texte, requete }: { texte: string; requete: string }) {
 
 export function DernieresOperations({ onClose, bureau }: { onClose: () => void; bureau: boolean }) {
   const { filtre } = useFin()
-  const transactions = useHorizon((s) => s.finTransactions)
+  const transactions = useTransactions()
   const idx = useIndex()
   const reco = useReconnaissance()
   const [requete, setRequete] = useState('')
@@ -51,7 +50,9 @@ export function DernieresOperations({ onClose, bureau }: { onClose: () => void; 
   }, [onClose])
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex bg-black/55" onClick={onClose} data-testid="dernieres-operations">
+    // z-[45] : au-dessus du Shell (z-40), SOUS les fenêtres qu'ouvre l'édition d'une opération
+    // (catégories z-[60], « Rembourse… » / intitulé en Modal z-50) — sinon elles restent derrière, inclicables.
+    <div className="fixed inset-0 z-[45] flex bg-black/55" onClick={onClose} data-testid="dernieres-operations">
       <div role="dialog" aria-label="Dernières opérations" onClick={(e) => e.stopPropagation()}
         className={`flex flex-col border border-line-2 bg-[#15110e] ${bureau
           ? 'm-auto h-[min(82vh,720px)] w-[min(92vw,560px)] rounded-2xl'
@@ -84,12 +85,12 @@ export function DernieresOperations({ onClose, bureau }: { onClose: () => void; 
                       <button data-testid="op-recente" onClick={() => setSel(actif ? null : tx.id)}
                         className={`flex w-full items-baseline gap-2 py-1.5 text-left text-[12.5px] ${actif ? 'text-[#eda145]' : 'text-ink-2'}`}>
                         <IconeCompte tx={tx} idx={idx} />
-                        <span className="min-w-0 flex-1 truncate" title={tx.label}>
+                        <span className="min-w-0 flex-1 truncate" title={tx.surprise_cachee ? undefined : tx.label}>
                           <Surligne texte={reco.libelle(tx) || '(sans libellé)'} requete={requete} />
                         </span>
                         <span className="max-w-[38%] shrink-0 truncate text-[10.5px] text-ink-3"><Surligne texte={cat} requete={requete} /></span>
                         <span className="w-[70px] shrink-0 text-right tabular-nums" style={montant > 0 ? { color: VERT } : undefined}>
-                          {montant > 0 ? '+' : ''}{euros(Math.abs(montant), true)}
+                          {tx.surprise_cachee ? MONTANT_CACHE : <>{montant > 0 ? '+' : ''}{euros(Math.abs(montant), true)}</>}
                         </span>
                       </button>
                       {actif && <EditionOperation key={tx.id} tx={tx} onClose={() => setSel(null)} />}

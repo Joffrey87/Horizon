@@ -7,6 +7,7 @@ import {
   estEnAttente, NON_CLASSE, agreger, allocation, bilan, aplatirGroupes, capitalRembourse, cleGroupe, compositionPatrimoine, depensesAVenir, detailPeriode, entreesPrevues, grouperParIntitule, nomLisible, creerReconnaissance, normaliserLibelle, operationsSemblables, rechercherOperations, operationsRecentes, segmentsSurlignes, categoriesParLigne, blocsChoixCategorie, ligneDeCategorie, budgetDe, budgetAjuste, ecrituresBudgetMois, estEpargneComptee, fondLigne, classer, decaleMois, detailLigne, ecartMois, euros, indexer,
   libelleMois, moisEcoules, patrimoine, previsionDe, provision, syntheseMois,
   agregerHorsCapital, appliquerRemboursements, remboursementsRecus, hierarchieDetail, nomPropres, detailHorsCapital, NOM_PRET_REIMS, capitalDuMois, epargnesPrevues, listeEpargnes,
+  masquerSurprises, surpriseCachee, estCadeaux, SURPRISE,
 } from './finances'
 
 let seq = 0
@@ -863,5 +864,34 @@ describe('remboursements rattachés', () => {
     expect(r.total).toBe(49)
     expect(r.operations.map((t) => t.id).sort()).toEqual([retour.id, mutuelle.id].sort())
     expect(remboursementsRecus({ mois: '2026-09', transactions: [achat, retour], idx: idxR, filtre: 'foyer' }).total).toBe(0)
+  })
+})
+
+describe('surprises (Cadeaux)', () => {
+  const s = op('a', '2026-11-20', -42.5, { label: 'FNAC CB*1111', label_local: 'Livre', surprise_de: 'joffrey', surprise_jusqu: '2026-12-25' })
+  it("cachée à l'autre jusqu'à la veille de sa révélation, jamais à qui l'a posée", () => {
+    expect(surpriseCachee(s, 'honorine', '2026-12-24')).toBe(true)
+    expect(surpriseCachee(s, 'honorine', '2026-12-25')).toBe(false)
+    expect(surpriseCachee(s, 'joffrey', '2026-12-01')).toBe(false)
+    expect(surpriseCachee(op('a', '2026-11-20', -5), 'honorine', '2026-12-01')).toBe(false)
+  })
+  it('masque intitulés mais garde le montant (totaux complets)', () => {
+    const autre = op('a', '2026-11-21', -3)
+    const [m, a] = masquerSurprises([s, autre], 'honorine', '2026-12-01')
+    expect(m).toMatchObject({ label: SURPRISE, label_local: SURPRISE, amount: -42.5, surprise_cachee: true })
+    expect(a).toBe(autre)
+    const memes = [autre]
+    expect(masquerSurprises(memes, 'honorine', '2026-12-01')).toBe(memes)
+  })
+  it('une surprise cachée ne répond pas à une recherche de montant', () => {
+    const [m] = masquerSurprises([s], 'honorine', '2026-12-01')
+    const idx = indexer([], [], [])
+    expect(rechercherOperations({ transactions: [m!], requete: '42', idx, filtre: 'foyer' })).toEqual([])
+    expect(rechercherOperations({ transactions: [m!], requete: 'livre', idx, filtre: 'foyer' })).toEqual([])
+  })
+  it('reconnaît la catégorie Cadeaux', () => {
+    expect(estCadeaux('Cadeaux')).toBe(true)
+    expect(estCadeaux('cadeau ')).toBe(true)
+    expect(estCadeaux('Cadeaux de Noël')).toBe(false)
   })
 })

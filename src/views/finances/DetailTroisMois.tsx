@@ -4,7 +4,7 @@
 import { Fragment, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, Combine, GripVertical, Ungroup } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
-import { decaleMois, detailPeriode, euros, libelleMois, normaliserLibelle, type GroupePeriode } from '../../lib/finances'
+import { MONTANT_CACHE, toutesCachees, decaleMois, detailPeriode, euros, libelleMois, normaliserLibelle, type GroupePeriode } from '../../lib/finances'
 import { Modal } from '../../components/ui'
 import { LigneOperation } from './partage'
 import { useFin, useIndex, useReconnaissance, useVue, useTransactionsBudget } from './contexte'
@@ -81,8 +81,8 @@ export function DetailTroisMois({ cle }: { cle: string }) {
                       </span>
                     </button>
                   </td>
-                  {g.parMois.map((v, i) => <td key={periode[i]} className="px-2 text-right tabular-nums text-ink-2">{montant(v)}</td>)}
-                  <td className="px-2 text-right font-medium tabular-nums">{euros(g.moyenne)}</td>
+                  {g.parMois.map((v, i) => <td key={periode[i]} className="px-2 text-right tabular-nums text-ink-2">{toutesCachees(g.operations) ? MONTANT_CACHE : montant(v)}</td>)}
+                  <td className="px-2 text-right font-medium tabular-nums">{toutesCachees(g.operations) ? MONTANT_CACHE : euros(g.moyenne)}</td>
                   <td className="pl-1 text-right">
                     {rangeable && (
                       <button onClick={() => setARegrouper({ groupe: g })} className="btn-ghost p-1"

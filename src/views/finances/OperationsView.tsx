@@ -6,7 +6,7 @@ import { useHorizon } from '../../lib/store'
 import { NON_CLASSE, classer, correspond, euros, lignesTriees, titulaireDe } from '../../lib/finances'
 import { EmptyState } from '../../components/ui'
 import { FiltreSeg, LigneOperation, NavMois } from './partage'
-import { useFin, useIndex, useReconnaissance, useVue } from './contexte'
+import { useFin, useIndex, useReconnaissance, useVue, useTransactions } from './contexte'
 import { ImportCsvCarte } from './ImportCsvCarte'
 
 type Portee = 'tout' | 'budget' | typeof NON_CLASSE | 'revenus' | 'hors' | string
@@ -16,7 +16,7 @@ const PAR_PAGE = 150
 /** Toutes les opérations, filtrables ; c'est ici qu'on range ce qui est « Non classé ». */
 export function OperationsView() {
   const { mois, setMois, filtre, setFiltre } = useFin()
-  const transactions = useHorizon((s) => s.finTransactions)
+  const transactions = useTransactions()
   const accounts = useHorizon((s) => s.finAccounts)
   const lines = useHorizon((s) => s.finLines)
   const idx = useIndex()

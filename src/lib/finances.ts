@@ -982,6 +982,8 @@ export function rechercherOperations(opts: {
   return transactions.filter((tx) => {
     if (!correspond(filtre, titulaireDe(tx, idx))) return false
     const montant = Math.abs(Number(tx.amount))
+    // Une surprise cachée ne répond jamais à une recherche de montant : elle le trahirait.
+    if (nombre !== null && tx.surprise_cachee) return false
     if (nombre !== null) {
       const n = Math.abs(Number(nombre))
       return nombre.includes('.') ? Math.abs(montant - n) < 0.005 : Math.trunc(montant) === n
@@ -1372,4 +1374,36 @@ export function provision(p: FinPlanned, aujourdhui: string): { restant: number;
 /** Opération « en attente » : marquée par la banque (pending) ou, pour la carte Crypto.com, note « en attente… ». */
 export function estEnAttente(tx: Pick<FinTransaction, 'pending' | 'note'>): boolean {
   return !!tx.pending || /^\s*en attente/i.test(tx.note ?? '')
+}
+
+// ── Surprises ──────────────────────────────────────────────────────────────────────────────
+
+/** Intitulé montré à la place d'une surprise cachée. */
+export const SURPRISE = 'Surprise'
+
+/** Montant affiché à la place de celui d'une surprise cachée. */
+export const MONTANT_CACHE = '•••'
+
+/** Infobulle d'une surprise cachée. */
+export const TITRE_SURPRISE = (tx: FinTransaction) =>
+  `Surprise : intitulé et montant cachés${tx.surprise_jusqu ? ` jusqu'au ${tx.surprise_jusqu.split('-').reverse().join('/')}` : ''}`
+
+/** Toutes ces opérations sont des surprises cachées (leur total les trahirait). */
+export const toutesCachees = (ops: FinTransaction[]) => ops.length > 0 && ops.every((o) => o.surprise_cachee)
+
+/** Catégorie « Cadeaux » (la seule où l'on peut cacher une surprise). */
+export const estCadeaux = (nom: string | undefined | null) => !!nom && /^cadeaux?$/i.test(nom.trim())
+
+/** Surprise cachée à `moi` le jour `aujourdhui` : posée par quelqu'un d'autre, pas encore révélée. */
+export function surpriseCachee(tx: FinTransaction, moi: string | null, aujourdhui: string): boolean {
+  return !!tx.surprise_de && !!moi && tx.surprise_de !== moi && (!tx.surprise_jusqu || aujourdhui < tx.surprise_jusqu)
+}
+
+/** Copies masquées des surprises cachées à `moi` (intitulés remplacés, montant gardé pour les totaux,
+ *  `surprise_cachee` posé pour que l'affichage taise le montant). Même tableau si rien n'est caché. */
+export function masquerSurprises(transactions: FinTransaction[], moi: string | null, aujourdhui: string): FinTransaction[] {
+  if (!transactions.some((tx) => surpriseCachee(tx, moi, aujourdhui))) return transactions
+  return transactions.map((tx) => surpriseCachee(tx, moi, aujourdhui)
+    ? { ...tx, label: SURPRISE, label_local: SURPRISE, note: null, surprise_cachee: true }
+    : tx)
 }

@@ -3,11 +3,10 @@ import { moisAffecte } from '../../lib/moisPaie'
 // et résultats sur tous les mois, regroupés par mois.
 import { useMemo, useState } from 'react'
 import { Search, X } from 'lucide-react'
-import { useHorizon } from '../../lib/store'
 import { euros, libelleMois, rechercherOperations } from '../../lib/finances'
 import type { FinTransaction } from '../../lib/types'
 import { LigneOperation } from './partage'
-import { useFin, useIndex, useReconnaissance } from './contexte'
+import { useFin, useIndex, useReconnaissance, useTransactions } from './contexte'
 
 const PAR_PAGE = 150
 
@@ -39,7 +38,7 @@ export function ChampRecherche({ valeur, onChange }: { valeur: string; onChange:
 /** Résultats sur tous les mois (filtre de titulaire appliqué), les plus récents d'abord. */
 export function ResultatsRecherche({ requete }: { requete: string }) {
   const { filtre } = useFin()
-  const transactions = useHorizon((s) => s.finTransactions)
+  const transactions = useTransactions()
   const idx = useIndex()
   const reco = useReconnaissance()
   const [limite, setLimite] = useState(PAR_PAGE)

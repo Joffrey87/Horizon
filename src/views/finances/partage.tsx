@@ -3,12 +3,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight, EyeOff, Eye } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
-import { TITULAIRES, categorieEffective, nomCategorie, normaliserLibelle, operationsSemblables, decaleMois, estEnAttente, euros, libelleMois, type FiltreTitulaire, type IndexFinances } from '../../lib/finances'
+import { MONTANT_CACHE, TITRE_SURPRISE, TITULAIRES, categorieEffective, nomCategorie, normaliserLibelle, operationsSemblables, decaleMois, estEnAttente, euros, libelleMois, type FiltreTitulaire, type IndexFinances } from '../../lib/finances'
 import type { FinOwner, FinTransaction } from '../../lib/types'
 import { IconeCompte } from './IconeCompte'
 import { COULEUR_HONORINE_DEFAUT, enregistrerCouleurHonorine, normaliserCouleur, useCouleurHonorine } from '../../lib/couleurHonorine'
 import { Modal, Seg } from '../../components/ui'
-import { dateCourte, dateLongue, moisCourant, useArbreCategories, useReconnaissance, useVue } from './contexte'
+import { dateCourte, dateLongue, moisCourant, useArbreCategories, useReconnaissance, useVue, useTransactions } from './contexte'
 
 export function NavMois({ mois, onChange }: { mois: string; onChange: (m: string) => void }) {
   const courant = moisCourant()
@@ -172,11 +172,12 @@ export function LigneOperation({ tx, idx, montrerDate = true }: { tx: FinTransac
   const reco = useReconnaissance()
   const [edition, setEdition] = useState(false)
   const [nouvelleCat, setNouvelleCat] = useState<{ id: string | null; semblables: FinTransaction[] } | null>(null)
-  const transactions = useHorizon((s) => s.finTransactions)
+  const transactions = useTransactions()
   const local = reco.estLocal(tx)
   // Vue partagée : ranger (catégorie, titulaire, intitulé) si permis ; jamais écarter du budget.
   const vue = useVue()
-  const rangeable = !vue || vue.finances_classer
+  // Une surprise cachée (posée par l'autre) ne se touche pas : on ne la voit pas.
+  const rangeable = (!vue || vue.finances_classer) && !tx.surprise_cachee
   // Changer la catégorie : s'il existe des opérations semblables, on propose de les
   // ranger au même endroit (fenêtre de validation) ; sinon on change directement.
   const changerCategorie = (id: string | null) => {
@@ -191,7 +192,7 @@ export function LigneOperation({ tx, idx, montrerDate = true }: { tx: FinTransac
       {/* Intitulé local s'il existe (sinon bancaire, en plus pâle), raccourci ; le reste au survol, l'édition au clic. */}
       <IconeCompte tx={tx} idx={idx} />
       <button onClick={() => { if (rangeable) setEdition(true) }} className="w-40 min-w-0 shrink-0 text-left sm:w-52"
-        title={`${local ? `${reco.libelle(tx)}\nIntitulé bancaire : ` : ''}${tx.label}\n${compte?.name ?? ''}${tx.internal ? ' · virement interne' : ''}${tx.category_manual ? ' · classée à la main' : ''}\nCliquer pour choisir l’intitulé affiché`}>
+        title={tx.surprise_cachee ? TITRE_SURPRISE(tx) : `${local ? `${reco.libelle(tx)}\nIntitulé bancaire : ` : ''}${tx.label}\n${compte?.name ?? ''}${tx.internal ? ' · virement interne' : ''}${tx.category_manual ? ' · classée à la main' : ''}\nCliquer pour choisir l’intitulé affiché`}>
         <span className={`block truncate decoration-dotted underline-offset-4 hover:underline ${local ? '' : 'text-ink-2'}`}>
           {reco.libelle(tx) || '(sans libellé)'}
         </span>
@@ -202,7 +203,7 @@ export function LigneOperation({ tx, idx, montrerDate = true }: { tx: FinTransac
       )}
       {edition && <EditeurLibelle tx={tx} onClose={() => setEdition(false)} />}
       <span className={`w-24 shrink-0 text-right font-medium tabular-nums ${Number(tx.amount) > 0 ? 'text-[#4cc79a]' : ''}`}>
-        {Number(tx.amount) > 0 ? '+' : ''}{euros(Number(tx.amount), true)}
+        {tx.surprise_cachee ? MONTANT_CACHE : <>{Number(tx.amount) > 0 ? '+' : ''}{euros(Number(tx.amount), true)}</>}
       </span>
       <span className="hidden flex-1 sm:block" />
       <SelectCategorie value={categorieEffective(tx.category_id, idx)?.id ?? null} className="!w-auto max-w-[11rem]"
@@ -230,7 +231,7 @@ export function LigneOperation({ tx, idx, montrerDate = true }: { tx: FinTransac
  *  toutes cochées ; on décoche celles à laisser telles quelles. */
 export function EditeurLibelle({ tx, onClose }: { tx: FinTransaction; onClose: () => void }) {
   const regles = useHorizon((s) => s.finLabels)
-  const transactions = useHorizon((s) => s.finTransactions)
+  const transactions = useTransactions()
   const { insert, update, remove, updateMany } = useHorizon.getState()
   const reco = useReconnaissance()
   const regle = reco.regleDe(tx.label)

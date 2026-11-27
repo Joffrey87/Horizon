@@ -1,11 +1,11 @@
 // Détail d'une ligne du budget pour le mois affiché : catégories, puis intitulés regroupés, puis opérations.
 // Partagé par le Budget (sous une ligne du tableau) et le Résumé (sous une tuile dépliée).
 import { useMemo, useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, EyeOff } from 'lucide-react'
 import { useHorizon } from '../../lib/store'
 import { moisAffecte } from '../../lib/moisPaie'
 import { ChoixCategorie } from './ChoixCategorie'
-import { decaleMois, libelleMois, categorieEffective, aplatirGroupes, detailHorsCapital, detailLigne, euros, grouperParIntitule, hierarchieDetail, nomPropres, nomLisible, titulaireDe, TITULAIRES, type GroupeCategorie, type GroupeIntitules, type IndexFinances } from '../../lib/finances'
+import { MONTANT_CACHE, TITRE_SURPRISE, estCadeaux, toutesCachees, decaleMois, libelleMois, categorieEffective, aplatirGroupes, detailHorsCapital, detailLigne, euros, grouperParIntitule, hierarchieDetail, nomPropres, nomLisible, titulaireDe, TITULAIRES, type GroupeCategorie, type GroupeIntitules, type IndexFinances } from '../../lib/finances'
 import type { FinOwner, FinTransaction } from '../../lib/types'
 import { cleCommercant, clesDuGroupe, planAlias, planRegrouper, planSeparer, type Ecriture } from '../../lib/editionGroupes'
 import { ProgressBar } from '../../components/ui'
@@ -14,7 +14,7 @@ import { LierRemboursement } from './LierRemboursement'
 import { IconeCompte, IconeTitulaire } from './IconeCompte'
 import { FenetreConso, varianteEnergie } from './ConsoEnergie'
 import { siteEnergie } from '../../lib/energie'
-import { dateCourte, useFin, useIndex, useReconnaissance, useTransactionsBudget } from './contexte'
+import { dateCourte, useFin, useIndex, useMoi, useReconnaissance, useTransactionsBudget, useTransactions, useVue } from './contexte'
 import { useTuilesMois } from './tuilesMois'
 
 /** Niveau de détail d'une catégorie : fermée, ses groupes d'intitulés, ou toutes ses opérations. */
@@ -160,6 +160,11 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
   const [conso, setConso] = useState(false)
   const [lien, setLien] = useState(false)
   const idx = useIndex()
+  const moi = useMoi()
+  const vue = useVue()
+  const partages = useHorizon((s) => s.partages)
+  // À qui une surprise est cachée : le propriétaire pour le membre du partage, sinon le membre (Honorine).
+  const autre = vue ? 'Joffrey' : partages.find((p) => p.member_name)?.member_name ?? 'Honorine'
   const site = sel.type === 'op' ? siteEnergie(nomAffiche, sel.tx.label_local, sel.tx.label) : null
   const lancer = async (f: () => Promise<void>) => { setEnvoi(true); await f(); setEnvoi(false); onClose() }
   const renommer = () => lancer(async () => {
@@ -175,7 +180,27 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
   const separer = () => lancer(() => appliquer('fin_groups', planSeparer(clesDuGroupe(groupe, regles), regles)))
 
   // Catégorie de CETTE opération seulement : même écriture que le classement à la main (LigneOperation).
-  const changerCategorie = (id: string) => sel.type === 'op' && lancer(async () => { await useHorizon.getState().update('fin_transactions', sel.tx.id, { category_id: id, category_manual: true }) })
+  // Quitter Cadeaux lève la surprise ; « Cacher » (œil barré sur Cadeaux) la pose jusqu'à la date choisie.
+  const changerCategorie = (id: string) => sel.type === 'op' && lancer(async () => {
+    const values: Record<string, unknown> = { category_id: id, category_manual: true }
+    if (sel.tx.surprise_de && !estCadeaux(idx.categories.get(id)?.name)) Object.assign(values, { surprise_de: null, surprise_jusqu: null })
+    await useHorizon.getState().update('fin_transactions', sel.tx.id, values)
+  })
+  const cacherSurprise = (id: string, jusqu: string) => sel.type === 'op' && lancer(async () => {
+    await useHorizon.getState().update('fin_transactions', sel.tx.id, { category_id: id, category_manual: true, surprise_de: moi, surprise_jusqu: jusqu })
+  })
+  const revelerSurprise = () => sel.type === 'op' && lancer(async () => {
+    await useHorizon.getState().update('fin_transactions', sel.tx.id, { surprise_de: null, surprise_jusqu: null })
+  })
+  // Surprise posée par l'autre : rien à voir ni à modifier avant sa révélation.
+  if (sel.type === 'op' && sel.tx.surprise_cachee) return (
+    <div data-testid="panneau-surprise-cachee" className="my-1.5 flex items-center gap-2 rounded-lg border border-line-2 bg-panel-2 p-2 text-[12px] text-ink-3">
+      <EyeOff size={14} className="shrink-0" />
+      <span className="min-w-0 flex-1">{TITRE_SURPRISE(sel.tx)}</span>
+      <button onClick={onClose} className={BTN_NEUTRE}>Fermer</button>
+    </div>
+  )
+  const maSurprise = sel.type === 'op' && !!sel.tx.surprise_de && sel.tx.surprise_de === moi
   // Mois de CETTE opération seulement : elle y compte malgré sa date bancaire ; « Automatique » revient au mois de paie.
   const changerMois = (m: string | null) => sel.type === 'op' && lancer(async () => { await useHorizon.getState().update('fin_transactions', sel.tx.id, { mois_affecte: m }) })
   if (choixMois && sel.type === 'op') {
@@ -204,7 +229,8 @@ function PanneauEdition({ sel, groupe, autres, nomAffiche, onClose }: {
     return (
       <ChoixCategorie idx={idx} actuelle={actuelle} occupe={envoi} titre="Catégorie de l'opération"
         detail={`${sel.tx.label_local ?? nomAffiche} · ${euros(Math.abs(Number(sel.tx.amount)))}`}
-        onChoisir={(id) => void changerCategorie(id)} onClose={() => setChoixCat(false)} />
+        onChoisir={(id) => void changerCategorie(id)} onClose={() => setChoixCat(false)}
+        surprise={moi && (!sel.tx.surprise_de || maSurprise) ? { autre, jusqu: maSurprise ? sel.tx.surprise_jusqu ?? null : null, onCacher: (id, j) => void cacherSurprise(id, j) } : undefined} />
     )
   }
   if (fusion) return (
@@ -244,6 +270,13 @@ ${idx.comptes.get(sel.tx.account_id)?.name ?? ''}`}>
         onChange={(e) => setNom(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void renommer() }} className={CHAMP} />
       {sel.type === 'op' && <p className="mt-1 text-[10.5px] text-ink-3">Pour toutes les opérations {groupe.nom}</p>}
       {sel.type === 'op' && <Attribution tx={sel.tx} idx={idx} />}
+      {maSurprise && sel.type === 'op' && (
+        <p data-testid="ma-surprise" className="mt-2 flex items-center gap-1.5 text-[11px] text-[#eda145]">
+          <EyeOff size={13} className="shrink-0" />
+          <span className="min-w-0 flex-1">Surprise cachée à {autre}{sel.tx.surprise_jusqu ? ` jusqu'au ${sel.tx.surprise_jusqu.split('-').reverse().join('/')}` : ''}</span>
+          <button disabled={envoi} onClick={() => void revelerSurprise()} className={BTN_NEUTRE}>Révéler</button>
+        </p>
+      )}
       <div className="mt-2 flex flex-wrap gap-1.5">
         <button disabled={envoi} onClick={() => void renommer()} className={BTN_OK}>Renommer</button>
         {sel.type === 'op' && <button onClick={() => setChoixCat(true)} className={BTN_NEUTRE}>Catégorie</button>}
@@ -297,8 +330,8 @@ function MarchandsLecture({ operations, nomCategorie }: { operations: FinTransac
                 className={`flex w-full items-baseline gap-3 py-1 text-left text-[12px] ${actif ? 'text-[#eda145]' : 'text-ink-2'}`}>
                 <span className={`w-11 shrink-0 tabular-nums ${actif ? '' : 'text-ink-3'}`}>{dateCourte(tx.date)}</span>
                 <IconeTitulaire titulaire={titulaireDe(tx, idx)} />
-                <span className="min-w-0 flex-1 truncate">{nom(tx)}</span>
-                {m(-Number(tx.amount))}
+                <span className="min-w-0 flex-1 truncate" title={tx.surprise_cachee ? TITRE_SURPRISE(tx) : undefined}>{nom(tx)}</span>
+                {tx.surprise_cachee ? <span className="shrink-0">{MONTANT_CACHE}</span> : m(-Number(tx.amount))}
               </button>
               {panneau(g)}
             </li>
@@ -318,7 +351,7 @@ function MarchandsLecture({ operations, nomCategorie }: { operations: FinTransac
                 {g.nom}
                 <span className="ml-1.5 rounded-full bg-[#c9b48a]/20 px-1.5 text-[10px] text-[#d8c7a3]">{g.operations.length}</span>
               </button>
-              {m(g.total)}
+              {toutesCachees(g.operations) ? <span className="shrink-0">{MONTANT_CACHE}</span> : m(g.total)}
             </div>
             {ouvert && (
               <div className="flex flex-wrap gap-1.5 pb-1.5 pl-14">
@@ -327,7 +360,7 @@ function MarchandsLecture({ operations, nomCategorie }: { operations: FinTransac
                   return (
                     <button key={tx.id} data-testid="souscat-chip" onClick={() => choisir({ type: 'op', tx, groupe: g.cle })}
                       className={`rounded-md px-1.5 py-0.5 text-[11px] tabular-nums ${actif ? 'bg-[#eda145]/10 text-[#eda145] ring-1 ring-[#eda145]/60' : 'bg-[#c9b48a]/10 text-ink-2'}`}>
-                      {dateCourte(tx.date)} · {euros(-Number(tx.amount))}
+                      {dateCourte(tx.date)} · {tx.surprise_cachee ? MONTANT_CACHE : euros(-Number(tx.amount))}
                     </button>
                   )
                 })}
@@ -350,7 +383,7 @@ export interface ApportLigne { titre: string; infobulle: string; lignes: { id: s
 
 function LigneApport({ apport }: { apport: ApportLigne }) {
   const [ouvert, setOuvert] = useState(false)
-  const toutes = useHorizon((st) => st.finTransactions)
+  const toutes = useTransactions()
   const [edition, setEdition] = useState<FinTransaction | null>(null)
   const total = apport.lignes.reduce((n, l) => n + l.montant, 0)
   return (
@@ -521,7 +554,7 @@ function OperationsGroupees({ operations, nomCategorie, toutDeplie }: {
           </span>
           <span className="w-40 min-w-0 shrink-0 truncate sm:w-52">{g.nom}</span>
           <span className={`w-24 shrink-0 text-right font-medium tabular-nums ${g.total < 0 ? 'text-[#4cc79a]' : ''}`}>
-            {g.total < 0 ? '+' : ''}{euros(-g.total, true)}
+            {toutesCachees(g.operations) ? MONTANT_CACHE : <>{g.total < 0 ? '+' : ''}{euros(-g.total, true)}</>}
           </span>
         </button>
         {ouvert && (
