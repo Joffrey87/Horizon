@@ -8,7 +8,14 @@ import { Card, Modal } from '../components/ui'
  *  Le contenu est personnel : il vit dans la base (un layout `discussions-disputes`), jamais dans le dépôt public. */
 const PROJECTION = 'discussions-disputes'
 
-interface Dispute { id: string; titre: string; date: string; contenu: string }
+/** Encadrement dans la liste : rouge = dispute, vert = discussion (absent = rouge, les anciennes notes). */
+type Couleur = 'rouge' | 'verte'
+interface Dispute { id: string; titre: string; date: string; contenu: string; couleur?: Couleur }
+
+const COULEURS: Record<Couleur, { libelle: string; bord: string; bordChoisi: string; fond: string; pastille: string }> = {
+  rouge: { libelle: 'Dispute', bord: 'border-[#ff6b6b]/75', bordChoisi: 'border-[#ff6b6b]', fond: 'bg-[#ff6b6b]/10', pastille: 'bg-[#ff6b6b]' },
+  verte: { libelle: 'Discussion', bord: 'border-[#4cc79a]/75', bordChoisi: 'border-[#4cc79a]', fond: 'bg-[#4cc79a]/10', pastille: 'bg-[#4cc79a]' },
+}
 
 const lire = (data: unknown): Dispute[] => {
   const d = (data as { disputes?: Dispute[] } | undefined)?.disputes
@@ -50,14 +57,17 @@ export function DisputesView() {
     <div className="rise space-y-2">
       <div className="flex flex-col gap-2 md:flex-row md:gap-4">
         <nav aria-label="Disputes" className="flex flex-col gap-1.5 md:w-72 md:shrink-0">
-          {triees.map((d) => (
-            <button key={d.id} onClick={() => setChoix(d.id)} data-testid="dispute-menu"
+          {triees.map((d) => {
+            const c = COULEURS[d.couleur ?? 'rouge']
+            return (
+            <button key={d.id} onClick={() => setChoix(d.id)} data-testid="dispute-menu" title={c.libelle}
               className={`rounded-lg border px-2.5 py-1.5 text-left text-sm transition-colors ${
-                courante?.id === d.id ? 'border-sun/50 bg-sun/10 text-ink' : 'border-line text-ink-2 hover:bg-panel-2 hover:text-ink'}`}>
+                courante?.id === d.id ? `${c.bordChoisi} ${c.fond} text-ink` : `${c.bord} text-ink-2 hover:bg-panel-2 hover:text-ink`}`}>
               <span className="block font-medium">{d.titre}</span>
               <span className="block text-xs text-ink-3">{dateLongue(d.date)}</span>
             </button>
-          ))}
+            )
+          })}
           <button onClick={() => setEdition('nouvelle')} title="Ajouter une dispute" aria-label="Ajouter une dispute"
             className="btn-ghost flex items-center justify-center gap-1 rounded-lg border border-dashed border-line px-2.5 py-1 text-sm">
             <Plus size={14} /> Ajouter
@@ -104,15 +114,26 @@ function FormulaireDispute({ dispute, onClose, onSave, onDelete }: {
   const [titre, setTitre] = useState(dispute?.titre ?? '')
   const [date, setDate] = useState(dispute?.date ?? todayIso())
   const [contenu, setContenu] = useState(dispute?.contenu ?? '')
+  const [couleur, setCouleur] = useState<Couleur>(dispute?.couleur ?? 'rouge')
   const valider = (e: React.FormEvent) => {
     e.preventDefault()
     if (!titre.trim() || !date || !contenu.trim()) return
-    onSave({ id: dispute?.id ?? crypto.randomUUID(), titre: titre.trim(), date, contenu: contenu.replace(/\s+$/, '') })
+    onSave({ id: dispute?.id ?? crypto.randomUUID(), titre: titre.trim(), date, contenu: contenu.replace(/\s+$/, ''), couleur })
   }
   return (
     <Modal open onClose={onClose} title={dispute ? 'Modifier la dispute' : 'Nouvelle dispute'} compact>
       <form onSubmit={valider} className="space-y-3">
         <input value={titre} onChange={(e) => setTitre(e.target.value)} placeholder="Titre" className="field w-full" autoFocus required />
+        <div role="radiogroup" aria-label="Couleur" className="flex gap-2">
+          {(Object.keys(COULEURS) as Couleur[]).map((k) => (
+            <button key={k} type="button" role="radio" aria-checked={couleur === k} onClick={() => setCouleur(k)} data-testid={`couleur-${k}`}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg border px-3 py-1.5 text-sm ${
+                couleur === k ? `${COULEURS[k].bordChoisi} ${COULEURS[k].fond} text-ink` : 'border-line text-ink-3 hover:text-ink'}`}>
+              <span className={`h-2.5 w-2.5 rounded-full ${COULEURS[k].pastille}`} />
+              {COULEURS[k].libelle}
+            </button>
+          ))}
+        </div>
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="field w-full" required />
         <textarea value={contenu} onChange={(e) => setContenu(e.target.value)} placeholder="Contenu" rows={10} className="field w-full text-sm" required />
         <div className="flex items-center justify-between gap-2">
